@@ -232,6 +232,14 @@ The `name` lives on the file (not the `PerspectiveReplayHeader`) because it is s
 
 `viewerId` is locked and immutable for the lifetime of the file; every frame must be projected for that exact viewer.
 
+### Frame retention (Invariant #30)
+
+`PerspectiveReplayManager` retains a whole projected `PlayerSnapshot` per changed beat, and the buffer is released per **match** — `abort()` on return-to-lobby, session close and joined teardown — not per session. What it holds is therefore set by how long one uninterrupted match runs.
+
+The manager therefore takes a `maxFrames` ceiling, defaulting to `DEFAULT_MAX_PERSPECTIVE_REPLAY_FRAMES`. On overflow the OLDEST frame is dropped and a `perspective-replay:overflow` warn is raised **once per recording** — past the ceiling every frame evicts, so a per-eviction warn would be one log line per beat for the rest of the match. The latch lives on the recording state, so a second match that overflows reports again.
+
+Eviction moves the front of the buffer; `recordSnapshot`'s strictly-increasing-tick check reads the back, so a dropped frame can never make a later one look out of order. Overflow costs a long match the OLDEST part of its perspective replay — a retention decision, not a correctness one, and independent of any per-game switch that turns recording off.
+
 ---
 
 ## Cross-Version Compatibility

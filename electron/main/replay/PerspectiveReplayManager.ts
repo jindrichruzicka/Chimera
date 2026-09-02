@@ -19,6 +19,9 @@
  * Architecture reference: §4.28
  *
  * Invariants upheld:
+ *   #30 — the frame buffer has a fixed `maxFrames` ceiling; on overflow the
+ *           OLDEST frame is dropped and the transition is reported once per
+ *           recording.
  *   #67 — constructed with an injected Logger child; it reports through that
  *           Logger, never `console.*`. `recordSnapshot` reports at `trace` rather
  *           than `debug` because it runs once per recorded beat — see the file
@@ -61,9 +64,42 @@ export interface PerspectiveReplayEngineIdentity {
     readonly engineVersion: string;
 }
 
+/**
+ * Default ceiling on the frames one recording retains (Invariant #30).
+ *
+ * The number matches `MAX_ACTION_HISTORY_ENTRIES` — the engine's existing
+ * order of magnitude for a per-match retained buffer — and nothing more is
+ * claimed for it: the two fill at different rates, because the action history
+ * appends on every depth-0 dispatch while a frame is retained only when the
+ * beat changed something.
+ *
+ * The retained cost is a whole projected snapshot per frame, so it scales with
+ * the game's entity count rather than with this number alone.
+ *
+ * A ceiling is a retention decision, not a correctness one: overflowing a match
+ * costs the OLDEST frames of its perspective replay, never a later one, and the
+ * per-game switch that turns recording off entirely is a separate concern.
+ */
+export const DEFAULT_MAX_PERSPECTIVE_REPLAY_FRAMES = 10_000;
+
+/** Construction-time knobs. */
+export interface PerspectiveReplayManagerOptions {
+    /**
+     * Frames one recording retains before the oldest is evicted. Defaults to
+     * {@link DEFAULT_MAX_PERSPECTIVE_REPLAY_FRAMES}. Must be a positive integer.
+     */
+    readonly maxFrames?: number;
+}
+
 interface RecordingState {
     readonly header: PerspectiveReplayStartHeader;
     readonly frames: PerspectiveReplayFrame[];
+    /**
+     * Latch for the `perspective-replay:overflow` warn, scoped to THIS
+     * recording: raised on the first eviction, and gone with the state when the
+     * recording ends, so a second match that overflows reports again.
+     */
+    overflowReported: boolean;
 }
 
 /**
@@ -82,12 +118,23 @@ export class PerspectiveReplayManager {
      */
     private lastSavedPath: string | null = null;
 
+    /** Frame ceiling for one recording — fixed at construction (Invariant #30). */
+    private readonly maxFrames: number;
+
     constructor(
         private readonly repository: PerspectiveReplayRepository,
         private readonly identity: PerspectiveReplayEngineIdentity,
         logger: Logger,
+        options?: PerspectiveReplayManagerOptions,
     ) {
         this.log = logger.child({ module: 'perspective-replay-manager' });
+        const maxFrames = options?.maxFrames ?? DEFAULT_MAX_PERSPECTIVE_REPLAY_FRAMES;
+        if (!Number.isInteger(maxFrames) || maxFrames <= 0) {
+            throw new Error(
+                `PerspectiveReplayManager: maxFrames must be a positive integer, got ${String(maxFrames)}`,
+            );
+        }
+        this.maxFrames = maxFrames;
     }
 
     // ── Recording ─────────────────────────────────────────────────────────────
@@ -114,7 +161,7 @@ export class PerspectiveReplayManager {
         }
         // A new match supersedes any path remembered from the previous one.
         this.lastSavedPath = null;
-        this.recording = { header, frames: [] };
+        this.recording = { header, frames: [], overflowReported: false };
     }
 
     /**
@@ -165,7 +212,31 @@ export class PerspectiveReplayManager {
             });
             return;
         }
-        this.recording.frames.push(frame);
+        this.#appendWithinCeiling(this.recording, frame);
+    }
+
+    /**
+     * Append `frame`, dropping the oldest first when the recording is at its
+     * ceiling. Called only after every validation has passed, so eviction can
+     * never be spent on a frame that is about to be skipped.
+     *
+     * Eviction moves the FRONT of the buffer. `recordSnapshot`'s tick-order check
+     * reads the back (`frames.at(-1)`), so a dropped frame cannot make a later
+     * one look out of order.
+     *
+     * The warn is raised on the first eviction and latched for the rest of the
+     * recording: at a realtime tick rate every subsequent frame evicts, so an
+     * unlatched warn would be one line per beat for the rest of the match.
+     */
+    #appendWithinCeiling(state: RecordingState, frame: PerspectiveReplayFrame): void {
+        if (state.frames.length >= this.maxFrames) {
+            state.frames.shift();
+            if (!state.overflowReported) {
+                state.overflowReported = true;
+                this.log.warn('perspective-replay:overflow', { maxFrames: this.maxFrames });
+            }
+        }
+        state.frames.push(frame);
     }
 
     /**

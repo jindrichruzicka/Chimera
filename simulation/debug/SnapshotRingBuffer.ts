@@ -4,7 +4,7 @@
  * Fixed-capacity ring buffer of historical authoritative snapshots backing
  * the Debug Inspector timeline (§4.12 — Runtime Debug Layer).
  *
- * Invariant #30: the capacity is fixed and explicitly set — the buffer never
+ * Invariant #30: the capacity is fixed and configurable — the buffer never
  * grows unboundedly; the oldest entry is overwritten silently when full.
  * Invariant #31: instantiated only when `IS_DEBUG_MODE` is true. The
  * simulation side couples to it solely through the optional

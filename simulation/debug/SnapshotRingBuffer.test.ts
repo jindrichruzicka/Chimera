@@ -12,7 +12,7 @@
  * scenario: "250 entries into capacity-200 buffer; last 200 retrievable;
  * onRecord callback fires."
  *
- * Invariant #30: fixed, explicitly set capacity — never grows unboundedly;
+ * Invariant #30: fixed, configurable capacity — never grows unboundedly;
  * oldest entries are overwritten silently.
  */
 

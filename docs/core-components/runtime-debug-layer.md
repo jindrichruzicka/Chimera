@@ -161,7 +161,7 @@ export class SnapshotRingBuffer {
 }
 ```
 
-> **Invariant #30** — `SnapshotRingBuffer` has a fixed capacity; it must never grow unboundedly.
+> **Invariant #30** governs this buffer's capacity — see [Architecture Invariants](../executive-architecture/architecture-invariants.md).
 > **Invariant #31** — `SnapshotInspector` and `SnapshotRingBuffer` are instantiated only when `IS_DEBUG_MODE` is true.
 
 ---

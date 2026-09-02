@@ -219,7 +219,7 @@ export interface StartDebugBridgeOptions {
      * ⇒ the flip is simply a no-op.
      */
     readonly onI18nTokenModeChange?: (enabled: boolean) => void;
-    /** Ring buffer capacity override (Invariant #30: always explicit-fixed). */
+    /** Ring buffer capacity override. When omitted the buffer takes its default. */
     readonly ringBufferCapacity?: number;
     /** Action-log cap override — tests only. */
     readonly actionLogCapacity?: number;

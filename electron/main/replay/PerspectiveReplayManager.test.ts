@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryPerspectiveReplayRepository } from '@chimera-engine/simulation/replay/index.js';
 import { ReplayVersionError } from '@chimera-engine/simulation/replay/index.js';
+import { MAX_ACTION_HISTORY_ENTRIES } from '@chimera-engine/simulation/engine/UndoManager.js';
 import type {
     PerspectiveReplayFrame,
     PerspectiveReplayRepository,
@@ -19,9 +20,14 @@ import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/State
 import { playerId as toPlayerId, gamePhase } from '@chimera-engine/simulation/engine/types.js';
 import { createLogger, createMemorySink } from '../logging/logger.js';
 import type { MemorySink } from '../logging/logger.js';
-import { PerspectiveReplayManager } from './PerspectiveReplayManager.js';
+import type { LogEntry } from '@chimera-engine/simulation/foundation/logging.js';
+import {
+    PerspectiveReplayManager,
+    DEFAULT_MAX_PERSPECTIVE_REPLAY_FRAMES,
+} from './PerspectiveReplayManager.js';
 import type {
     PerspectiveReplayEngineIdentity,
+    PerspectiveReplayManagerOptions,
     PerspectiveReplayStartHeader,
 } from './PerspectiveReplayManager.js';
 
@@ -70,10 +76,15 @@ function frame(viewerId: ReturnType<typeof toPlayerId>, tick: number): Perspecti
 function makeManager(
     repo: PerspectiveReplayRepository = new InMemoryPerspectiveReplayRepository(),
     identity: PerspectiveReplayEngineIdentity = IDENTITY,
+    options?: PerspectiveReplayManagerOptions,
 ): { manager: PerspectiveReplayManager; repo: PerspectiveReplayRepository; sink: MemorySink } {
     const sink = createMemorySink();
     const logger = createLogger({ source: { process: 'main', module: 'test' }, sink });
-    return { manager: new PerspectiveReplayManager(repo, identity, logger), repo, sink };
+    return {
+        manager: new PerspectiveReplayManager(repo, identity, logger, options),
+        repo,
+        sink,
+    };
 }
 
 // ── Recording round-trip ─────────────────────────────────────────────────────
@@ -614,5 +625,128 @@ describe('PerspectiveReplayManager — logging', () => {
             { level: 'trace', message: 'recordSnapshot' },
             { level: 'trace', message: 'recordSnapshot' },
         ]);
+    });
+});
+
+// ── Frame ceiling (Invariant #30) ────────────────────────────────────────────
+
+describe('PerspectiveReplayManager — frame ceiling', () => {
+    /** Record `count` strictly-increasing frames starting at `from`. */
+    function record(manager: PerspectiveReplayManager, count: number, from = 0): void {
+        for (let i = 0; i < count; i++) manager.recordSnapshot(frame(VIEWER, from + i));
+    }
+
+    function overflowWarns(sink: MemorySink): readonly LogEntry[] {
+        return sink.entries.filter(
+            (e) => e.level === 'warn' && e.message === 'perspective-replay:overflow',
+        );
+    }
+
+    it('declares a default ceiling equal to the action-history bound', () => {
+        expect(DEFAULT_MAX_PERSPECTIVE_REPLAY_FRAMES).toBe(MAX_ACTION_HISTORY_ENTRIES);
+    });
+
+    it('holds exactly maxFrames, evicting oldest and retaining newest', async () => {
+        const maxFrames = 4;
+        const { manager } = makeManager(undefined, undefined, { maxFrames });
+
+        manager.start(makeStartHeader());
+        record(manager, maxFrames + 3); // ticks 0..6
+        const saved = await manager.finalise();
+
+        const loaded = await manager.load(saved);
+        expect(loaded.frames).toHaveLength(maxFrames);
+        // Oldest three dropped, newest four kept, order preserved.
+        expect(loaded.frames.map((f) => f.tick)).toStrictEqual([3, 4, 5, 6]);
+    });
+
+    it('warns perspective-replay:overflow exactly once across many evictions', () => {
+        const maxFrames = 3;
+        const { manager, sink } = makeManager(undefined, undefined, { maxFrames });
+
+        manager.start(makeStartHeader());
+        record(manager, maxFrames + 40);
+
+        expect(overflowWarns(sink)).toHaveLength(1);
+        // The child logger contributes `module`; `maxFrames` is this warn's own field.
+        expect(overflowWarns(sink)[0]?.context).toStrictEqual({
+            module: 'perspective-replay-manager',
+            maxFrames,
+        });
+    });
+
+    it('re-arms the overflow warn for the next recording', () => {
+        const maxFrames = 2;
+        const { manager, sink } = makeManager(undefined, undefined, { maxFrames });
+
+        manager.start(makeStartHeader());
+        record(manager, maxFrames + 5);
+        manager.abort();
+
+        manager.start(makeStartHeader());
+        record(manager, maxFrames + 5);
+
+        // The latch is per RECORDING, not per manager: a second match that
+        // overflows is a second thing worth reporting.
+        expect(overflowWarns(sink)).toHaveLength(2);
+    });
+
+    it('stays silent at exactly maxFrames, warning on the eviction that follows', () => {
+        const maxFrames = 3;
+        const { manager, sink } = makeManager(undefined, undefined, { maxFrames });
+
+        manager.start(makeStartHeader());
+        record(manager, maxFrames);
+        expect(overflowWarns(sink)).toHaveLength(0);
+
+        manager.recordSnapshot(frame(VIEWER, maxFrames));
+        expect(overflowWarns(sink)).toHaveLength(1);
+    });
+
+    it('still rejects a non-increasing tick after eviction has occurred', async () => {
+        const maxFrames = 3;
+        const { manager, sink } = makeManager(undefined, undefined, { maxFrames });
+
+        manager.start(makeStartHeader());
+        record(manager, maxFrames + 4); // ticks 0..6, buffer holds 4,5,6
+
+        // Tick 2 was evicted, so it is no longer in the buffer — but it is still
+        // BEHIND the newest retained tick and must be skipped. Eviction moves the
+        // head, never the tail the order check reads.
+        manager.recordSnapshot(frame(VIEWER, 2));
+        manager.recordSnapshot(frame(VIEWER, 6));
+
+        expect(
+            sink.entries.filter(
+                (e) => e.message === 'recordSnapshot: skipped non-increasing-tick frame',
+            ),
+        ).toHaveLength(2);
+
+        const loaded = await manager.load(await manager.finalise());
+        expect(loaded.frames.map((f) => f.tick)).toStrictEqual([4, 5, 6]);
+    });
+
+    it('leaves a recording that never reaches the ceiling untouched', async () => {
+        const { manager, sink } = makeManager(undefined, undefined, { maxFrames: 10 });
+
+        manager.start(makeStartHeader());
+        record(manager, 10);
+        const loaded = await manager.load(await manager.finalise());
+
+        expect(loaded.frames).toHaveLength(10);
+        expect(overflowWarns(sink)).toHaveLength(0);
+    });
+
+    it('rejects a non-positive or non-integer maxFrames at construction', () => {
+        const repo = new InMemoryPerspectiveReplayRepository();
+        const logger = createLogger({
+            source: { process: 'main', module: 'test' },
+            sink: createMemorySink(),
+        });
+        for (const maxFrames of [0, -1, 1.5, Number.NaN]) {
+            expect(
+                () => new PerspectiveReplayManager(repo, IDENTITY, logger, { maxFrames }),
+            ).toThrow(/maxFrames/);
+        }
     });
 });
