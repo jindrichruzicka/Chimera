@@ -17,6 +17,7 @@
  *   Sole mutation point — no raw action object bypasses ActionPipeline.
  */
 
+import { IS_DEVELOPMENT_BUILD } from '../foundation/constants.js';
 import { isSceneTransitionCompletionAction } from '../foundation/scene-lifecycle.js';
 import type { Logger } from '../foundation/logging.js';
 import type { ClosedAnimationWindow } from './AnimationWindow.js';
@@ -85,6 +86,42 @@ export class ActionUnauthorizedError extends Error {
         this.name = 'ActionUnauthorizedError';
         this.type = type;
         this.reason = reason;
+        Object.setPrototypeOf(this, new.target.prototype);
+    }
+}
+
+/**
+ * Thrown after Stage 5 when a reducer produced a CHANGED snapshot without
+ * advancing `GameSnapshot.tick` by exactly 1 (Invariant #42).
+ *
+ * Consumers depend on that rule and cannot enforce it: `ReplayPlayer.step()`
+ * refuses the recorded action long after the fact, and
+ * `replay-playback-manager` derives both `totalTicks` and its `step()` fast
+ * path from it. Raised here, the refusal happens at the seam, and its message
+ * names the reducer.
+ *
+ * Raised only under `IS_DEVELOPMENT_BUILD`. A shipped game must not be
+ * bricked by a violation discovered after release; the same violation is still
+ * caught at replay time, which is where it always was.
+ */
+export class TickContractError extends Error {
+    readonly code = 'TICK_CONTRACT' as const;
+    /** Named `type` to match `ActionSchemaError` and `ActionUnauthorizedError`. */
+    readonly type: string;
+    readonly snapshotTick: number;
+    readonly nextTick: number;
+
+    constructor(actionType: string, snapshotTick: number, nextTick: number) {
+        super(
+            `TickContractError: reducer for "${actionType}" returned a changed snapshot at ` +
+                `tick ${nextTick.toString()}, but Invariant #42 requires ${(snapshotTick + 1).toString()} ` +
+                `(exactly one more than ${snapshotTick.toString()}). A reducer that changes state must ` +
+                `write \`tick: state.tick + 1\`; one that changes nothing must return its input reference.`,
+        );
+        this.name = 'TickContractError';
+        this.type = actionType;
+        this.snapshotTick = snapshotTick;
+        this.nextTick = nextTick;
         Object.setPrototypeOf(this, new.target.prototype);
     }
 }
@@ -183,6 +220,14 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
     /** Tracks the action type currently being processed, used by `#forbiddenDispatchFn`. */
     #currentActionType = '';
     /**
+     * Monotonic count of nested `ctx.dispatch` calls, read only as a before/after
+     * pair around a single `reduce`. A reducer that dispatches children returns
+     * their cumulative advance, not its own — `engine:tick` advances once and
+     * then dispatches every fired timer action, each of which advances again —
+     * so the tick-contract check can only measure a reduce that ran alone.
+     */
+    #dispatchCount = 0;
+    /**
      * Mutable singleton context handed to `validate()` and `reduce()`.
      *
      * `rng` and `dispatchDepth` are updated per call — `rng` is re-seeded from
@@ -213,6 +258,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             if (this.#depth >= MAX_NESTED_DISPATCH) {
                 throw new RecursiveDispatchError(this.#depth);
             }
+            this.#dispatchCount++;
             this.#depth++;
             // Save the current dispatch and action type so nested process() calls
             // (which overwrite #ctx.dispatch for the nested action) do not clobber
@@ -304,6 +350,9 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
      *   - `ActionSchemaError`        — Stage 2: parsePayload threw.
      *   - `ActionUnauthorizedError`  — Stage 4: validate returned { ok: false }.
      *   - `RecursiveDispatchError`   — re-entrant dispatch exceeded MAX_NESTED_DISPATCH.
+     *   - `ForbiddenDispatchError`   — a non-tick reducer called `ctx.dispatch`.
+     *   - `TickContractError`        — Stage 5: the tick did not advance by one
+     *                                  (development builds only).
      */
     process(snapshot: Readonly<TState>, action: ActionEnvelope): TState {
         // ── Stage 1 — tick validation + resolve ────────────────────────────
@@ -406,7 +455,27 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         }
 
         // ── Stage 5 — reduce ──────────────────────────────────────────────
+        const dispatchesBefore = this.#dispatchCount;
         const reducedState = def.reduce(snapshot, parsedPayload, action.playerId, ctx);
+
+        // ── The one-tick-per-action rule (§4.2.1, Invariant #42) ────────────
+        // Stage 5 takes `reduce`'s output verbatim, so without this nothing
+        // between here and `ReplayPlayer.step()` checks that the clock ADVANCED.
+        // Measured against `reducedState`, not `nextState`: `#resolveGameResult`
+        // can hand back a new object with the tick untouched, which is a
+        // property of the resolver, not of the reducer this names.
+        if (
+            IS_DEVELOPMENT_BUILD &&
+            reducedState !== snapshot &&
+            reducedState.tick !== snapshot.tick + 1 &&
+            this.#depth === 0 &&
+            this.#dispatchCount === dispatchesBefore &&
+            action.type !== 'engine:undo' &&
+            action.type !== 'engine:redo'
+        ) {
+            throw new TickContractError(action.type, snapshot.tick, reducedState.tick);
+        }
+
         const nextState = this.#resolveGameResult(reducedState);
 
         this.#logger.debug('action reduced', {

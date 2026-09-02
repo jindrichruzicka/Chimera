@@ -51,3 +51,26 @@ export const DEBUG_PUSH_CHANNEL = 'chimera:debug:push';
  */
 export const IS_DEBUG_MODE =
     process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';
+
+/**
+ * Whether development-only contract checks run in this process.
+ *
+ * Distinct from {@link IS_DEBUG_MODE}: that one arms the §4.12 Inspector and is
+ * opt-in via `CHIMERA_DEBUG`, while this is on unless the build says otherwise.
+ * It gates checks whose job is to catch a defect during development and which
+ * must never be able to brick a shipped game.
+ *
+ * `NODE_ENV` is the signal because the packaging `define`
+ * (`electron/build-main/bundle-plan.ts`) bakes `process.env.NODE_ENV` to
+ * `"production"` for a packaged build, so this folds to `false` there. The fold
+ * itself is pinned against a real packaged bundle by
+ * `apps/tactics/electron/__tests__/packaged-bundle-content.test.ts`; change the
+ * shape of the read and that test says so. Nothing is pruned by the fold: those
+ * bundles are not minified, so the guarded statements remain and are simply
+ * never entered.
+ *
+ * This file is one of the two paths invariant check 19 exempts from the
+ * `process.env` ban, which is why the read lives here rather than at the site
+ * that needs it.
+ */
+export const IS_DEVELOPMENT_BUILD = process.env.NODE_ENV !== 'production';

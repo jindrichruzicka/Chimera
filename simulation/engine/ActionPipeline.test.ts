@@ -27,6 +27,7 @@ import {
     RecursiveDispatchError,
     ForbiddenDispatchError,
     MAX_NESTED_DISPATCH,
+    TickContractError,
 } from './ActionPipeline.js';
 import { ActionRegistry, UnknownActionTypeError } from './ActionRegistry.js';
 import type {
@@ -49,6 +50,7 @@ import {
     engineSyncRequestDefinition,
     engineReturnToLobbyDefinition,
     engineTickDefinition,
+    registerEngineActions,
 } from './EngineActions.js';
 
 // ─── Test fixtures ─────────────────────────────────────────────────────
@@ -1537,8 +1539,12 @@ describe('ActionPipeline — engine:end_turn clears undoManager history (post-St
         type: 'engine:end_turn',
         parsePayload: () => ({}),
         validate: () => ({ ok: true }),
-        // Return a new reference so Stage 7 broadcast fires (parity with real reducer).
-        reduce: (state) => ({ ...state }),
+        // Parity with the real reducer on both counts. `engineEndTurnDefinition`
+        // returns either the input reference or a new snapshot at
+        // `state.tick + 1`; it never returns a fresh reference at the same
+        // tick, which is what this double used to do and what the Stage 5
+        // tick-contract check reports.
+        reduce: (state) => ({ ...state, tick: state.tick + 1 }),
     };
 
     const makeUndoManagerStub = (): NonNullable<PipelineContext['undoManager']> => ({
@@ -2119,5 +2125,271 @@ describe('ActionPipeline — GameDefinition.onBeat wiring', () => {
 
         expect(broadcastTick).not.toHaveBeenCalled();
         expect(broadcast).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ─── The one-tick-per-action rule at the seam (§4.2.1, Invariant #42) ─────────
+
+describe('ActionPipeline — the one-tick-per-action rule', () => {
+    /** A reducer that rewrites the snapshot and forgets to advance the tick. */
+    const stalledDef: ActionDefinition<Record<string, never>> = {
+        type: 'game:stalled',
+        parsePayload: () => ({}),
+        validate: () => ({ ok: true }),
+        reduce: (state) => ({ ...state, events: [...state.events, { type: 'game:stalled' }] }),
+    };
+
+    it('reports a reducer that changes the snapshot without advancing the tick', () => {
+        // The whole value of the check is naming which reducer is wrong. Without
+        // it the first symptom is a DeterminismError out of ReplayPlayer, many
+        // actions later, naming only the tick it stopped at.
+        registry.register(stalledDef);
+
+        expect(() => pipeline.process(makeSnapshot(4), makeEnvelope(4, 'game:stalled'))).toThrow(
+            TickContractError,
+        );
+    });
+
+    it('names the offending action type in the message', () => {
+        registry.register(stalledDef);
+
+        expect(() => pipeline.process(makeSnapshot(4), makeEnvelope(4, 'game:stalled'))).toThrow(
+            /game:stalled/u,
+        );
+    });
+
+    it('reports a reducer that advances the tick by more than one', () => {
+        const leapDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:leap',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state) => ({ ...state, tick: state.tick + 2 }),
+        };
+        registry.register(leapDef);
+
+        expect(() => pipeline.process(makeSnapshot(4), makeEnvelope(4, 'game:leap'))).toThrow(
+            TickContractError,
+        );
+    });
+
+    it('is silent for a reducer that returns the INPUT REFERENCE unchanged', () => {
+        // `noopDef` returns `state` itself. Reference equality is the
+        // discriminator: a reducer that said no did not apply anything, so
+        // there is no action for the clock to count.
+        expect(() => pipeline.process(makeSnapshot(4), makeEnvelope(4))).not.toThrow();
+    });
+
+    it('reports the ticks it compared, not just that it refused', () => {
+        // The tick pair is what tells the author whether the reducer skipped
+        // the advance or leapt past it. Asserted as fields rather than by
+        // matching the message, which would pin the wording instead.
+        //
+        // The LEAP fixture, not the stalled one: a stalled reducer leaves the
+        // two ticks equal, so reporting `snapshotTick` in `nextTick`'s place
+        // would be indistinguishable there. Four and six tell them apart.
+        const leapDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:leap-fields',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state) => ({ ...state, tick: state.tick + 2 }),
+        };
+        registry.register(leapDef);
+
+        let caught: unknown;
+        try {
+            pipeline.process(makeSnapshot(4), makeEnvelope(4, 'game:leap-fields'));
+        } catch (err) {
+            caught = err;
+        }
+
+        expect(caught).toBeInstanceOf(TickContractError);
+        const error = caught as TickContractError;
+        expect(error.code).toBe('TICK_CONTRACT');
+        expect(error.type).toBe('game:leap-fields');
+        expect(error.snapshotTick).toBe(4);
+        expect(error.nextTick).toBe(6);
+    });
+
+    it('is silent when the game RESOLVER, not the reducer, minted the new object', () => {
+        // The reason the rule is measured against `reduce`'s own output rather
+        // than the post-Stage-5 state: `#resolveGameResult` returns a fresh
+        // snapshot carrying `gameResult` and `phase: 'ended'` with the tick
+        // untouched. Under the other comparison this exact shape — an
+        // input-reference reducer landing on a board the resolver calls
+        // finished — would be reported, naming a reducer that did nothing
+        // wrong.
+        const r = new ActionRegistry<BaseGameSnapshot>();
+        r.register(noopDef);
+        r.registerGame('test-game', { resolveGameResult: () => ({ winnerIds: [PID] }) });
+        const p = new ActionPipeline(r, { gameId: 'test-game' });
+
+        const snapshot = makeSnapshot(4);
+        let next: BaseGameSnapshot | undefined;
+        expect(() => {
+            next = p.process(snapshot, makeEnvelope(4));
+        }).not.toThrow();
+
+        // The shape the check must not read as a reducer fault: a NEW object,
+        // at the SAME tick.
+        expect(next).not.toBe(snapshot);
+        expect(next?.tick).toBe(4);
+        expect(next?.gameResult).toEqual({ winnerIds: [PID] });
+    });
+
+    it('does not run in a production build', async () => {
+        // The gate is what keeps a violation discovered after release from
+        // bricking a shipped game — the same violation still surfaces at
+        // replay time, where it always did. `NODE_ENV` is the signal because
+        // `computePackagedDefine` bakes it to "production" into a packaged
+        // bundle, folding the read to a literal; here it is stubbed and the
+        // module re-imported, since the flag is evaluated once at load.
+        vi.resetModules();
+        vi.stubEnv('NODE_ENV', 'production');
+        try {
+            const productionModule = await import('./ActionPipeline.js');
+            const r = new ActionRegistry();
+            r.register(stalledDef);
+            const p = new productionModule.ActionPipeline(r);
+
+            expect(() => p.process(makeSnapshot(4), makeEnvelope(4, 'game:stalled'))).not.toThrow();
+        } finally {
+            vi.unstubAllEnvs();
+            vi.resetModules();
+        }
+    });
+
+    it('is silent for each engine action that returns its input reference', () => {
+        // The four the feature enumerates by name. None of them is exempted by
+        // NAME here — each returns the input reference, the same discriminator
+        // `noopDef` above rides on. Registering the REAL definitions is what
+        // makes this a claim about them rather than about a double: change any
+        // one to return a copy instead and this test reports it.
+        //
+        const r = new ActionRegistry();
+        registerEngineActions(r);
+        const p = new ActionPipeline(r);
+        const base = { ...makeSnapshot(4), hostPlayerId: PID };
+
+        // Reference identity, not merely the absence of a throw: a reducer
+        // returning a copy at `state.tick + 1` would also not throw, and would
+        // be a different action from the one this test is about. With no
+        // `gameId` on the pipeline, `#resolveGameResult` passes the reduce's
+        // output straight through, so what comes back IS what `reduce` returned.
+        expect(base.turnClock, 'the end_turn arm under test needs no turnClock').toBeUndefined();
+        for (const envelope of [
+            makeEnvelope(4, 'engine:save', { slotId: 'slot-1' }),
+            makeEnvelope(4, 'engine:load', { slotId: 'slot-1' }),
+            makeEnvelope(4, 'engine:sync_request'),
+            makeEnvelope(4, 'engine:end_turn'),
+        ]) {
+            let next: BaseGameSnapshot | undefined;
+            expect(() => {
+                next = p.process(base, envelope);
+            }, envelope.type).not.toThrow();
+            expect(next, envelope.type).toBe(base);
+        }
+    });
+
+    it('is silent for engine:undo and engine:redo even when they change the snapshot', () => {
+        // Exempted BY NAME, not by reference equality. A recorded engine:undo
+        // does not advance the tick — it reconstructs a prior state — so the
+        // pair is excused whatever their reducers return. With no undoManager
+        // wired they fall past the Stage 3 intercept to Stage 5, which is the
+        // only way to reach the check at all.
+        const r = new ActionRegistry();
+        for (const type of ['engine:undo', 'engine:redo'] as const) {
+            r.registerEngineAction({
+                type,
+                parsePayload: () => ({ steps: 1 }),
+                validate: () => ({ ok: true }),
+                reduce: (state) => ({ ...state, events: [...state.events, { type }] }),
+            } satisfies ActionDefinition<{ readonly steps: number }>);
+        }
+        const p = new ActionPipeline(r);
+
+        expect(() => p.process(makeSnapshot(4), makeEnvelope(4, 'engine:undo'))).not.toThrow();
+        expect(() => p.process(makeSnapshot(4), makeEnvelope(4, 'engine:redo'))).not.toThrow();
+    });
+
+    it('is silent for a NESTED dispatch that changes the snapshot without advancing', () => {
+        // Depth is the exemption: the check does not run on a child dispatched
+        // from inside engine:tick. The outer action is exempt too, by the
+        // separate composed-children conjunct below — so a chain like this is
+        // measured nowhere, and the recording's own entry is the outer one.
+        const r = new ActionRegistry();
+        r.registerEngineAction({
+            type: 'game:stalled-child',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state) => ({ ...state, events: [...state.events, { type: 'child' }] }),
+        } satisfies ActionDefinition<Record<string, never>>);
+        r.registerEngineAction({
+            type: 'engine:tick',
+            parsePayload: () => ({ seed: 0 }),
+            validate: () => ({ ok: true }),
+            reduce: (state, _payload, playerId, ctx) => {
+                const advanced = { ...state, tick: state.tick + 1 };
+                if (!isReduceContext(ctx) || ctx.dispatch === undefined) return advanced;
+                return ctx.dispatch(advanced, {
+                    type: 'game:stalled-child',
+                    playerId,
+                    tick: advanced.tick,
+                    payload: {},
+                });
+            },
+        } satisfies ActionDefinition<{ readonly seed: number }>);
+        const p = new ActionPipeline(r);
+
+        expect(() =>
+            p.process(makeSnapshot(4), makeEnvelope(4, 'engine:tick', { seed: 0 })),
+        ).not.toThrow();
+    });
+
+    it('is silent for a reduce that COMPOSED children into a multi-tick advance', () => {
+        // What the real engine:tick does: advance once, then dispatch every
+        // fired timer action, each of which advances again. The outer reduce
+        // returns their cumulative advance, so it cannot be measured as a
+        // reduce that ran alone.
+        const r = new ActionRegistry();
+        r.registerEngineAction({
+            type: 'game:advancing-child',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state) => ({ ...state, tick: state.tick + 1 }),
+        } satisfies ActionDefinition<Record<string, never>>);
+        r.registerEngineAction({
+            type: 'engine:tick',
+            parsePayload: () => ({ seed: 0 }),
+            validate: () => ({ ok: true }),
+            reduce: (state, _payload, playerId, ctx) => {
+                const advanced = { ...state, tick: state.tick + 1 };
+                if (!isReduceContext(ctx) || ctx.dispatch === undefined) return advanced;
+                return ctx.dispatch(advanced, {
+                    type: 'game:advancing-child',
+                    playerId,
+                    tick: advanced.tick,
+                    payload: {},
+                });
+            },
+        } satisfies ActionDefinition<{ readonly seed: number }>);
+        const p = new ActionPipeline(r);
+
+        // Two ticks out of one action: the check must not read that as a leap.
+        const next = p.process(makeSnapshot(4), makeEnvelope(4, 'engine:tick', { seed: 0 }));
+        expect(next.tick).toBe(6);
+    });
+
+    it('is silent for a reducer that advances by exactly one', () => {
+        const advanceDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:advance',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state) => ({ ...state, tick: state.tick + 1 }),
+        };
+        registry.register(advanceDef);
+
+        expect(() =>
+            pipeline.process(makeSnapshot(4), makeEnvelope(4, 'game:advance')),
+        ).not.toThrow();
     });
 });

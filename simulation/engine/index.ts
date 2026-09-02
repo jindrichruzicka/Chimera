@@ -71,6 +71,7 @@ export {
     StaleActionError,
     ActionUnauthorizedError,
     ForbiddenDispatchError,
+    TickContractError,
 } from './ActionPipeline.js';
 
 export { RecursiveDispatchError, MAX_NESTED_DISPATCH } from './RecursiveDispatchError.js';

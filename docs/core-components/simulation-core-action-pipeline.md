@@ -184,6 +184,8 @@ Stage 3  intercept()  — handle engine:undo/redo via UndoManager             �
 Stage 4  validate()   — definition.validate(payload, state, playerId, ctx)  → ValidationResult
                          └─ if ok:false → broadcast REJECT to sender; halt
 Stage 5  reduce()     — definition.reduce(state, payload, playerId, ctx)    → nextState
+                         └─ development builds: TickContractError, under the conditions
+                            ActionPipeline.test.ts's one-tick-per-action block enumerates
 Stage 6  record()     — history.append({ tick, turnNumber, action })
 Stage 7  broadcast()  — project(nextState, viewerId) for each viewer → StateBroadcaster → HostTransport
 ```

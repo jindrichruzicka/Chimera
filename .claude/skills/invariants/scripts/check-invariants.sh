@@ -612,8 +612,8 @@ check_grep "110" \
 #
 # Two engine infrastructure files carry a SANCTIONED, non-reducer I/O surface and
 # are path-exempted (startup/projection infrastructure, not validate()/reduce()):
-#   * simulation/foundation/constants.ts — the IS_DEBUG_MODE env read gated by
-#     Invariant #27 (a production runtime asserts it is false at startup).
+#   * simulation/foundation/constants.ts — the module where the engine's
+#     env-derived flags are declared, for readers outside validate()/reduce().
 #   * simulation/content/ContentLoader.ts — the content-DB loader's fs read
 #     (§4.8); a failed load throws fatally at main startup, never inside a tick.
 # node:crypto is deliberately NOT in the module list: simulation/projection/

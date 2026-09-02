@@ -22,6 +22,7 @@ import {
     RecursiveDispatchError,
     StaleActionError,
     ActionUnauthorizedError,
+    TickContractError,
     AnimationWindowManager,
     applyTimeScale,
     clearTimeScale,
@@ -63,6 +64,15 @@ describe('simulation/engine barrel — error class exports', () => {
         const err = new ActionUnauthorizedError('game:test', 'not_allowed');
         expect(err).toBeInstanceOf(ActionUnauthorizedError);
         expect(err.code).toBe('ACTION_UNAUTHORIZED');
+    });
+
+    it('TickContractError is still exported from the barrel', () => {
+        // The Stage 5 tick-contract refusal. A host that wants to distinguish
+        // it from the other pipeline throws needs it reachable here rather
+        // than through a deep import of ActionPipeline.js.
+        const err = new TickContractError('game:test', 4, 4);
+        expect(err).toBeInstanceOf(TickContractError);
+        expect(err.code).toBe('TICK_CONTRACT');
     });
 });
 

@@ -376,6 +376,22 @@ describe('packaged bundle content (§4.12)', () => {
         expect(dev).not.toContain('IS_DEBUG_MODE = false');
     });
 
+    // The same property for the flag that gates the pipeline's tick-contract
+    // check. Everything keeping that development-only throw out of a shipped
+    // game rests on this fold: unfolded, the read evaluates to `true` in a
+    // packaged app, because electron-builder never sets NODE_ENV.
+    it('folds IS_DEVELOPMENT_BUILD to the literal false when packaged, and keeps the read in dev', async () => {
+        const packaged = (await bundleApp({ [PACKAGED_BUILD_ENV]: '1' })).code.get('main') ?? '';
+        expect(packaged, 'packaged main bundle must contain the folded literal').toContain(
+            'IS_DEVELOPMENT_BUILD = false',
+        );
+
+        const dev = (await bundleApp({})).code.get('main') ?? '';
+        expect(dev, 'a dev build must keep the runtime env read').toContain(
+            'IS_DEVELOPMENT_BUILD = process.env.NODE_ENV !== "production"',
+        );
+    });
+
     // The route a SCAFFOLDED game's packaging run actually takes: no monorepo
     // source entry, so `resolveInstalledDebugPreloadEntry` resolves the packed
     // engine's sibling instead. Applying the packaged drop to only the source
