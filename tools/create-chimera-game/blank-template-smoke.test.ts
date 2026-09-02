@@ -8,10 +8,10 @@ import { GROWTH_DIRECTORIES } from './__test-support__/template-contract.js';
 import { GAME_TOKENS } from './tokens.js';
 
 /**
- * Guards that the blank template ships the minimal smoke harness: a co-located
- * unit smoke (manifest descriptor + the one stub screen renders) and exactly one e2e
- * boot-smoke spec, plus the tokenised test config a generated app needs so `pnpm test`
- * and `pnpm test:e2e` are green the moment a game is scaffolded.
+ * Guards that the blank template ships the minimal smoke harness: the co-located
+ * unit smokes pinned below and exactly one e2e boot-smoke spec, plus the tokenised
+ * test config a generated app needs so `pnpm test` and `pnpm test:e2e` are green
+ * the moment a game is scaffolded.
  *
  * These assert on the REAL `templates/blank/` tree (read-only) so the suite goes red if
  * the harness is dropped or a file is renamed. Assertions stay game-agnostic: every
@@ -31,6 +31,23 @@ describe('blank template smoke harness', () => {
         expect(content).toContain("from './simulation/constants.js'");
         expect(content).toContain('__gameCamel__Manifest');
         expect(content).toContain('__GAME_CONSTANT___GAME_ID');
+    });
+
+    it('ships a reducer smoke wired to the example action', async () => {
+        // This pins that the file SHIPS and reaches the reducer. It does not
+        // pin the assertions inside it: reading them back as text can show a
+        // string is present, never that the case still measures anything.
+        //
+        // The properties that file claims are measured where they can be:
+        // `blank-template-reducer.test.ts` EXECUTES the same reducer for both
+        // the tick advance and the absence of input mutation, and
+        // `verify:scaffold` runs the shipped file itself in a generated app.
+        const content = await read('simulation/actions.test.ts');
+        expect(content).toContain("from './actions.js'");
+        expect(content).toContain("from './constants.js'");
+        // The registration CALL, not just the imported name: without it the
+        // registry is empty and `resolve` throws in every scaffolded game.
+        expect(content).toContain('register__GamePascal__Actions(registry);');
     });
 
     // Canonical game-app layout: deterministic gameplay lives under simulation/

@@ -110,7 +110,7 @@ The blank template follows the canonical game-app structure (mirroring `apps/tac
 
 ```
 apps/<kebab>/
-├── simulation/            # deterministic gameplay — actions.ts, constants.ts, visibility-rules.ts;
+├── simulation/            # deterministic gameplay modules and their co-located tests;
 │                          #   pure (no DOM/IPC), covered by the apps/*/simulation ESLint zones
 ├── ai/                    # EMPTY (.gitkeep) — per-game agent policies; in the
 │                          #   no-fromfloat-in-simulation zone alongside simulation/

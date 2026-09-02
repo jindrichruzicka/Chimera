@@ -18,7 +18,7 @@
  *   3. `create-chimera-game <name> --out <out>`       — the real CLI EMITS the standalone project
  *   4. layer tarball overrides onto the emitted root + rewrite the app's `@chimera-engine/*` deps
  *   5. `pnpm install`                                 — install tarballs + toolchain into `<out>`
- *   6. `pnpm --filter <app> test`                     — the generated app's unit smoke
+ *   6. `pnpm --filter <app> test`                     — the generated app's own unit suites
  *   7. `pnpm --filter <app> build`                    — production tsc (standalone refs resolve)
  *   8. `pnpm --filter <app> verify:packaged-bundle`   — Invariant #27 gate (informational)
  *   9. `pnpm run package:<kebab>:mac-dir`             — the PACKAGED build → `apps/<kebab>/release`
@@ -203,7 +203,8 @@ function main(): void {
     banner('pnpm install (fresh standalone workspace)');
     run('pnpm', ['install'], { cwd: outRoot });
 
-    // 6. unit smoke — cheap; confirms the scaffold registered + booted its screens.
+    // 6. the generated app's own unit suites — cheap, and run before the
+    // expensive arms below.
     banner('unit smoke: pnpm --filter <app> test');
     run('pnpm', ['--filter', pkgName, 'test'], { cwd: outRoot });
 

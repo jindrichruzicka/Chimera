@@ -101,6 +101,12 @@ describe('scaffoldGame', () => {
             'templates/blank/screens/__GamePascal__Playfield.tsx',
             "import styles from './__GamePascal__Playfield.module.css';\nexport function __GamePascal__Playfield() { return styles; }",
         );
+        // A co-located TEST. The template ships several, and a scaffolded
+        // game's own suite is made of them.
+        await write(
+            'templates/blank/simulation/__gameCamel__.test.ts',
+            "import { __GAME_CONSTANT___GAME_ID } from './constants.js';\nexport const probe = __GAME_CONSTANT___GAME_ID;",
+        );
         // A ROOT-level file whose basename is load-bearing: `chimera-validate-assets`
         // discovers manifests by basename, and `asset-manifest.ts` is the one a match
         // inventory has to carry, so a copy pipeline that renamed or dropped it would
@@ -301,6 +307,13 @@ describe('scaffoldGame', () => {
         // The kebab token substitutes inside the fetch:fonts script, so the
         // scaffolded app fetches under its own game id.
         expect(pkg.scripts['fetch:fonts']).toContain('--game my-game');
+
+        // The co-located tests must survive the copy, in a renamed directory
+        // and with their contents substituted — a scaffolded game's own suite is
+        // made of them.
+        await expect(
+            readFile(path.join(result.appDir, 'simulation', 'myGame.test.ts'), 'utf8'),
+        ).resolves.toContain('MY_GAME_GAME_ID');
 
         // Dotfiles must survive the copy: the committed asset-dir convention
         // ships as an empty .gitkeep (Invariant #97).

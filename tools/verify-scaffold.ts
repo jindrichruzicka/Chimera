@@ -6,8 +6,8 @@
  * `verify:pack` proves the packed `@chimera-engine/*` surfaces resolve. This gate proves the
  * NEXT link in the chain: that `create-chimera-game` token-substitutes those packages
  * into a genuinely BOOTABLE app — not just files that look right. It generates a game
- * OUTSIDE the workspace and runs the generated app's own unit smoke + e2e boot-smoke
- * against it, so a broken token map, a missing public `@chimera-engine/*` export, or a renderer
+ * OUTSIDE the workspace and runs the generated app's own co-located unit suites and its
+ * e2e boot-smoke against it, so a broken token map, a missing public `@chimera-engine/*` export, or a renderer
  * barrel regression surfaces here as a scaffold boot failure. It doubles as an
  * end-to-end regression net for the `@chimera-engine/*` packages.
  *
@@ -22,7 +22,7 @@
  *      deps onto the packed tarballs, so the whole DAG resolves through the locally-built
  *      artifacts instead of the (unpublished) npm ranges the CLI emitted
  *   5. `pnpm install`                 — install the tarballs + toolchain into `<tmp>`
- *   6. `pnpm --filter <app> test`     — the generated app's UNIT smoke (manifest + screen render)
+ *   6. `pnpm --filter <app> test`     — the generated app's co-located UNIT smokes
  *   7. `pnpm --filter <app> test:e2e` — the generated app's Electron BOOT-smoke
  *   8. `pnpm --filter <app> build` + `build:app` — the PRODUCTION build: `tsc -p tsconfig.build.json`
  *      (proves the standalone refs rewrite resolves the engine from `node_modules`) + the esbuild
@@ -1146,7 +1146,7 @@ async function scaffoldPipeline(
     deps.log('installing the standalone workspace (tarballs + toolchain)…');
     assertStepOk('install', deps.run('pnpm', ['install'], { cwd: tmp }));
 
-    // 6. unit smoke
+    // 6. `pnpm test`
     assertStepOk('unit', runAppScript(deps, tmp, 'test'));
 
     // 7. e2e boot-smoke. The EMITTED app's `test:e2e` script self-sets

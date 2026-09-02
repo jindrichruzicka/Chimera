@@ -20,9 +20,9 @@ export type { __GamePascal__PingPayload } from './action-types.js';
 
 /**
  * A trivial example action so the registry is non-empty and the dispatch path is
- * wired end-to-end: `validate` always passes and `reduce` returns the snapshot
- * unchanged. Replace it with your game's real reducers (`validate` + `reduce`
- * must stay pure).
+ * wired end-to-end: `validate` always passes and `reduce` does the one thing
+ * every reducer has to do — advance the tick. Replace it with your game's real
+ * reducers (`validate` + `reduce` must stay pure).
  */
 const __gameCamel__PingDefinition: ActionDefinition<__GamePascal__PingPayload, BaseGameSnapshot> = {
     type: __GAME_CONSTANT___PING_ACTION,
@@ -36,7 +36,17 @@ const __gameCamel__PingDefinition: ActionDefinition<__GamePascal__PingPayload, B
     },
 
     reduce(state): BaseGameSnapshot {
-        return state;
+        // Advance `tick` by exactly one, here and in every action you add. The
+        // tick is the engine's clock and its action count: replaying a recorded
+        // match feeds the same actions back through this reducer and expects
+        // each one to land the tick one higher, so a reducer that skips it
+        // records a match that cannot be played back.
+        //
+        // An action that would change nothing has no reducer to write: refuse
+        // it in `validate` instead. By the time `reduce` runs the action has
+        // already been accepted, and returning an unchanged snapshot from here
+        // records exactly the entry a replay cannot play.
+        return { ...state, tick: state.tick + 1 };
     },
 };
 
