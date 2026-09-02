@@ -51,8 +51,8 @@ export interface RecordedAction {
 
 **Serializer strategies** (interface `ReplaySerializer`, `simulation/replay/ReplaySerializer.ts`):
 
-- `JsonReplaySerializer` (`simulation/replay/ReplaySerializer.ts`) — plain, human-readable JSON; wraps the pure `serializeReplay()` / `deserializeReplay()` functions.
-- `CompressedReplaySerializer` (`electron/main/replay/CompressedReplaySerializer.ts`) — async gzip; used when storage size matters.
+- `JsonReplaySerializer` (`simulation/replay/ReplaySerializer.ts`) — uncompressed JSON; wraps the pure `serializeReplay()` / `deserializeReplay()` functions. Compact, with no indentation: the file has no human reader, and `deserializeReplay` is indifferent to whitespace.
+- `CompressedReplaySerializer` (`electron/main/replay/CompressedReplaySerializer.ts`) — async gzip over that same JSON. This is the one `main()` wires into the deterministic `FileReplayRepository`. Its reader dispatches on the gzip magic and falls through to plain JSON, because both encodings share the `.chimera-replay` extension — so a replay written before it was wired still loads, and a corrupt gzip stream still fails as one rather than as bad JSON.
 
 Both are async and round-trip stable. `parseReplayFile()` validates required fields and rejects malformed input with `ReplayParseError`; the JSON reviver (`safeReviver`) rejects `__proto__` (prototype-pollution defence, OWASP A08). Extension: `.chimera-replay`. Location: `userData/replays/<game-id>/`.
 

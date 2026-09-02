@@ -498,3 +498,73 @@ describe('CompressedPerspectiveReplaySerializer', () => {
         expect(await serializer.deserialize(asString)).toStrictEqual(file);
     });
 });
+
+// ─── Reading a file written before the compressed serializer was wired ───────
+
+describe('deserializeReplayCompressed — uncompressed on-disk files', () => {
+    it('reads a plain-JSON replay written by JsonReplaySerializer', async () => {
+        // Non-ASCII on purpose: a display name comes from a user profile and an
+        // export name is typed by the player, so multi-byte text is the normal
+        // case. Decoding the fallback as latin1 would PARSE and deep-equal
+        // wrongly - silent mojibake, not an error - and an ASCII-only fixture is
+        // blind to it. Written as escapes so the fixture cannot itself be
+        // re-encoded by a tool between here and the assertion.
+        const file = makeReplayFile({
+            metadata: {
+                ...makeReplayFile().metadata,
+                name: 'Jind\u0159ich \u2014 z\u00e1pas \u010d. 3 \u{1F3AE}',
+                players: [{ playerId: toPlayerId('p1'), displayName: 'R\u016f\u017ei\u010dka' }],
+            },
+        });
+        const plain = Buffer.from(serializeReplay(file), 'utf8');
+
+        // `.chimera-replay` is the extension for BOTH encodings, so nothing in
+        // the path distinguishes them; the reader has to.
+        await expect(deserializeReplayCompressed(plain)).resolves.toStrictEqual(file);
+    });
+
+    it('round-trips its own gzipped output', async () => {
+        const file = makeReplayFile();
+
+        await expect(
+            deserializeReplayCompressed(await serializeReplayCompressed(file)),
+        ).resolves.toStrictEqual(file);
+    });
+
+    it('still rejects a buffer that is neither gzip nor valid replay JSON', async () => {
+        await expect(
+            deserializeReplayCompressed(Buffer.from('this is not gzip', 'utf8')),
+        ).rejects.toBeInstanceOf(ReplayParseError);
+    });
+
+    it('rejects a truncated gzip stream rather than reading it as JSON', async () => {
+        const gzipped = await serializeReplayCompressed(makeReplayFile());
+
+        // Keeps the 1f 8b magic, so the fallback must NOT swallow this as text.
+        // Asserted on the MESSAGE: both routes reject with a `ReplayParseError`,
+        // so the type alone cannot tell "gunzip failed" from "that was not JSON",
+        // and a reader that dispatched on a failed gunzip instead of on the magic
+        // would pass a type-only check.
+        await expect(
+            deserializeReplayCompressed(gzipped.subarray(0, gzipped.length - 8)),
+        ).rejects.toThrow(/could not be decompressed/);
+    });
+
+    it.each([
+        ['first byte only', [0x1f, 0x00]],
+        ['second byte only', [0x00, 0x8b]],
+    ] as const)(
+        'takes the JSON route for a buffer matching the gzip magic by its %s',
+        async (_, prefix) => {
+            // A gzip member is 1f 8b, both bytes (RFC 1952 §2.3.1). Either half alone
+            // is not one. Both routes reject, so the message is what separates them —
+            // and the JSON route's own message is asserted POSITIVELY, since a
+            // negative match passes for any rejection that merely lacks the phrase.
+            const nearMiss = Buffer.concat([Buffer.from(prefix), Buffer.from('{}', 'utf8')]);
+
+            await expect(deserializeReplayCompressed(nearMiss)).rejects.toThrow(
+                /Replay JSON is not valid/,
+            );
+        },
+    );
+});

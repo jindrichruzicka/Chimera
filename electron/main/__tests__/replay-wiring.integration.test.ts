@@ -28,7 +28,8 @@ import type {
     PlayerId,
 } from '@chimera-engine/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
-import { JsonReplaySerializer, ReplayMigrator } from '@chimera-engine/simulation/replay/index.js';
+import { ReplayMigrator } from '@chimera-engine/simulation/replay/index.js';
+import { CompressedReplaySerializer } from '../replay/CompressedReplaySerializer.js';
 import type { ReplayHeader } from '@chimera-engine/simulation/replay/index.js';
 import { FileReplayRepository } from '../replay/FileReplayRepository.js';
 import { ReplayManager } from '../replay/replay-manager.js';
@@ -274,7 +275,7 @@ describe('replay wiring — end-to-end persistence', () => {
         const sink = createMemorySink();
         const logger = createLogger({ source: { process: 'main', module: 'test' }, sink });
         const manager = new ReplayManager(
-            new FileReplayRepository(new JsonReplaySerializer(), tmpDir),
+            new FileReplayRepository(new CompressedReplaySerializer(), tmpDir),
             new ReplayMigrator(),
             IDENTITY,
             logger,

@@ -54,15 +54,32 @@ const gunzipAsync = promisify(gunzip);
  * `deserializeReplayCompressed` expects a `Buffer`.
  * Neither method blocks the event loop.
  *
- * Use this for production replay exports. Use the plain simulation-layer
- * `serializeReplay`/`deserializeReplay` when human-readability matters.
+ * `deserializeReplayCompressed` also accepts an UNCOMPRESSED buffer, since a
+ * replay written before this pair was wired sits under the same extension.
  */
 export async function serializeReplayCompressed(file: ReplayFile): Promise<Buffer> {
     const json = serializeReplay(file);
     return gzipAsync(Buffer.from(json, 'utf8'));
 }
 
+/** Leading bytes of a gzip member (RFC 1952 §2.3.1). */
+const GZIP_MAGIC_0 = 0x1f;
+const GZIP_MAGIC_1 = 0x8b;
+
+/** Whether `buf` starts with a gzip member header. */
+function isGzip(buf: Buffer): boolean {
+    return buf.length >= 2 && buf[0] === GZIP_MAGIC_0 && buf[1] === GZIP_MAGIC_1;
+}
+
 export async function deserializeReplayCompressed(buf: Buffer): Promise<ReplayFile> {
+    // A replay written before this serializer was wired is plain JSON under the
+    // SAME `.chimera-replay` extension, so nothing in the path distinguishes the
+    // two encodings and the reader has to. Dispatch on the gzip magic rather
+    // than on a failed gunzip: a truncated or corrupt gzip stream must stay an
+    // error, not fall through and be reported as bad JSON.
+    if (!isGzip(buf)) {
+        return deserializeReplay(buf.toString('utf8'));
+    }
     let decompressed: Buffer;
     try {
         decompressed = await gunzipAsync(buf);
@@ -77,9 +94,9 @@ export async function deserializeReplayCompressed(buf: Buffer): Promise<ReplayFi
 /**
  * `ReplaySerializer` strategy backed by the async gzip functions above.
  *
- * Inject this into `FileReplayRepository` for space-efficient production
- * storage; inject `JsonReplaySerializer` (simulation/replay) when
- * human-readable output is preferred.
+ * What `main()` injects into the deterministic `FileReplayRepository`.
+ * `JsonReplaySerializer` (simulation/replay) writes the same JSON uncompressed,
+ * and this reader accepts what it wrote.
  */
 export class CompressedReplaySerializer implements ReplaySerializer {
     serialize(file: ReplayFile): Promise<Buffer> {

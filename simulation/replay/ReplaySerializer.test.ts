@@ -303,3 +303,30 @@ describe('JsonReplaySerializer', () => {
         await expect(serializer.deserialize('not json')).rejects.toBeInstanceOf(ReplayParseError);
     });
 });
+
+// ─── Compact output (§4.28) ──────────────────────────────────────────────────
+
+describe('serializeReplay — compact output', () => {
+    it('emits no indentation', () => {
+        const json = serializeReplay(makeReplayFile());
+
+        // The file has no human reader; indentation is pure size. Asserted on
+        // the SHAPE rather than a byte count, which a schema change would move.
+        expect(json).not.toMatch(/\n/);
+        expect(json.startsWith('{"')).toBe(true);
+    });
+
+    it('round-trips deep-equal with the pretty-printer removed', () => {
+        const file = makeReplayFile();
+
+        expect(deserializeReplay(serializeReplay(file))).toStrictEqual(file);
+    });
+
+    it('is byte-identical to a bare JSON.stringify of the same file', () => {
+        const file = makeReplayFile();
+
+        // Pins that the serializer adds no formatting of its own — the property
+        // an indentation regression would break without changing the parse.
+        expect(serializeReplay(file)).toBe(JSON.stringify(file));
+    });
+});

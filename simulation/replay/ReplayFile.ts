@@ -71,7 +71,7 @@ export interface ReplayMetadata {
 /**
  * The complete, self-contained replay file schema.
  *
- * Stored as JSON (extension `.chimera-replay`). Playback starts from `seed +
+ * Extension `.chimera-replay`. Playback starts from `seed +
  * gameConfig` and feeds each `RecordedAction` through the live `ActionPipeline`
  * (invariant #70). Any file missing `seed` or `actions` is malformed (invariant #71).
  *

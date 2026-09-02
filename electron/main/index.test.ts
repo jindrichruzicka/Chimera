@@ -20,6 +20,9 @@ import type { LogEntry, LogLevel } from '@chimera-engine/simulation/foundation/l
 import type { ChimeraRendererUrl, MainGameContribution } from './index.js';
 import type { GameManifest } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type * as LoadGameContentModule from './content/loadGameContent.js';
+import type * as FileReplayRepositoryModule from './replay/FileReplayRepository.js';
+import type { ReplaySerializer } from '@chimera-engine/simulation/replay/index.js';
+import { makeReplayFile } from '@chimera-engine/simulation/replay/__test-support__/replayRepositoryContractTests.js';
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
 import { LOGS_EMIT_CHANNEL } from '../preload/apis/logs-api.js';
 import {
@@ -426,6 +429,28 @@ const { perspectiveSaves, mockFilePerspectiveReplayRepoCtor } = vi.hoisted(() =>
 vi.mock('./replay/FilePerspectiveReplayRepository.js', () => ({
     FilePerspectiveReplayRepository: mockFilePerspectiveReplayRepoCtor,
 }));
+
+// ── FileReplayRepository ctor spy ────────────────────────────────────────────
+// Records the arguments the composition root constructs the DETERMINISTIC replay
+// repository with, without changing what it does: the subclass delegates to the
+// real implementation. Which serializer `main()` injects is a decision no test
+// that rebuilds the repository by hand can see.
+const { mockFileReplayRepoCtor } = vi.hoisted(() => ({
+    mockFileReplayRepoCtor: vi.fn<(serializer: unknown, baseDir: unknown) => void>(),
+}));
+
+vi.mock('./replay/FileReplayRepository.js', async (importOriginal) => {
+    const actual = await importOriginal<typeof FileReplayRepositoryModule>();
+    return {
+        ...actual,
+        FileReplayRepository: class extends actual.FileReplayRepository {
+            constructor(...args: ConstructorParameters<typeof actual.FileReplayRepository>) {
+                super(...args);
+                mockFileReplayRepoCtor(args[0], args[1]);
+            }
+        },
+    };
+});
 
 // ── E2E hooks mock — captures getE2eHooks for wiring tests ────────────────────
 const { mockGetE2eHooks } = vi.hoisted(() => ({
@@ -5700,6 +5725,24 @@ describe('main() — perspective replay recording (F44b T5)', () => {
     it('constructs a FilePerspectiveReplayRepository at the composition root', async () => {
         await main(makeTestContributions());
         expect(mockFilePerspectiveReplayRepoCtor).toHaveBeenCalledOnce();
+    });
+
+    it('injects a gzipping serializer into the deterministic replay repository', async () => {
+        mockFileReplayRepoCtor.mockClear();
+
+        await main(makeTestContributions());
+
+        expect(mockFileReplayRepoCtor).toHaveBeenCalledOnce();
+        const [serializer, baseDir] = mockFileReplayRepoCtor.mock.calls[0] as unknown as [
+            ReplaySerializer,
+            string,
+        ];
+        expect(baseDir).toBe(path.join('/tmp/chimera-userData-fake', 'replays'));
+        // Asserted on what the injected serializer DOES, not on its class: the
+        // property that matters is the on-disk encoding, and an instanceof check
+        // would pass for a subclass that had stopped compressing.
+        const bytes = await serializer.serialize(makeReplayFile('tactics'));
+        expect([bytes[0], bytes[1]]).toStrictEqual([0x1f, 0x8b]);
     });
 
     it('host egress: records each snapshot, but persists for the host viewerId only on explicit save', async () => {

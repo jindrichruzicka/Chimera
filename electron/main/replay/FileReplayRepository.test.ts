@@ -28,6 +28,7 @@ import {
     ReplayPathError,
     InvalidGameIdError,
 } from './FileReplayRepository.js';
+import { CompressedReplaySerializer } from './CompressedReplaySerializer.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -154,5 +155,71 @@ describe('FileReplayRepository — integration', () => {
         const bad = { ...makeReplayFile('tactics'), gameId: '../evil' };
 
         await expect(repo.save(bad)).rejects.toBeInstanceOf(InvalidGameIdError);
+    });
+});
+
+// ── Wired encoding (§4.28) ───────────────────────────────────────────────────
+
+describe('FileReplayRepository — with the serializer main() wires', () => {
+    let tmpDir: string;
+
+    beforeEach(async () => {
+        tmpDir = await makeTmpDir();
+    });
+
+    afterEach(() => {
+        rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    /** The repository as `main()` constructs it. */
+    function makeWiredRepo(baseDir: string): FileReplayRepository {
+        return new FileReplayRepository(new CompressedReplaySerializer(), baseDir);
+    }
+
+    it('writes gzip bytes to disk and round-trips them back', async () => {
+        const repo = makeWiredRepo(tmpDir);
+        const file = makeReplayFile('tactics');
+
+        const savedPath = await repo.save(file);
+
+        // Read as raw bytes, not through the serializer: the point is the
+        // ON-DISK encoding, which a round trip alone cannot see.
+        const bytes = await fs.readFile(savedPath);
+        expect([bytes[0], bytes[1]]).toStrictEqual([0x1f, 0x8b]);
+        expect(await repo.load(savedPath)).toStrictEqual(file);
+    });
+
+    it('keeps the .chimera-replay extension, so listings still find it', async () => {
+        const repo = makeWiredRepo(tmpDir);
+
+        const savedPath = await repo.save(makeReplayFile('tactics'));
+
+        expect(savedPath.endsWith('.chimera-replay')).toBe(true);
+        expect(await repo.list('tactics')).toStrictEqual([savedPath]);
+    });
+
+    it('loads and lists a replay left on disk by the uncompressed serializer', async () => {
+        const legacy = new FileReplayRepository(new JsonReplaySerializer(), tmpDir);
+        const file = makeReplayFile('tactics');
+        const legacyPath = await legacy.save(file);
+
+        // Same directory, same extension — the wired repository has to read what
+        // the previous one wrote, and the listing has no per-file tolerance, so
+        // one unreadable replay would take the whole list rather than its own row.
+        const repo = makeWiredRepo(tmpDir);
+        expect(await repo.load(legacyPath)).toStrictEqual(file);
+        expect((await repo.listItems('tactics')).map((e) => e.path)).toStrictEqual([legacyPath]);
+    });
+
+    it('lists a mixed directory of compressed and uncompressed replays', async () => {
+        const legacyPath = await new FileReplayRepository(new JsonReplaySerializer(), tmpDir).save(
+            makeReplayFile('tactics'),
+        );
+        const repo = makeWiredRepo(tmpDir);
+        const compressedPath = await repo.save(makeReplayFile('tactics'));
+
+        expect((await repo.listItems('tactics')).map((e) => e.path).sort()).toStrictEqual(
+            [legacyPath, compressedPath].sort(),
+        );
     });
 });

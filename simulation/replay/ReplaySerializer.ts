@@ -40,14 +40,18 @@ export function safeReviver(key: string, value: unknown): unknown {
 // ─── serializeReplay ─────────────────────────────────────────────────────────
 
 /**
- * Serialises a `ReplayFile` to a JSON string.
+ * Serialises a `ReplayFile` to a compact JSON string.
+ *
+ * No indentation: a replay file has no human reader, and a full deterministic
+ * stream is tens of megabytes before compression. `deserializeReplay` is
+ * indifferent to whitespace, so nothing downstream sees the difference.
  *
  * Pure function — no I/O, no side effects (invariant #43).
  * The caller is responsible for writing the result to disk; the serialiser
  * has no knowledge of file paths or storage locations.
  */
 export function serializeReplay(file: ReplayFile): string {
-    return JSON.stringify(file, null, 2);
+    return JSON.stringify(file);
 }
 
 // ─── deserializeReplay ───────────────────────────────────────────────────────
@@ -103,8 +107,7 @@ export interface ReplaySerializer {
 /**
  * Plain-JSON `ReplaySerializer` — wraps the pure `serializeReplay` /
  * `deserializeReplay` functions and adapts them to the `ReplaySerializer`
- * contract. Human-readable; use `CompressedReplaySerializer` (electron/main)
- * when storage size matters.
+ * contract.
  */
 export class JsonReplaySerializer implements ReplaySerializer {
     serialize(file: ReplayFile): Promise<string> {

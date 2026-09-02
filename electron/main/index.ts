@@ -122,8 +122,11 @@ import { PerspectiveReplayManager } from './replay/PerspectiveReplayManager.js';
 import type { PerspectiveReplayStartHeader } from './replay/PerspectiveReplayManager.js';
 import { PerspectiveReplayPlaybackManager } from './replay/PerspectiveReplayPlaybackManager.js';
 import { FilePerspectiveReplayRepository } from './replay/FilePerspectiveReplayRepository.js';
-import { CompressedPerspectiveReplaySerializer } from './replay/CompressedReplaySerializer.js';
-import { JsonReplaySerializer, ReplayMigrator } from '@chimera-engine/simulation/replay/index.js';
+import {
+    CompressedPerspectiveReplaySerializer,
+    CompressedReplaySerializer,
+} from './replay/CompressedReplaySerializer.js';
+import { ReplayMigrator } from '@chimera-engine/simulation/replay/index.js';
 import type { PerspectiveReplayFrame } from '@chimera-engine/simulation/replay/index.js';
 import {
     buildDefaultAIPlayerAgent,
@@ -1596,7 +1599,9 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // (invariant #67), so the root logger is passed directly.
     const replayDir = path.join(userData, 'replays');
     const replayManager = new ReplayManager(
-        new FileReplayRepository(new JsonReplaySerializer(), replayDir),
+        // Gzipped. The reader accepts either encoding, so a replay written under
+        // this same extension before the swap still loads.
+        new FileReplayRepository(new CompressedReplaySerializer(), replayDir),
         new ReplayMigrator(),
         {
             engineVersion: app.getVersion(),
