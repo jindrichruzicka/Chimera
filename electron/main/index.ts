@@ -600,21 +600,37 @@ if (process.env['VITEST'] === undefined) {
 const RSC_CONTENT_TYPE = 'text/x-component; charset=utf-8';
 const HTML_CONTENT_TYPE = 'text/html; charset=utf-8';
 
+/**
+ * A CURATED list, not an exhaustive one. A row does two things: it sets the
+ * response's content type, and it decides range serving, because
+ * `isRangeCapableContentType` below reads that string. What turns on that is
+ * the docblock over `RANGE_CAPABLE_CONTENT_TYPE_PREFIXES`.
+ *
+ * So an absent extension is a decision, not an oversight. `.avi` and `.mkv` are
+ * left out: a row makes neither container playable, and no game here ships one.
+ * Add a row when one does.
+ */
 const CONTENT_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
+    '.aac': 'audio/aac',
     // .bin matches the fallback on purpose: a gltf external buffer is served
     // as octet-stream DELIBERATELY, not because the table forgot it.
     '.bin': 'application/octet-stream',
     '.css': 'text/css; charset=utf-8',
+    '.flac': 'audio/flac',
     '.glb': 'model/gltf-binary',
     '.gltf': 'model/gltf+json',
     '.html': HTML_CONTENT_TYPE,
     '.js': 'application/javascript; charset=utf-8',
     '.json': 'application/json; charset=utf-8',
+    '.m4a': 'audio/mp4',
     '.m4v': 'video/mp4',
     '.map': 'application/json; charset=utf-8',
     '.mov': 'video/quicktime',
+    '.mp3': 'audio/mpeg',
     '.mp4': 'video/mp4',
     '.ogg': 'audio/ogg',
+    // Opus is carried in an Ogg container, so it takes the container's type.
+    '.opus': 'audio/ogg',
     '.png': 'image/png',
     '.svg': 'image/svg+xml; charset=utf-8',
     '.txt': RSC_CONTENT_TYPE,

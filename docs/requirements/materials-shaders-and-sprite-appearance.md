@@ -192,7 +192,7 @@ game.
 
 ### A.7 — Texture format coverage is narrow
 
-The app-protocol MIME table (`electron/main/index.ts:598`) maps `.png`, `.webp`
+The app-protocol MIME table (`electron/main/index.ts`) maps `.png`, `.webp`
 and `.svg` for images. Everything unmapped falls through to
 `application/octet-stream`.
 

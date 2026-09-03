@@ -1523,6 +1523,75 @@ describe('renderer app protocol', () => {
         expect(response.headers.get('content-type')).toBe('video/mp4');
     });
 
+    // ── Audio formats a game ships ───────────────────────────────────────────
+    //
+    // The range behaviour is asserted, not just the content type: a
+    // content-type assertion passes the moment a row lands and says nothing
+    // about whether the element can play the file. See
+    // `RANGE_CAPABLE_CONTENT_TYPE_PREFIXES` for why the two are the same
+    // question here.
+    it('answers a ranged .mp3 request with 206 Partial Content', async () => {
+        const data = Buffer.from('0123456789'); // 10 bytes
+        const response = buildRendererProtocolResponse({
+            filePath: '/abs/path/games/tactics/assets/audio/theme.mp3',
+            data,
+            rangeHeader: 'bytes=2-5',
+        });
+
+        expect(response.status).toBe(206);
+        expect(response.headers.get('accept-ranges')).toBe('bytes');
+        expect(response.headers.get('content-range')).toBe('bytes 2-5/10');
+        await expect(response.text()).resolves.toBe('2345');
+    });
+
+    it.each([
+        ['.mp3', 'audio/mpeg'],
+        ['.m4a', 'audio/mp4'],
+        ['.aac', 'audio/aac'],
+        ['.flac', 'audio/flac'],
+        ['.opus', 'audio/ogg'],
+    ])('serves %s as %s', (extension, expected) => {
+        const response = buildRendererProtocolResponse({
+            filePath: `/abs/path/games/tactics/assets/audio/theme${extension}`,
+            data: Buffer.from('bytes'),
+            rangeHeader: null,
+        });
+
+        expect(response.headers.get('content-type')).toBe(expected);
+    });
+
+    it.each(['.mp3', '.m4a', '.aac', '.flac', '.opus'])(
+        'advertises byte-range support for %s, which is what the element needs',
+        (extension) => {
+            const response = buildRendererProtocolResponse({
+                filePath: `/abs/path/games/tactics/assets/audio/theme${extension}`,
+                data: Buffer.from('bytes'),
+                rangeHeader: null,
+            });
+
+            expect(response.headers.get('accept-ranges')).toBe('bytes');
+        },
+    );
+
+    it('leaves .avi and .mkv on the octet-stream fallback, as the table intends', () => {
+        // The withheld rows. A row here sets a content type and turns range
+        // serving on; it does not make a container playable, and neither of
+        // these is one the table has been asked for. This test is what makes
+        // their absence a decision rather than an oversight.
+        for (const extension of ['.avi', '.mkv']) {
+            const response = buildRendererProtocolResponse({
+                filePath: `/abs/path/games/tactics/assets/video/clip${extension}`,
+                data: Buffer.from('bytes'),
+                rangeHeader: null,
+            });
+
+            expect(response.headers.get('content-type'), extension).toBe(
+                'application/octet-stream',
+            );
+            expect(response.headers.get('accept-ranges'), extension).toBeNull();
+        }
+    });
+
     it('advertises byte-range support on a full (rangeless) media response', async () => {
         const data = Buffer.from('fake-mp4-bytes');
         const response = buildRendererProtocolResponse({
