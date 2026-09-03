@@ -104,6 +104,28 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             code: `import { makeRendererHelper } from '../renderer/makeRendererHelper.js';`,
         },
         {
+            // `isGameFile`'s SEGMENT anchor. `webapps/` merely ENDS in
+            // `apps`, so `apps/tactics/` sits inside it as a substring: drop
+            // `(?:^|\/)` and this reports. Its real-world trigger needs no code
+            // change — a checkout under any directory whose name ends in
+            // `apps` makes every engine renderer file read as a game file.
+            filename: '/repo/webapps/tactics/screens/TacticsDebugPanel.tsx',
+            code: `import { useGameStore } from '@chimera-engine/renderer/state/gameStore.js';`,
+        },
+        {
+            // `isGameFile`'s TRAILING `\/`: `apps/<name>/` wants a directory
+            // after the app name, so a file DIRECTLY under `apps/` is not
+            // inside a game app. Drop the trailing slash and `[^/]+` swallows
+            // the filename, so this reports.
+            //
+            // Its sibling mutant `[^/]+` → `[^/]*` deliberately gets no case:
+            // the two differ only on an EMPTY app-name segment, and
+            // `path.resolve('apps//screens/Foo.tsx')` collapses the doubled
+            // slash, and a real lint run's filename goes through `path.resolve`.
+            filename: 'apps/scratch.tsx',
+            code: `import { useGameStore } from '@chimera-engine/renderer/state/gameStore.js';`,
+        },
+        {
             filename: 'renderer/components/shell/GameShell.tsx',
             code: `import { useGameStore } from '@chimera-engine/renderer/state/gameStore.js';`,
         },
@@ -130,6 +152,14 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
         },
         {
             filename: 'apps/tactics/renderer/app/layout.tsx',
+            code: `export { default, metadata } from '@chimera-engine/renderer/shell/layout';`,
+        },
+        {
+            // The same permission on a Windows filename. `isAppNextHostRoute`
+            // carries its OWN `normalizePath` call: drop that call and a
+            // Windows developer's route is reported for re-exporting the engine
+            // shell it owns.
+            filename: 'C:\\repo\\apps\\tactics\\renderer\\app\\layout.tsx',
             code: `export { default, metadata } from '@chimera-engine/renderer/shell/layout';`,
         },
         {
@@ -169,6 +199,15 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
         {
             filename: 'apps/tactics/screens/translations/keys.ts',
             code: `import { translationKey } from '@chimera-engine/renderer/i18n/index.js';`,
+        },
+        {
+            // The same permission on a Windows filename. `isGameI18nCatalogue`
+            // carries its own `normalizePath` call too, and a catalogue is a
+            // plain `.ts` file that `isGameRendererSurface` deliberately
+            // excludes — so dropping that call reports a Windows developer's
+            // catalogue as an import from outside a surface.
+            filename: 'C:\\repo\\apps\\tactics\\screens\\translations\\keys.ts',
+            code: `import { translationKey } from '@chimera-engine/renderer/i18n';`,
         },
         {
             // The public audio barrel is allowed from a game surface — the subpath
@@ -334,6 +373,17 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
         {
             filename: '/repo/apps/tactics/screens/TacticsDebugPanel.tsx',
             code: `import { useGameStore } from '../../../renderer/state/gameStore.js';`,
+            errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
+        {
+            // The Windows filename shape — the third axis, and it traverses
+            // TWO normalised predicates at once. `isGameFile` decides the rule
+            // runs at all, and `isGameRendererSurface` decides WHICH message
+            // it reports: drop `normalizePath` at the first site and this goes
+            // silently inert; drop it at the second and the messageId becomes
+            // `gameRendererImportOutsideSurface`.
+            filename: 'C:\\repo\\apps\\tactics\\screens\\TacticsDebugPanel.tsx',
+            code: `import { useGameStore } from '@chimera-engine/renderer/state/gameStore.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {

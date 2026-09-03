@@ -26,7 +26,7 @@
  *   satisfies all four because it lives at `apps/<kebab>` — which makes that
  *   layout part of this contract, and is why `preset.ts` spells out what a game
  *   at a bare project root loses. See `no-raw-r3f-canvas.test.ts` for its
- *   predicate under both filename shapes.
+ *   predicate under the filename shapes it is measured on.
  *   `no-animation-derivation-in-reduce` declares no path predicate, so its zones
  *   below are its WHOLE scope and both of them stay live wherever the game sits.
  */

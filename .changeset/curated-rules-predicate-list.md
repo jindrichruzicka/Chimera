@@ -11,9 +11,8 @@ A reader trusting the shorter list would conclude that rule is layout-independen
 
 The same passage said those predicates "read the ABSOLUTE filename". What they want is the
 `apps/<name>/` SEGMENT, not a leading slash — a relative filename satisfies them just as well, which
-`no-raw-r3f-canvas.test.ts` already measured through its existing relative and absolute cases. That
-file gains one case: a game surface at a bare project root, which must NOT fire — the layout
-`preset.ts` warns a standalone game about.
+`no-raw-r3f-canvas.test.ts` measures. That file gains a case for a game surface at a bare project
+root, which must NOT fire — the layout `preset.ts` warns a standalone game about.
 
 No rule behaviour changes. The same "ABSOLUTE" wording is struck wherever this branch's repaired
 passage would send a reader — `preset.ts`, its test header, `electron/dev-tools/eslint/README.md`,

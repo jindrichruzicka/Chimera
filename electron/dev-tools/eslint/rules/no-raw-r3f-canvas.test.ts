@@ -80,6 +80,30 @@ ruleTester.run('chimera/no-raw-r3f-canvas', rule, {
             code: `import { Canvas } from '@react-three/fiber';\nexport const S = () => <Canvas />;`,
         },
         {
+            // The predicate's SEGMENT anchor, on the shape that has a
+            // real-world trigger: `webapps/` merely ENDS in `apps`, so
+            // `apps/tactics/` sits inside it as a substring. Drop `(?:^|\/)`
+            // and this fires. Checking the repo out under any directory whose
+            // name ends in `apps` makes every engine renderer file read as a
+            // game file the same way, with no code change at all.
+            filename: '/repo/webapps/tactics/screens/TacticsDemoBoard.tsx',
+            code: `import { Canvas } from '@react-three/fiber';\nexport const S = () => <Canvas />;`,
+        },
+        {
+            // The predicate's TRAILING `\/`: `apps/<name>/` wants a directory
+            // after the app name, so a file sitting DIRECTLY under `apps/` is
+            // not inside a game app. Drop the trailing slash and `[^/]+`
+            // swallows the filename, so this fires.
+            //
+            // Its sibling mutant `[^/]+` → `[^/]*` deliberately gets no case:
+            // the two regexes differ only on an EMPTY app-name segment, and
+            // `path.resolve('apps//screens/Foo.tsx')` collapses the doubled
+            // slash, and a real lint run's filename goes through `path.resolve`.
+            // A case for it would assert about an input no lint run produces.
+            filename: 'apps/scratch.tsx',
+            code: `import { Canvas } from '@react-three/fiber';\nexport const S = () => <Canvas />;`,
+        },
+        {
             // Outside a game app the rule is inert — renderer-internal code
             // and tests keep raw/fake Canvas (Invariant #127 scopes game
             // surfaces only).
@@ -188,6 +212,15 @@ ruleTester.run('chimera/no-raw-r3f-canvas', rule, {
         {
             // The absolute-path form real lint runs hand the rule.
             filename: '/repo/apps/tactics/screens/TacticsDemoBoard.tsx',
+            code: `import { Canvas } from '@react-three/fiber';`,
+            errors: [{ messageId: 'rawCanvasImport' }],
+        },
+        {
+            // The Windows filename shape — the third axis. `normalizePath` is
+            // the whole reason a `/`-separated regex reads a backslash path as
+            // segments; drop that call and the rule goes silently inert for
+            // every Windows developer.
+            filename: 'C:\\repo\\apps\\tactics\\screens\\TacticsDemoBoard.tsx',
             code: `import { Canvas } from '@react-three/fiber';`,
             errors: [{ messageId: 'rawCanvasImport' }],
         },

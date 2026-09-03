@@ -50,8 +50,9 @@ function normalizePath(value: string): string {
 
 // Game apps live under apps/<name>/ — the same predicate as
 // no-game-renderer-internals, satisfied by both the monorepo and the
-// scaffolded apps/<kebab> standalone layout, on relative and absolute
-// filenames alike.
+// scaffolded apps/<kebab> standalone layout, on relative, absolute and
+// backslash-separated Windows filenames alike — the last of those is what
+// normalizePath buys, and this rule's suite is where the shapes are measured.
 function isGameFile(filename: string): boolean {
     return /(?:^|\/)apps\/[^/]+\//u.test(normalizePath(filename));
 }

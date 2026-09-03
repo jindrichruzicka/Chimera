@@ -173,5 +173,17 @@ ruleTester.run('chimera/no-fromfloat-in-simulation', rule, {
             code: `${IMPORT_FIXED_POINT_ALIAS}\nconst v = fromFloat(2.5);`,
             errors: [{ messageId: 'noFromFloat' }],
         },
+
+        // 9. The same per-game AI path on a WINDOWS filename. The zone check
+        // opens with `filename.replace(/\\/g, '/')` under a header claiming it
+        // "normalises Windows backslashes", and every zone test downstream of it
+        // — `APP_AI_PATH` and the `/simulation/` substring checks alike — is
+        // `/`-separated. Drop that replace and the guard goes silently inert on
+        // a Windows filename.
+        {
+            filename: 'C:\\repo\\apps\\tactics\\ai\\tacticsPolicy.ts',
+            code: `${IMPORT_FIXED_POINT_ALIAS}\nconst v = fromFloat(2.5);`,
+            errors: [{ messageId: 'noFromFloat' }],
+        },
     ],
 });
