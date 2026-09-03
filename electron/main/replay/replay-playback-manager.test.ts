@@ -15,14 +15,18 @@
  *   #70 — playback reuses the live ActionPipeline wiring (buildHostSessionPipeline).
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera-engine/simulation/engine/EngineActions.js';
 import { TickContractError } from '@chimera-engine/simulation/engine/index.js';
 import type { ActionDefinition } from '@chimera-engine/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
 import type { ReplayFile } from '@chimera-engine/simulation/replay/index.js';
-import { DeterminismError } from '@chimera-engine/simulation/replay/index.js';
+import {
+    DeterminismError,
+    ReplayPlayer,
+    ReplaySeekError,
+} from '@chimera-engine/simulation/replay/index.js';
 import type { VisibilityRules } from '@chimera-engine/simulation/projection/index.js';
 import { createLogger, createMemorySink } from '../logging/logger.js';
 import { ReplayPlaybackManager } from './replay-playback-manager.js';
@@ -200,12 +204,54 @@ describe('ReplayPlaybackManager', () => {
         });
 
         it('advances one tick via step on sequential requests', async () => {
+            // Both arms of the fork answer the same request with the same
+            // snapshot, so the tick assertions cannot tell them apart: replace
+            // the whole fork with an unconditional `seek(absoluteTick)` and
+            // every one of them still holds. What separates the arms is which
+            // call the fork makes, so count those. Tick 0 is not `lastTick + 1`,
+            // so it seeks; every tick after it is, so each takes one `step()`
+            // and no further seek. `seek()` steps internally on its way to the
+            // requested tick, which is why the SEEK count is the discriminator:
+            // under the unconditional-seek mutant it is 3 rather than 1.
+            const stepSpy = vi.spyOn(ReplayPlayer.prototype, 'step');
+            const seekSpy = vi.spyOn(ReplayPlayer.prototype, 'seek');
             const manager = makeManager();
             await manager.open('/replays/match.chimera-replay');
 
             expect(manager.snapshotAt(0).tick).toBe(0);
             expect(manager.snapshotAt(1).tick).toBe(1);
             expect(manager.snapshotAt(2).tick).toBe(2);
+
+            expect(seekSpy).toHaveBeenCalledTimes(1);
+            expect(seekSpy).toHaveBeenCalledWith(0);
+            expect(stepSpy).toHaveBeenCalledTimes(2);
+        });
+
+        it('falls back to seek when the fast path runs out of recorded actions', async () => {
+            // `makeReplayFile()` records 3 actions, so tick 3 is the last
+            // reachable snapshot and the player's cursor is exhausted there.
+            // Renderer tick 4 IS `lastTick + 1`, so the fork takes the fast
+            // path and `step()` answers `null` — the `?? active.player.seek()`
+            // arm is what produces the result, and it produces a refusal.
+            // Drop that arm and the `null` reaches `state.tick`, so the failure
+            // becomes a TypeError and the tick the fallback passes goes
+            // unobserved.
+            const manager = makeManager();
+            await manager.open('/replays/match.chimera-replay');
+            expect(manager.snapshotAt(3).tick).toBe(3);
+
+            let caught: unknown;
+            try {
+                manager.snapshotAt(4);
+            } catch (error) {
+                caught = error;
+            }
+
+            expect(caught).toBeInstanceOf(ReplaySeekError);
+            // The tick the fallback hands `seek()` is the absolute tick asked
+            // for, not the cursor it started from.
+            expect((caught as ReplaySeekError).requestedTick).toBe(4);
+            expect((caught as ReplaySeekError).finalTick).toBe(3);
         });
 
         it('serves the same tick again when a request repeats', async () => {
