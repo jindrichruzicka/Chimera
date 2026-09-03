@@ -105,6 +105,40 @@ ruleTester.run('chimera/no-fromfloat-in-simulation', rule, {
             filename: 'ai/engine/AIController.ts',
             code: `${IMPORT_FIXED_POINT_ALIAS}\nconst v = fromFloat(1.0);`,
         },
+
+        // 9. `APP_AI_PATH`'s SEGMENT anchor `(?:^|\/)`, on the shape that has a
+        // real-world trigger: `webapps/` merely ENDS in `apps`, so
+        // `apps/tactics/ai/` sits inside it as a substring. Drop the anchor and
+        // this fires. The call is a real `fromFloat` from FixedPoint, so this
+        // case can only pass because the zone check said no.
+        {
+            filename: '/repo/webapps/tactics/ai/tacticsPolicy.ts',
+            code: `${IMPORT_FIXED_POINT_ALIAS}\nconst v = fromFloat(2.5);`,
+        },
+
+        // 10. `APP_AI_PATH`'s TRAILING `\/`: the zone is the per-game `ai/`
+        // DIRECTORY, so a file sitting directly under `apps/<game>/` whose
+        // NAME merely starts with `ai` is outside it. Drop the trailing slash
+        // and `apps\/[^/]+\/ai` matches this filename, so it fires.
+        //
+        // Note this is NOT the sibling rules' shape: their predicate ends one
+        // segment earlier, at `apps/<name>/`. `APP_AI_PATH` needs the `ai`
+        // segment too, so a file directly under `apps/` misses both the
+        // shipped regex and the mutant, and would pin nothing.
+        {
+            filename: 'apps/tactics/aiPolicy.ts',
+            code: `${IMPORT_FIXED_POINT_ALIAS}\nconst w = fromFloat(0.75);`,
+        },
+
+        // 11. `APP_AI_PATH`'s app-name segment is SINGLE-segment (`[^/]+`): the
+        // zone is the game's own top-level `ai/`, one directory under the app.
+        // Widen it to `.+` and the match crosses slashes, so any nested `ai/`
+        // anywhere inside a game app — here a renderer one — becomes a
+        // forbidden zone.
+        {
+            filename: 'apps/tactics/renderer/ai/useAiHints.ts',
+            code: `${IMPORT_FIXED_POINT_ALIAS}\nconst z = fromFloat(1.25);`,
+        },
     ],
 
     // ── Invalid — rule MUST fire ─────────────────────────────────────────────
