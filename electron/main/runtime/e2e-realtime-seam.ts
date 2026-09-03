@@ -7,7 +7,9 @@
  * engine-tick heartbeat — its autonomous firing, or its broadcast to CLIENTS,
  * which is the half a single-window realtime game cannot show either. This seam
  * lets such a spec opt one host into a live ticker via
- * `CHIMERA_E2E_REALTIME_TICK_MS`.
+ * `CHIMERA_E2E_REALTIME_TICK_MS`. A forced ticker also makes that host
+ * heartbeat-driven for `restampForHeartbeatHost`: a player action it receives
+ * is re-stamped to the current tick rather than refused as stale.
  *
  * It is deliberately double-gated and production-inert: it fires ONLY when
  * `CHIMERA_E2E === '1'` (never set outside e2e) AND an explicit, valid tick

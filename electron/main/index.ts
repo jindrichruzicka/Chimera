@@ -108,6 +108,7 @@ import { SpectatorRegistry } from './lobby/SpectatorRegistry.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { RealtimeTicker } from './runtime/RealtimeTicker.js';
 import { resolveE2eForcedTickerHz } from './runtime/e2e-realtime-seam.js';
+import { restampForHeartbeatHost } from './runtime/realtime-input.js';
 import { buildHostSessionPipeline, type ReplayPort } from './runtime/HostSessionPipeline.js';
 import { runRevealSync } from './runtime/RevealOrchestrator.js';
 import { FileReplayRepository } from './replay/FileReplayRepository.js';
@@ -2549,7 +2550,19 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // (`transport.onActionReceived`), and AI seats (`dispatchAiAction`).
             // `afterTick` re-ticks every registered agent, so an AI seat made
             // active by `action` decides and dispatches its own next action here.
-            const runHostAction = (action: ActionEnvelope): void => {
+            //
+            // A heartbeat-driven host applies the action at the beat it arrives
+            // on. The ticker advances `tick` between the sender's stamp and this
+            // call, so the stamp is behind whenever the hop spanned a beat and
+            // the pipeline's `StaleActionError` would refuse the input; the
+            // re-stamp leaves a host with no ticker's envelope untouched, where
+            // that refusal is right. Every envelope entering here takes the same
+            // road — the host's renderer, a remote client, an AI seat.
+            const runHostAction = (received: ActionEnvelope): void => {
+                const action = restampForHeartbeatHost(received, {
+                    heartbeatDriven: realtimeTicker !== null,
+                    hostTick: sessionRuntime.getSnapshot().tick,
+                });
                 sessionRuntime.applyAction(action);
                 stageCommitmentIfAccepted(action);
                 simulationHost.afterTick(sessionRuntime.getSnapshot());

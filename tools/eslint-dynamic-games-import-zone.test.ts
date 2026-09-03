@@ -55,7 +55,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { spawnSync, execFile } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,7 +63,11 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
-const ESLINT_FIXTURE_TIMEOUT_MS = 20_000;
+// A ceiling that is live now that the fixtures spawn asynchronously: under
+// `spawnSync` the loop was blocked, so vitest's per-test timer could not fire
+// mid-test. A fixture case ran under ten seconds on the CI runs read; the
+// ceiling matches the reach cases' rather than sitting a slow day away.
+const ESLINT_FIXTURE_TIMEOUT_MS = 60_000;
 const ESLINT_REACH_TIMEOUT_MS = 60_000;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -171,20 +175,76 @@ interface ESLintResult {
     messages: ESLintMessage[];
 }
 
+interface ChildOutput {
+    readonly status: number;
+    readonly stdout: string;
+    readonly stderr: string;
+}
+
+/** The rejection `execFile` produces for a child that ran and exited non-zero. */
+interface ExitRejection {
+    readonly code: number;
+    readonly stdout: string;
+    readonly stderr: string;
+}
+
+function isExitRejection(error: unknown): error is ExitRejection {
+    if (typeof error !== 'object' || error === null) {
+        return false;
+    }
+    const candidate = error as { code?: unknown; stdout?: unknown; stderr?: unknown };
+    return (
+        typeof candidate.code === 'number' &&
+        typeof candidate.stdout === 'string' &&
+        typeof candidate.stderr === 'string'
+    );
+}
+
+/**
+ * Run `file` from the repo root and collect its output, whatever its exit code.
+ *
+ * Asynchronous, and the reason is the test runner rather than the tool. A
+ * Vitest worker reports each test's progress to the main process over an RPC
+ * whose reply it must read within birpc's fixed 60 s window, and it reads that
+ * reply only when its event loop is free. A `spawnSync` chain across the cases
+ * below held the loop for as long as the chain ran, and on the CI runner the
+ * chain crossed the minute: the run then ended with every test green and one
+ * unhandled `[vitest-worker]: Timeout calling "onTaskUpdate"`, which failed the
+ * job. With `execFile` the loop is idle while the child runs, so the reply is
+ * read as it arrives.
+ *
+ * A non-zero exit is an OUTPUT here, not a failure: eslint exits 1 whenever it
+ * reports a violation, which is what most cases below ask it to do. A
+ * rejection whose `code` is not a number — a missing binary, a child killed by
+ * a signal, output past `execFile`'s `maxBuffer` — is rethrown as a failure.
+ */
+async function runChild(file: string, args: readonly string[]): Promise<ChildOutput> {
+    try {
+        const { stdout, stderr } = await execFileAsync(file, [...args], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+        return { status: 0, stdout, stderr };
+    } catch (error) {
+        if (isExitRejection(error)) {
+            return { status: error.code, stdout: error.stdout, stderr: error.stderr };
+        }
+        throw error;
+    }
+}
+
 /**
  * Lint one repo-relative fixture with `--no-ignore` (the fixtures live in the
  * config's GLOBAL ignores so they never break the project lint run; `--no-ignore`
  * bypasses those, while a config object's own `ignores` still applies).
  */
-function runEslint(relPath: string): ESLintMessage[] {
-    const result = spawnSync(
-        eslintBin,
-        ['--no-ignore', '--format', 'json', resolve(repoRoot, relPath)],
-        { cwd: repoRoot, encoding: 'utf8' },
-    );
-    if (result.error) {
-        throw result.error;
-    }
+async function runEslint(relPath: string): Promise<ESLintMessage[]> {
+    const result = await runChild(eslintBin, [
+        '--no-ignore',
+        '--format',
+        'json',
+        resolve(repoRoot, relPath),
+    ]);
     // Empty stdout means eslint never linted anything — a missing path, a config
     // crash. Returning `[]` there would let "no rule reported" and "nothing was
     // measured" look identical, which is how a probe pointed at a file that does
@@ -228,7 +288,7 @@ interface ConfigProbe {
  * derivation and the rule share one implementation rather than two that agree
  * today.
  */
-function probeConfig(): ConfigProbe {
+async function probeConfig(): Promise<ConfigProbe> {
     const script = `
         const config = (await import('./eslint.config.mjs')).default;
         const { isGamesImport } = await import(${JSON.stringify(GAME_PATH_MODULE)});
@@ -279,13 +339,7 @@ function probeConfig(): ConfigProbe {
 
         }));
     `;
-    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
-        cwd: repoRoot,
-        encoding: 'utf8',
-    });
-    if (result.error) {
-        throw result.error;
-    }
+    const result = await runChild(process.execPath, ['--input-type=module', '-e', script]);
     if (result.status !== 0) {
         throw new Error(`could not load eslint.config.mjs: ${result.stderr}`);
     }
@@ -301,8 +355,8 @@ function declaresDynamicRule(entry: ConfigObject): boolean {
     return entry.dynamicRule !== null;
 }
 
-function configObjects(): readonly ConfigObject[] {
-    return probeConfig().objects;
+async function configObjects(): Promise<readonly ConfigObject[]> {
+    return (await probeConfig()).objects;
 }
 
 /** The `ruleId` entry the config ESLint actually resolves for `file`. */
@@ -462,13 +516,13 @@ describe('dynamic-import zone probes', () => {
 
     it(
         'fail loudly rather than measuring nothing when a probe path is wrong',
-        () => {
+        async () => {
             // The two anti-vacuity guards behind every NEGATIVE assertion in this
             // suite. `runEslint` returning `[]` on a path eslint never linted, or
             // `specifierOf` relabelling an unreadable file as one that names no
             // module, would make "no rule reported" and "nothing was measured"
             // indistinguishable — which is how a phantom path reads as a pass.
-            expect(() => runEslint('simulation/engine/does-not-exist.ts')).toThrow(
+            await expect(runEslint('simulation/engine/does-not-exist.ts')).rejects.toThrow(
                 /produced no JSON/u,
             );
             expect(() => specifierOf('simulation/engine/does-not-exist.ts')).toThrow(/ENOENT/u);
@@ -480,14 +534,14 @@ describe('dynamic-import zone probes', () => {
 // ── 1. Parity ───────────────────────────────────────────────────────────────
 
 describe('dynamic-import zone parity (Invariant #1)', () => {
-    it('reads "declares the rule" off the sentinel probeConfig actually produces', () => {
+    it('reads "declares the rule" off the sentinel probeConfig actually produces', async () => {
         // `probeConfig()` normalises an absent rule to `null`, and both filters
         // below turn on that agreement. Nothing else asserts the producer and
         // the consumer mean the same thing, so a comparator that drifted (say to
         // `=== undefined`) would classify EVERY object as "declares it" — the
         // gaps filter would then find no gaps in a config that was all gap, and
         // the subset check would pass while measuring nothing.
-        const entries = configObjects();
+        const entries = await configObjects();
 
         expect(entries.filter((entry) => declaresDynamicRule(entry)).length).toBeGreaterThan(0);
         expect(entries.filter((entry) => !declaresDynamicRule(entry)).length).toBeGreaterThan(0);
@@ -496,27 +550,27 @@ describe('dynamic-import zone parity (Invariant #1)', () => {
         ).toBe(true);
     });
 
-    it('declares the dynamic rule in every config object that bans a game statically', () => {
-        const gaps = configObjects()
+    it('declares the dynamic rule in every config object that bans a game statically', async () => {
+        const gaps = (await configObjects())
             .filter((entry) => entry.bansGameStatically && !declaresDynamicRule(entry))
             .map((entry) => entry.files?.join(', ') ?? '(no files glob)');
 
         expect(gaps).toEqual([]);
     });
 
-    it('declares the dynamic rule in no config object that bans no game statically', () => {
+    it('declares the dynamic rule in no config object that bans no game statically', async () => {
         // The converse direction. The rule's own report message tells the reader
         // "this zone bans the static form through no-restricted-imports"; a zone
         // that declared the rule without such a ban would emit a message that
         // lies about its own config, and the subset check above cannot see it.
-        const orphans = configObjects()
+        const orphans = (await configObjects())
             .filter((entry) => declaresDynamicRule(entry) && !entry.bansGameStatically)
             .map((entry) => entry.files?.join(', ') ?? '(no files glob)');
 
         expect(orphans).toEqual([]);
     });
 
-    it('finds the static game bans it is comparing against', () => {
+    it('finds the static game bans it is comparing against', async () => {
         // Without this, a change that renamed the option shape out from under
         // `namesGame()` would make the parity check above vacuously green: zero
         // zones ban a game statically, so zero of them are missing the arm.
@@ -525,7 +579,7 @@ describe('dynamic-import zone parity (Invariant #1)', () => {
         // counts CONFIG OBJECTS; adding a probe for an object already covered
         // must not move this number. The relation between the two is stated
         // once, below, where the literal names pin it.
-        const banning = configObjects().filter((entry) => entry.bansGameStatically);
+        const banning = (await configObjects()).filter((entry) => entry.bansGameStatically);
 
         expect(banning.map((entry) => entry.files?.join(', '))).toHaveLength(5);
 
@@ -547,7 +601,7 @@ describe('dynamic-import zone parity (Invariant #1)', () => {
         ]);
     });
 
-    it('classifies a group glob the way the rule classifies a specifier', () => {
+    it('classifies a group glob the way the rule classifies a specifier', async () => {
         // The derivation above asks `isGamesImport` whether a glob names a game.
         // A classifier that lost the package arm would still find every zone
         // that spells the ban as `apps/*` and miss one that bans a game only as
@@ -557,14 +611,14 @@ describe('dynamic-import zone parity (Invariant #1)', () => {
         // off this array, so only the count sees a deleted row.
         expect(GLOB_CLASSIFICATION).toHaveLength(11);
 
-        const { globVerdicts } = probeConfig();
+        const { globVerdicts } = await probeConfig();
 
         expect(
             GLOB_CLASSIFICATION.map(([glob], index) => [glob, globVerdicts[index]] as const),
         ).toEqual(GLOB_CLASSIFICATION.map(([glob, expected]) => [glob, expected]));
     });
 
-    it('reads a game ban out of the option shapes OPTION_SHAPES pins, and not the one it does not', () => {
+    it('reads a game ban out of the option shapes OPTION_SHAPES pins, and not the one it does not', async () => {
         // Both directions in one table: the shapes the derivation reads a ban
         // out of, the shape it cannot (a constructed regex), and the controls
         // that stop an always-true arm passing the lot.
@@ -575,15 +629,15 @@ describe('dynamic-import zone parity (Invariant #1)', () => {
         // thing that notices.
         expect(OPTION_SHAPES).toHaveLength(12);
 
-        const { optionShapeVerdicts } = probeConfig();
+        const { optionShapeVerdicts } = await probeConfig();
 
         expect(
             OPTION_SHAPES.map(([label], index) => [label, optionShapeVerdicts[index]] as const),
         ).toEqual(OPTION_SHAPES.map(([label, , expected]) => [label, expected]));
     });
 
-    it('enables the dynamic rule at error severity wherever it is declared', () => {
-        const declared = configObjects().filter((entry) => declaresDynamicRule(entry));
+    it('enables the dynamic rule at error severity wherever it is declared', async () => {
+        const declared = (await configObjects()).filter((entry) => declaresDynamicRule(entry));
 
         expect(declared.length).toBeGreaterThan(0);
         for (const entry of declared) {
@@ -598,8 +652,8 @@ describe('dynamic-import zone behaviour', () => {
     for (const zone of ZONES) {
         it(
             `flags a lazy game load in ${zone.name}`,
-            () => {
-                expect(ruleIdsOf(runEslint(zone.badFixture))).toContain(DYNAMIC_RULE);
+            async () => {
+                expect(ruleIdsOf(await runEslint(zone.badFixture))).toContain(DYNAMIC_RULE);
             },
             ESLINT_FIXTURE_TIMEOUT_MS,
         );
@@ -607,8 +661,8 @@ describe('dynamic-import zone behaviour', () => {
 
     it(
         'stays silent on a lazy load of a non-game module',
-        () => {
-            const ruleIds = ruleIdsOf(runEslint(GOOD_FIXTURE));
+        async () => {
+            const ruleIds = ruleIdsOf(await runEslint(GOOD_FIXTURE));
             expect(ruleIds).not.toContain(DYNAMIC_RULE);
         },
         ESLINT_FIXTURE_TIMEOUT_MS,
@@ -654,7 +708,7 @@ describe('specifierIn', () => {
 describe('dynamic-import zone — static and dynamic positions both covered', () => {
     it(
         'reports the static form under no-restricted-imports and the lazy one under the chimera rule',
-        () => {
+        async () => {
             // The two fixtures name the SAME specifier and differ only in the
             // position it sits in — asserted, not arranged. Without this, a
             // one-line edit to either file makes the two `not.toContain`
@@ -662,9 +716,9 @@ describe('dynamic-import zone — static and dynamic positions both covered', ()
             // because the positions do, and the suite stays green either way.
             expect(specifierOf(STATIC_FIXTURE)).toBe(specifierOf(DYNAMIC_FIXTURE));
 
-            const staticMessages = runEslint(STATIC_FIXTURE);
+            const staticMessages = await runEslint(STATIC_FIXTURE);
             const staticIds = ruleIdsOf(staticMessages);
-            const dynamicIds = ruleIdsOf(runEslint(DYNAMIC_FIXTURE));
+            const dynamicIds = ruleIdsOf(await runEslint(DYNAMIC_FIXTURE));
 
             expect(staticIds).toContain(STATIC_RULE);
             // …reported by the group that names a GAME, which the rule id alone

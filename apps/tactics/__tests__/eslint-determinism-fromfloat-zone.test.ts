@@ -29,7 +29,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { spawnSync, execFile } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,7 +37,11 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
-const ESLINT_FIXTURE_TIMEOUT_MS = 20_000;
+// A ceiling that is live now that the fixtures spawn asynchronously: under
+// `spawnSync` the loop was blocked, so vitest's per-test timer could not fire
+// mid-test. A fixture case ran under ten seconds on the CI runs read; the
+// ceiling matches the reach case's rather than sitting a slow day away.
+const ESLINT_FIXTURE_TIMEOUT_MS = 60_000;
 // The reach case spawns one `--print-config` per probe target. They run
 // concurrently, but the ceiling has to cover a cold start of all at once.
 const ESLINT_REACH_TIMEOUT_MS = 60_000;
@@ -63,20 +67,77 @@ interface ESLintResult {
     messages: ESLintMessage[];
 }
 
+interface ChildOutput {
+    readonly status: number;
+    readonly stdout: string;
+    readonly stderr: string;
+}
+
+/** The rejection `execFile` produces for a child that ran and exited non-zero. */
+interface ExitRejection {
+    readonly code: number;
+    readonly stdout: string;
+    readonly stderr: string;
+}
+
+function isExitRejection(error: unknown): error is ExitRejection {
+    if (typeof error !== 'object' || error === null) {
+        return false;
+    }
+    const candidate = error as { code?: unknown; stdout?: unknown; stderr?: unknown };
+    return (
+        typeof candidate.code === 'number' &&
+        typeof candidate.stdout === 'string' &&
+        typeof candidate.stderr === 'string'
+    );
+}
+
+/**
+ * Run `file` from the repo root and collect its output, whatever its exit code.
+ *
+ * Asynchronous, and the reason is the test runner rather than the tool. A
+ * Vitest worker reports each test's progress to the main process over an RPC
+ * whose reply it must read within birpc's fixed 60 s window, and it reads that
+ * reply only when its event loop is free. A `spawnSync` chain across the cases
+ * below holds the loop for as long as the chain runs. On the CI runs that
+ * tripped its sibling `tools/eslint-dynamic-games-import-zone.test.ts`, this
+ * file ran for about as long as that window; past it, the run ends with every
+ * test green and one unhandled `[vitest-worker]: Timeout calling
+ * "onTaskUpdate"`, which fails the job. With `execFile` the loop is idle while
+ * the child runs, so the reply is read as it arrives.
+ *
+ * A non-zero exit is an OUTPUT here, not a failure: eslint exits 1 whenever it
+ * reports a violation, which is what the bad fixtures below ask it to do. A
+ * rejection whose `code` is not a number — a missing binary, a child killed by
+ * a signal, output past `execFile`'s `maxBuffer` — is rethrown as a failure.
+ */
+async function runChild(file: string, args: readonly string[]): Promise<ChildOutput> {
+    try {
+        const { stdout, stderr } = await execFileAsync(file, [...args], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+        return { status: 0, stdout, stderr };
+    } catch (error) {
+        if (isExitRejection(error)) {
+            return { status: error.code, stdout: error.stdout, stderr: error.stderr };
+        }
+        throw error;
+    }
+}
+
 /**
  * Lint one repo-relative fixture with `--no-ignore` (the fixtures live in the
  * config's GLOBAL ignores so they never break the project lint run; `--no-ignore`
  * bypasses those, while a config object's own `ignores` still applies).
  */
-function runEslint(relPath: string): ESLintMessage[] {
-    const result = spawnSync(
-        eslintBin,
-        ['--no-ignore', '--format', 'json', resolve(repoRoot, relPath)],
-        { cwd: repoRoot, encoding: 'utf8' },
-    );
-    if (result.error) {
-        throw result.error;
-    }
+async function runEslint(relPath: string): Promise<ESLintMessage[]> {
+    const result = await runChild(eslintBin, [
+        '--no-ignore',
+        '--format',
+        'json',
+        resolve(repoRoot, relPath),
+    ]);
     const output = result.stdout.trim();
     if (!output) {
         return [];
@@ -96,7 +157,7 @@ interface Zone {
 }
 
 /** Every flat-config entry that configures `ruleId`, in declaration order. */
-function zonesConfiguring(ruleId: string): Zone[] {
+async function zonesConfiguring(ruleId: string): Promise<Zone[]> {
     const script = `
         const config = (await import('./eslint.config.mjs')).default;
         const zones = config
@@ -104,13 +165,7 @@ function zonesConfiguring(ruleId: string): Zone[] {
             .map((e) => ({ files: e.files, ignores: e.ignores, rule: e.rules[${JSON.stringify(ruleId)}] }));
         process.stdout.write(JSON.stringify(zones));
     `;
-    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
-        cwd: repoRoot,
-        encoding: 'utf8',
-    });
-    if (result.error) {
-        throw result.error;
-    }
+    const result = await runChild(process.execPath, ['--input-type=module', '-e', script]);
     if (result.status !== 0) {
         throw new Error(`could not load eslint.config.mjs: ${result.stderr}`);
     }
@@ -234,8 +289,8 @@ describe('ESLint apps zone — behaviour (Invariants #76, #43, #1)', () => {
     for (const [label, fixture, ruleId] of badCases) {
         it(
             `flags ${label} with ${ruleId} at error severity`,
-            () => {
-                const messages = runEslint(fixture);
+            async () => {
+                const messages = await runEslint(fixture);
                 expect(ruleIdsOf(messages)).toContain(ruleId);
                 const hit = messages.find((m) => m.ruleId === ruleId);
                 // Error, not warning: no package sets `--max-warnings`, so a
@@ -254,8 +309,8 @@ describe('ESLint apps zone — behaviour (Invariants #76, #43, #1)', () => {
     for (const fixture of goodFixtures) {
         it(
             `produces zero violations for ${fixture}`,
-            () => {
-                const violations = runEslint(fixture).filter((m) => m.severity >= 2);
+            async () => {
+                const violations = (await runEslint(fixture)).filter((m) => m.severity >= 2);
                 expect(violations).toEqual([]);
             },
             ESLINT_FIXTURE_TIMEOUT_MS,
@@ -266,8 +321,10 @@ describe('ESLint apps zone — behaviour (Invariants #76, #43, #1)', () => {
 // ── 2. Shape ──────────────────────────────────────────────────────────────
 
 describe('ESLint apps zone — shape', () => {
-    it('scopes the fromFloat error zone to engine + per-game simulation + per-game ai', () => {
-        const errorZones = zonesConfiguring(FROMFLOAT_RULE).filter((z) => z.rule === 'error');
+    it('scopes the fromFloat error zone to engine + per-game simulation + per-game ai', async () => {
+        const errorZones = (await zonesConfiguring(FROMFLOAT_RULE)).filter(
+            (z) => z.rule === 'error',
+        );
         expect(errorZones).toHaveLength(1);
         expect(errorZones[0]!.files).toEqual([
             'simulation/**/*.{ts,tsx}',
@@ -276,16 +333,16 @@ describe('ESLint apps zone — shape', () => {
         ]);
     });
 
-    it('extends the determinism zone to both per-game gameplay dirs', () => {
-        const zones = zonesConfiguring(DETERMINISM_RULE);
+    it('extends the determinism zone to both per-game gameplay dirs', async () => {
+        const zones = await zonesConfiguring(DETERMINISM_RULE);
         expect(zones).toHaveLength(1);
         const files = zones[0]!.files ?? [];
         expect(files).toContain('apps/*/simulation/**/*.{ts,tsx}');
         expect(files).toContain('apps/*/ai/**/*.{ts,tsx}');
     });
 
-    it('scopes the gameplay boundary zone to ai/ + the per-game gameplay, content, and settings-schema globs', () => {
-        const zones = zonesConfiguring(BOUNDARY_RULE).filter((z) =>
+    it('scopes the gameplay boundary zone to ai/ + the per-game gameplay, content, and settings-schema globs', async () => {
+        const zones = (await zonesConfiguring(BOUNDARY_RULE)).filter((z) =>
             (z.files ?? []).includes('ai/**/*.{ts,tsx}'),
         );
         expect(zones).toHaveLength(1);

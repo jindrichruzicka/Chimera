@@ -356,7 +356,9 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                 revealIfCommitmentEndTurn(endTurnAction);
             };
 
-            // mirrors index.ts::runHostAction — the shared host fan-out.
+            // mirrors index.ts::runHostAction — the shared host fan-out — minus
+            // the heartbeat re-stamp: this harness builds no RealtimeTicker, so
+            // it would be the identity.
             const runHostAction = (action: ActionEnvelope): void => {
                 sessionRuntime.applyAction(action);
                 stageCommitmentIfAccepted(action);

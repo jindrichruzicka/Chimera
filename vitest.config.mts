@@ -5,12 +5,18 @@ import { createPreferTypeScriptSourceResolver } from './tools/vitest-resolver-pl
 
 const workspaceRoot = import.meta.dirname;
 
-// Cap at 1: even with 2 forks the Vite main thread is saturated by the heavy
-// ESLint/renderer test suites (~90 s total), tripping birpc's `onTaskUpdate`
-// timeout after all tests have passed. A single fork keeps the main thread
-// responsive; by avoiding redundant cold transforms it is also *faster* on the
-// renderer suite. The bottleneck is one main thread, so the cap is a small
-// constant rather than core-scaled.
+// Cap at 1: a single fork avoids redundant cold transforms and is *faster* on
+// the renderer suite. The bottleneck is one main thread (Vite transforms run
+// there), so the cap is a small constant rather than core-scaled.
+//
+// What the cap does NOT buy is immunity from birpc's `onTaskUpdate` timeout.
+// That reply is read by the WORKER, and only when its event loop is free: a
+// test file that holds the loop synchronously for a minute — a chain of
+// `spawnSync` eslint runs, measured on the CI runner at this very cap — ends
+// with every test green and one unhandled `[vitest-worker]: Timeout calling
+// "onTaskUpdate"`, which fails the run. The cure lives in the test file, which
+// must spawn asynchronously — `tools/eslint-dynamic-games-import-zone.test.ts`
+// and its tactics sibling do.
 const MAX_TEST_FORKS = 1;
 
 const VIRTUAL_PREFIX = '\0chimera-raw-css:';

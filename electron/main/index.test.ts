@@ -26,6 +26,10 @@ import { makeReplayFile } from '@chimera-engine/simulation/replay/__test-support
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
 import { LOGS_EMIT_CHANNEL } from '../preload/apis/logs-api.js';
 import {
+    GAME_ACTION_REJECTED_CHANNEL,
+    GAME_SEND_ACTION_CHANNEL,
+} from '../preload/apis/game-api.js';
+import {
     SESSION_MODE_QUICK,
     SESSION_MODE_PARAM,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
@@ -3502,6 +3506,132 @@ describe('main', () => {
         mockSimulationHostInstance.afterTick.mockClear();
         capturedActionRef.current?.(spectatorId, { ...moveAction, tick: 2 });
         expect(mockSimulationHostInstance.afterTick).not.toHaveBeenCalled();
+    });
+
+    // ── A renderer action's tick on a heartbeat-driven host ──────────────────
+    // The host's own renderer stamps an action with the last tick it saw, and
+    // on a realtime host the ticker has moved the clock by the time the
+    // envelope crosses IPC. The two cases below are the fork: the same stale
+    // envelope is applied when a heartbeat drives the clock and refused when
+    // only actions do.
+
+    /**
+     * The `chimera:game:send-action` listener the most recent `main()` registered,
+     * driven the way the preload does — with an `event` whose sender receives
+     * the REJECT push.
+     */
+    function sendRendererAction(action: ActionEnvelope): ReturnType<typeof vi.fn> {
+        const handler = ipcMainOn.mock.calls.find(
+            ([channel]) => channel === GAME_SEND_ACTION_CHANNEL,
+        )?.[1] as ((event: unknown, action: unknown) => void) | undefined;
+        expect(handler).toBeDefined();
+        const senderSend = vi.fn();
+        handler!({ sender: { send: senderSend } }, action);
+        return senderSend;
+    }
+
+    it('applies a renderer action stamped behind the clock on a heartbeat-driven host', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterCtor.mockClear();
+        // `ipcMainOn` accumulates across the file; cleared so the listener found
+        // below belongs to THIS `main()`.
+        ipcMainOn.mockClear();
+        // Constructed, never started: the fork under test reads the ticker's
+        // presence, and with no timer armed the test never touches the wall
+        // clock and teardown has nothing to clear.
+        const tickerStart = vi
+            .spyOn(RealtimeTicker.prototype, 'start')
+            .mockImplementation(() => undefined);
+        let teardown: (() => void) | void = undefined;
+        try {
+            await main(makeRealtimeTestContributions());
+
+            const { transport, options } = makeSpectatorSessionHarness();
+            const hostId = playerId('host-heartbeat-input');
+            teardown = options?.onSessionHosted?.(transport, { hostId, maxPlayers: 1 });
+            options?.onGameStartRequested?.({
+                info: { sessionId: 'session-heartbeat-input', hostId, gameId: 'tactics' },
+                players: [{ playerId: hostId, displayName: 'Host', ready: true }],
+            });
+
+            // `engine:start_game` took the clock to 1. An end-turn stamped at
+            // that tick goes through as stamped and takes it to 2 — the
+            // identity arm, and the distance that tells a re-stamp to the live
+            // tick from a re-stamp to the stamp's successor.
+            mockSimulationHostInstance.afterTick.mockClear();
+            const currentSend = sendRendererAction({
+                type: 'engine:end_turn',
+                playerId: hostId,
+                tick: 1,
+                payload: {},
+            });
+            expect(currentSend).not.toHaveBeenCalled();
+            expect(mockSimulationHostInstance.afterTick).toHaveBeenLastCalledWith(
+                expect.objectContaining({ tick: 2 }),
+            );
+
+            // The renderer's stamp is two behind the host, which is what a slow
+            // round trip leaves it holding.
+            const staleSend = sendRendererAction({
+                type: 'tactics:move_unit',
+                playerId: hostId,
+                tick: 0,
+                payload: { unitId: 'unit-1', x: 1, y: 0 },
+            });
+
+            // Applied at the HOST's tick: the fan-out ran again on a snapshot
+            // whose clock is 3 — past 2, not past the stamp's successor — and
+            // nothing was pushed back as a rejection.
+            expect(mockSimulationHostInstance.afterTick).toHaveBeenLastCalledWith(
+                expect.objectContaining({ tick: 3 }),
+            );
+            expect(staleSend).not.toHaveBeenCalled();
+        } finally {
+            teardown?.();
+            tickerStart.mockRestore();
+        }
+    });
+
+    it('still refuses a renderer action stamped one tick behind on a turn-based host', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterCtor.mockClear();
+        ipcMainOn.mockClear();
+        let teardown: (() => void) | void = undefined;
+        try {
+            await main(makeTestContributions());
+
+            const { transport, options } = makeSpectatorSessionHarness();
+            const hostId = playerId('host-turn-based-input');
+            teardown = options?.onSessionHosted?.(transport, { hostId, maxPlayers: 1 });
+            options?.onGameStartRequested?.({
+                info: { sessionId: 'session-turn-based-input', hostId, gameId: 'tactics' },
+                players: [{ playerId: hostId, displayName: 'Host', ready: true }],
+            });
+
+            mockSimulationHostInstance.afterTick.mockClear();
+            const senderSend = sendRendererAction({
+                type: 'tactics:move_unit',
+                playerId: hostId,
+                tick: 0,
+                payload: { unitId: 'unit-1', x: 1, y: 0 },
+            });
+
+            // The pipeline's own refusal, pushed back to the sender: with no
+            // heartbeat the clock only moves when someone acts, so a stale
+            // stamp is an action against a state that no longer exists.
+            expect(mockSimulationHostInstance.afterTick).not.toHaveBeenCalled();
+            expect(senderSend).toHaveBeenCalledWith(
+                GAME_ACTION_REJECTED_CHANNEL,
+                expect.objectContaining({
+                    reason: expect.stringContaining(
+                        'StaleActionError: action.tick (0) does not match snapshot.tick (1)',
+                    ),
+                    tick: 0,
+                }),
+            );
+        } finally {
+            teardown?.();
+        }
     });
 
     it('removes a spectator from the viewer registry when it disconnects', async () => {
