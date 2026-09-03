@@ -13,7 +13,7 @@ tags: [replay, determinism, action-history, export, ipc, perspective-replay, fog
 
 ## Overview
 
-Given `seed + ActionHistory`, a Chimera simulation replays bit-identically (invariants #42–44). Replays are a thin packaging + playback layer on top of existing determinism guarantees — marginal cost is low, value (bug reports, post-game review, highlights) is high.
+Given `seed + ActionHistory`, a Chimera simulation replays bit-identically (invariants #42–44) — for the action sequences `ReplayPlayer.step()` accepts, which is a strictly smaller set than "everything a match records"; see Determinism guarantees & errors below for what it refuses and why. Replays are a thin packaging + playback layer on top of existing determinism guarantees — marginal cost is low, value (bug reports, post-game review, highlights) is high.
 
 Two replay artifacts coexist on disk, discriminated by a `kind` field. The **deterministic match replay** (`ReplayFile`, no `kind`) is host-internal: it stores `seed` + `gameConfig` + full `EngineAction` payloads and re-runs the simulation through `ActionPipeline` (Invariant #71). The **perspective replay** (`PerspectiveReplayFile`, `kind: 'perspective'`) is privacy-preserving: it stores only already-projected `PlayerSnapshot` frames for a single locked viewer and is never re-simulated (Invariant #98). See [Perspective Replay](#perspective-replay-perspectivereplayfile) below.
 

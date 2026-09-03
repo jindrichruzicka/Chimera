@@ -9,7 +9,8 @@
  *
  * Invariants upheld:
  *   #1  — simulation/replay has zero runtime deps on Electron, renderer, games, or networking
- *   #42 — every replayed action advances tick by exactly 1 via ActionPipeline
+ *   #42 — step() REFUSES any advance other than +1 via ActionPipeline; what
+ *          that excludes from replay is listed in §4.28
  *   #43 — replay methods are pure; no I/O, Date.now, or Math.random
  *   #70 — ReplayPlayer uses the injected ActionPipeline
  *   #71 — initialization derives from seed + gameConfig only

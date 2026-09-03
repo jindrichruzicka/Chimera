@@ -17,8 +17,8 @@
  *           `BaseGameSnapshot` produced by `ReplayPlayer` stays host-local.
  *   #67 — constructed with an injected `Logger` child; no logger is created here.
  *   #70 — playback reuses `buildHostSessionPipeline`; there is no replay-only
- *           pipeline shortcut, so recorded `engine:undo`/`engine:redo` actions
- *           replay through the same undo/history machinery as live play.
+ *           pipeline shortcut. What a recorded `engine:undo` does on this path
+ *           is §4.28's Determinism guarantees bullet.
  */
 
 import type { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
@@ -135,9 +135,9 @@ export class ReplayPlaybackManager {
         }
 
         // Invariant #70: reuse the exact live host pipeline wiring (undo +
-        // history) so recorded undo/redo actions replay faithfully. The broadcast
-        // and autosave ports are no-ops — playback projects outside the pipeline
-        // and never persists.
+        // history) rather than a replay-only shortcut. The broadcast and
+        // autosave ports are no-ops — playback projects outside the pipeline and
+        // never persists.
         const { pipeline } = buildHostSessionPipeline(this.#registry, () => undefined, {
             gameId: file.gameId,
             savePort: { autoSave: () => Promise.resolve() },
@@ -166,9 +166,10 @@ export class ReplayPlaybackManager {
 
         return {
             gameId: file.gameId,
-            // The renderer scrubs 0..totalTicks. Under invariant #42 each recorded
-            // action advances the tick by exactly 1, so the number of scrubbable
-            // steps is `file.actions.length` — independent of the replay's
+            // The renderer scrubs 0..totalTicks. `ReplayPlayer.step()` refuses any
+            // advance other than +1, so a replay that plays at all takes exactly
+            // one step per recorded action and the number of scrubbable steps is
+            // `file.actions.length` — independent of the replay's
             // (possibly non-zero) base tick. `#projectedAt` maps each 0-based
             // renderer tick onto the replay's absolute ticks, so the terminal
             // (game-over) snapshot at renderer tick `file.actions.length` stays
@@ -222,10 +223,13 @@ export class ReplayPlaybackManager {
      * sequential case (`absoluteTick === lastTick + 1`) and falls back to `seek()`
      * for scrubbing.
      *
-     * The `step()` fast-path is sound because every recorded action advances the
-     * tick by exactly 1 (Invariant #42): `step()` therefore returns either the
-     * snapshot at `lastTick + 1` or `null` at end-of-replay — never a snapshot at
-     * an unexpected tick — so trusting its `.tick` here cannot desynchronise
+     * The `step()` fast-path is sound because of what `step()` REFUSES, not
+     * because of what recordings guarantee: it throws `DeterminismError` unless
+     * the pipeline advanced the tick by exactly +1
+     * (`ReplayPlayer.test.ts > throws DeterminismError when a replayed action
+     * does not advance exactly one tick`). So it returns either the snapshot at
+     * `lastTick + 1` or `null` at end-of-replay — never a snapshot at an
+     * unexpected tick — and trusting its `.tick` here cannot desynchronise
      * `lastTick`.
      */
     #projectedAt(active: ActivePlayback, tick: number): PlayerSnapshot {

@@ -18,9 +18,11 @@
 import { describe, expect, it } from 'vitest';
 import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera-engine/simulation/engine/EngineActions.js';
+import { TickContractError } from '@chimera-engine/simulation/engine/index.js';
 import type { ActionDefinition } from '@chimera-engine/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
 import type { ReplayFile } from '@chimera-engine/simulation/replay/index.js';
+import { DeterminismError } from '@chimera-engine/simulation/replay/index.js';
 import type { VisibilityRules } from '@chimera-engine/simulation/projection/index.js';
 import { createLogger, createMemorySink } from '../logging/logger.js';
 import { ReplayPlaybackManager } from './replay-playback-manager.js';
@@ -300,6 +302,87 @@ describe('ReplayPlaybackManager', () => {
 
             expect(manager.snapshotAt(0).tick).toBe(4);
             expect(manager.snapshotAt(1).tick).toBe(5);
+        });
+    });
+    // ─── What the step() fast path actually rests on ─────────────────────────
+    //
+    // `#projectedAt` writes `active.lastTick = state.tick` from whatever `step()`
+    // returns. That is safe because a recording the pipeline cannot advance by
+    // exactly one is REFUSED, not served at an unexpected tick. The safety is a
+    // property of the refusal, not of what recordings contain — nothing stops a
+    // host recording an action no replay will accept.
+    //
+    // Both refusals are covered, because they are different layers and a
+    // production build has only the second. A reducer that CHANGES the snapshot
+    // without advancing is caught inside `pipeline.process` by the Stage 5
+    // tick-contract check, which is development-only. One that returns its INPUT
+    // REFERENCE is exempt there — a no-op need not advance — and reaches
+    // `ReplayPlayer.step()`, whose own comparison reads no build flag.
+    // That second case is the one the `#projectedAt` docblock argues from.
+    describe('a recording the pipeline cannot advance by exactly one', () => {
+        const stalledDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:stalled',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state) => ({ ...state, events: [...state.events, { type: 'game:stalled' }] }),
+        };
+
+        const inertDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:inert',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state) => state,
+        };
+
+        function makeManagerFor(type: string): ReplayPlaybackManager {
+            const registry = makeRegistry();
+            registry.register(stalledDef);
+            registry.register(inertDef);
+            const file: ReplayFile = {
+                ...makeReplayFile(1),
+                actions: [
+                    { tick: 0, playerId: P1, action: { type, playerId: P1, tick: 0, payload: {} } },
+                ],
+            };
+            return new ReplayPlaybackManager(
+                registry,
+                (gameId) => (gameId === 'tactics' ? passthroughRules : undefined),
+                { load: () => Promise.resolve(file), getCurrentMatchFile: () => file },
+                makeLogger(),
+            );
+        }
+
+        it('names the reducer in a development build, where Stage 5 gets there first', async () => {
+            // This suite is a development build, so the pipeline's tick-contract
+            // check fires inside `process()` and its message carries the action
+            // type. Fold that check off and the refusal still happens, one layer
+            // later and without the name — which is the case below.
+            const manager = makeManagerFor('game:stalled');
+            await manager.open('/replays/stalled.chimera-replay');
+
+            expect(() => manager.snapshotAt(1)).toThrow(TickContractError);
+            expect(() => manager.snapshotAt(1)).toThrow(/game:stalled/u);
+        });
+
+        it('refuses an input-reference reducer via ReplayPlayer.step()', async () => {
+            // The arm the `#projectedAt` docblock rests on: no Stage 5 check
+            // fires here, so deleting `step()`'s own tick comparison would make
+            // this the snapshot the manager serves — at tick 0, while
+            // `lastTick` was told it reached 1.
+            const manager = makeManagerFor('game:inert');
+            await manager.open('/replays/inert.chimera-replay');
+
+            expect(() => manager.snapshotAt(1)).toThrow(DeterminismError);
+        });
+
+        it('still serves the initial snapshot, so the refusal is about advancing', async () => {
+            // Guards the two above against passing for the wrong reason: the
+            // file opens, the base state projects, and only advancing past the
+            // offending action fails.
+            const manager = makeManagerFor('game:stalled');
+            await manager.open('/replays/stalled.chimera-replay');
+
+            expect(manager.snapshotAt(0).tick).toBe(0);
         });
     });
 
