@@ -208,6 +208,37 @@ describe('ReplayPlaybackManager', () => {
             expect(manager.snapshotAt(2).tick).toBe(2);
         });
 
+        it('serves the same tick again when a request repeats', async () => {
+            // The cursor write after each projection is what makes a repeat
+            // idempotent. Without it `lastTick` stays at `baseTick`, so the
+            // fast path fires on EVERY call and each one steps the player
+            // forward: the second snapshotAt(1) would answer with tick 2.
+            const manager = makeManager();
+            await manager.open('/replays/match.chimera-replay');
+
+            expect(manager.snapshotAt(0).tick).toBe(0);
+            expect(manager.snapshotAt(1).tick).toBe(1);
+            expect(manager.snapshotAt(1).tick).toBe(1);
+        });
+
+        it('serves the requested tick when a request skips ahead by two', async () => {
+            // The cursor must record the tick actually produced, not one past
+            // it. A cursor running one ahead makes this request look sequential,
+            // so it would take the step() fast path and serve tick 1 — the frame
+            // BEFORE the one asked for.
+            const manager = makeManager();
+            await manager.open('/replays/match.chimera-replay');
+
+            expect(manager.snapshotAt(0).tick).toBe(0);
+            expect(manager.snapshotAt(2).tick).toBe(2);
+        });
+
+        // A third variant of the cursor write, `active.lastTick = absoluteTick`,
+        // deliberately gets no case: it is equivalent over the reachable domain.
+        // `seek(t)` returns a snapshot whose `.tick` is `t` or throws, and the
+        // fast path is taken only when `absoluteTick === lastTick + 1`, which is
+        // what `step()` returns.
+
         it('seeks to an arbitrary tick on non-sequential requests', async () => {
             const manager = makeManager();
             await manager.open('/replays/match.chimera-replay');
@@ -254,6 +285,18 @@ describe('ReplayPlaybackManager', () => {
             const snaps = manager.snapshotRange(1, 2);
 
             expect(snaps.map((s) => s.tick)).toEqual([1, 2]);
+        });
+
+        it('serves the same ticks when a range request repeats', async () => {
+            // The production-shaped form of the same defect: the renderer
+            // prefetches ranges. With the cursor write dropped the repeat
+            // answers [3, 2] — the scrubber is handed a frame from the wrong
+            // tick as the FIRST frame of the range it asked for.
+            const manager = makeManager();
+            await manager.open('/replays/match.chimera-replay');
+
+            expect(manager.snapshotRange(1, 2).map((s) => s.tick)).toEqual([1, 2]);
+            expect(manager.snapshotRange(1, 2).map((s) => s.tick)).toEqual([1, 2]);
         });
 
         it('throws when from is greater than to', async () => {
