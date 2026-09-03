@@ -11,12 +11,11 @@ once per seated player, and `StateBroadcaster.fanOutToSpectators` projects again
 followed seat — and in a game that dispatches no `engine:end_turn` the segment is never re-based by a
 memento boundary, so its length grows to the `MAX_ACTION_HISTORY_ENTRIES` safety net.
 
-`ActionHistory` gains `sizeSinceLastMemento(): number`. This is a required member, so any external
-implementer of the interface must add it; `InMemoryActionHistory` is the only implementer in this
-repo. It and `sinceLastMemento()` now both derive their start index from one private accessor, so the
-count describes exactly the array the slice would produce.
+`ActionHistory` gains `sizeSinceLastMemento(): number`. This is a required member, so any
+implementer of the interface must add it. It and `sinceLastMemento()` now both derive their start
+index from one private accessor, so the count describes exactly the array the slice would produce.
 
 `canUndo` reads the per-player virtual history's length when an undo has already diverged it from the
-shared history, and the size query otherwise. Every short-circuit — policy `allowUndo`, a missing
-memento, `maxUndoSteps` — keeps its previous order, so the projected `undoMeta.canUndo` is unchanged.
+shared history, and the size query otherwise. What it answers for a given state is pinned by the
+`canUndo` and `canUndo — history access` describe blocks in `simulation/engine/UndoManager.test.ts`.
 `undo()` still calls `sinceLastMemento()`: it genuinely replays the entries.

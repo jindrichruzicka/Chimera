@@ -887,7 +887,7 @@ question, not a defect; on `/game`, `closeLobby()` publishes `'disconnected'` sy
 `GameShell` unmounts while the invoke is still in flight, ahead of the fade meant to hide it — the
 fix is a fade-vs-close ownership redesign; and an agent action accepted inside `onGameStart` sits in
 the first human's undo range, since `UndoManager` reads `sinceLastMemento()` unfiltered by player —
-latent in-tree, because tactics' AI is turn-gated and no shipped game declares `manifest.realtime`.
+latent in tactics, whose AI is turn-gated.
 
 #### Scope decisions
 

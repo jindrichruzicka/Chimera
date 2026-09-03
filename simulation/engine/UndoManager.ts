@@ -87,10 +87,12 @@ export interface ActionHistoryEntry {
 }
 
 /**
- * Append-only action history for a single turn.
+ * Append-only action history.
  *
- * `sinceLastMemento()` returns all entries accumulated since the last
- * `saveTurnMemento()` call (or all entries if no memento boundary exists yet).
+ * `sinceLastMemento()` returns the entries that survive from the segment since
+ * the last `markMementoBoundary()`, or since construction if none was marked.
+ * `hasEvictedSinceMemento()` reports when that is less than what was appended
+ * to the segment.
  *
  * Architecture: §4.5 — ActionHistory
  */
@@ -198,10 +200,9 @@ export class UndoNotAllowedError extends Error {
 /**
  * In-memory implementation of `ActionHistory`.
  *
- * `sinceLastMemento()` returns all entries that have been appended since
- * construction or the last call to a reset (there is no explicit reset —
- * a new instance is created per turn in production; in tests the caller
- * controls what gets appended).
+ * There is no reset: `markMementoBoundary()` re-bases the undoable segment, and
+ * entries leave only by eviction — `maxEntries` overflow in `append()`, or
+ * `pruneTo`.
  */
 export class InMemoryActionHistory implements ActionHistory {
     /**
