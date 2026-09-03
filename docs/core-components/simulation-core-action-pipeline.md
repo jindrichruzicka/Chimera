@@ -287,6 +287,12 @@ interface ActionHistory {
      */
     sizeSinceLastMemento(): number;
     /**
+     * True once eviction has dropped an entry recorded since the last
+     * markMementoBoundary(), so `sinceLastMemento()` no longer begins where that
+     * boundary was set. Cleared by the next markMementoBoundary().
+     */
+    hasEvictedSinceMemento(): boolean;
+    /**
      * Remove every ActionHistoryEntry whose turnNumber < cutoff (strict <, never <=).
      * Idempotent: calling pruneTo with an identical or lower cutoff is a no-op.
      * @param cutoff — typically currentTurn - TURN_MEMENTO_RETENTION (invariant 45)

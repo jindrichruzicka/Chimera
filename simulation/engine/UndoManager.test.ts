@@ -25,7 +25,7 @@ import { InMemoryUndoManager, InMemoryActionHistory, UndoNotAllowedError } from 
 import type { ActionHistory, ActionHistoryEntry } from './UndoManager.js';
 import { DEFAULT_UNDO_POLICY } from './UndoPolicy.js';
 import type { UndoPolicy } from './UndoPolicy.js';
-import type { BaseGameSnapshot, ActionEnvelope } from './types.js';
+import type { BaseGameSnapshot, ActionEnvelope, PlayerId } from './types.js';
 import { playerId as toPlayerId } from './types.js';
 
 // ─── Test fixtures ─────────────────────────────────────────────────────────────
@@ -83,6 +83,7 @@ const makeSpyHistory = (entries: readonly ActionHistoryEntry[] = []) => {
         markMementoBoundary: vi.fn((): void => {}),
         sinceLastMemento: vi.fn((): readonly ActionHistoryEntry[] => entries),
         sizeSinceLastMemento: vi.fn((): number => entries.length),
+        hasEvictedSinceMemento: vi.fn((): boolean => false),
         pruneTo: vi.fn((_cutoff: number): void => {}),
     };
     return spy satisfies ActionHistory;
@@ -271,13 +272,14 @@ describe('InMemoryUndoManager', () => {
             expect(spy.sinceLastMemento).not.toHaveBeenCalled();
         });
 
-        it('reads the per-player virtual history after an undo, touching neither history reader', () => {
+        it('reads the per-player virtual history after an undo, touching no history reader', () => {
             const spy = makeSpyHistory([makeHistoryEntry(1), makeHistoryEntry(2)]);
             const m = new InMemoryUndoManager(spy, DEFAULT_UNDO_POLICY, countingReplay);
             m.saveTurnMemento(makeSnapshot(0), P1);
             m.undo(P1, 1);
             spy.sinceLastMemento.mockClear();
             spy.sizeSinceLastMemento.mockClear();
+            spy.hasEvictedSinceMemento.mockClear();
 
             // One entry remains in the virtual history, so undo is still allowed —
             // and the answer comes from that per-player array, not from the shared
@@ -286,6 +288,7 @@ describe('InMemoryUndoManager', () => {
 
             expect(spy.sizeSinceLastMemento).not.toHaveBeenCalled();
             expect(spy.sinceLastMemento).not.toHaveBeenCalled();
+            expect(spy.hasEvictedSinceMemento).not.toHaveBeenCalled();
         });
 
         it('does not reach the history at all when the policy or the memento short-circuits first', () => {
@@ -303,6 +306,179 @@ describe('InMemoryUndoManager', () => {
 
             expect(spy.sizeSinceLastMemento).not.toHaveBeenCalled();
             expect(spy.sinceLastMemento).not.toHaveBeenCalled();
+            expect(spy.hasEvictedSinceMemento).not.toHaveBeenCalled();
+        });
+    });
+
+    // ─── undo after eviction crossed the memento boundary ────────────────────
+
+    describe('undo after eviction crossed the memento boundary', () => {
+        const CAP = 4;
+
+        /**
+         * Builds the state the defect lives in. The history holds CAP entries
+         * before the memento is taken, so eviction has to walk all of those
+         * before it starts dropping the entries `undo()` would replay —
+         * `postMemento === CAP` is the last run that leaves the segment whole.
+         */
+        const saturate = (
+            postMemento: number,
+        ): { hist: InMemoryActionHistory; m: InMemoryUndoManager } => {
+            const hist = new InMemoryActionHistory({ maxEntries: CAP });
+            const m = new InMemoryUndoManager(hist, DEFAULT_UNDO_POLICY, countingReplay);
+            for (let i = 1; i <= CAP; i++) hist.append(makeHistoryEntry(i));
+            m.saveTurnMemento(makeSnapshot(0), P1);
+            for (let i = 1; i <= postMemento; i++) hist.append(makeHistoryEntry(CAP + i));
+            return { hist, m };
+        };
+
+        it('undoes normally while eviction has only dropped pre-memento entries', () => {
+            const { m } = saturate(CAP);
+            expect(m.canUndo(P1)).toBe(true);
+            // countingReplay returns the baseline tick plus the replayed count:
+            // the whole segment except the one step undone.
+            expect(m.undo(P1, 1).tick).toBe(CAP - 1);
+        });
+
+        it('refuses undo once eviction has dropped an entry recorded after the memento', () => {
+            // One append past the run above, so the eviction it forces is the
+            // first to land inside the segment undo replays. Unrefused, undo()
+            // replays the surviving tail onto a baseline that tail no longer
+            // follows and returns a snapshot the match was never in.
+            const { m } = saturate(CAP + 1);
+
+            let thrown: unknown;
+            try {
+                m.undo(P1, 1);
+            } catch (error) {
+                thrown = error;
+            }
+
+            expect(thrown).toBeInstanceOf(UndoNotAllowedError);
+            expect((thrown as UndoNotAllowedError).reason).toBe('not_enough_history');
+        });
+
+        it('reports canUndo false in that state, so undoMeta cannot advertise undo', () => {
+            const { m } = saturate(CAP + 1);
+            expect(m.canUndo(P1)).toBe(false);
+        });
+
+        it('still undoes for a player whose own undo already left the shared history', () => {
+            // Their replay segment is the copy the manager took while it was
+            // whole, and the baseline is the memento the manager still holds —
+            // neither is what eviction destroyed.
+            const { hist, m } = saturate(CAP);
+            expect(m.undo(P1, 1).tick).toBe(CAP - 1);
+
+            hist.append(makeHistoryEntry(101));
+            expect(hist.hasEvictedSinceMemento()).toBe(true);
+
+            expect(m.canUndo(P1)).toBe(true);
+            expect(m.undo(P1, 1).tick).toBe(CAP - 2);
+        });
+
+        it('undoes again once a fresh memento re-anchors the baseline to the live tail', () => {
+            const { hist, m } = saturate(CAP + 1);
+            expect(m.canUndo(P1)).toBe(false);
+
+            m.saveTurnMemento(makeSnapshot(9), P1);
+            hist.append(makeHistoryEntry(99));
+
+            expect(m.canUndo(P1)).toBe(true);
+            expect(m.undo(P1, 1).tick).toBe(9);
+        });
+    });
+
+    // ─── undo — refusal reason ───────────────────────────────────────────────
+
+    describe('undo — refusal reason', () => {
+        /**
+         * The `reason` carried by the `UndoNotAllowedError` `undo` threw.
+         * Returns a marker string instead of throwing on the two ways this can
+         * go wrong, so a wrong reason and a missing throw both read as a value
+         * mismatch rather than as an error in the harness.
+         */
+        const reasonFromUndo = (m: InMemoryUndoManager, player: PlayerId): string => {
+            try {
+                m.undo(player, 1);
+            } catch (error) {
+                return error instanceof UndoNotAllowedError
+                    ? error.reason
+                    : `threw a non-UndoNotAllowedError: ${String(error)}`;
+            }
+            return 'did not throw';
+        };
+
+        it('names the policy when allowUndo is false', () => {
+            const m = new InMemoryUndoManager(
+                history,
+                { ...DEFAULT_UNDO_POLICY, allowUndo: false },
+                countingReplay,
+            );
+            m.saveTurnMemento(makeSnapshot(0), P1);
+            history.append(makeHistoryEntry(1));
+
+            expect(reasonFromUndo(m, P1)).toBe('policy_disallows');
+        });
+
+        it('names the missing memento for a player who has none', () => {
+            history.append(makeHistoryEntry(1));
+
+            expect(reasonFromUndo(manager, P1)).toBe('no_memento');
+        });
+
+        it('names the missing memento ahead of an evicted segment', () => {
+            // P2 never took a memento while the shared segment was cut into. The
+            // evicted-segment arm is about a baseline P2 does not have, so the
+            // memento arm has to answer first.
+            const hist = new InMemoryActionHistory({ maxEntries: 2 });
+            const m = new InMemoryUndoManager(hist, DEFAULT_UNDO_POLICY, countingReplay);
+            m.saveTurnMemento(makeSnapshot(0), P1);
+            for (let i = 1; i <= 3; i++) hist.append(makeHistoryEntry(i));
+            expect(hist.hasEvictedSinceMemento()).toBe(true);
+
+            expect(reasonFromUndo(m, P2)).toBe('no_memento');
+        });
+
+        it('names the evicted segment once eviction cut into the shared history', () => {
+            const hist = new InMemoryActionHistory({ maxEntries: 2 });
+            const m = new InMemoryUndoManager(hist, DEFAULT_UNDO_POLICY, countingReplay);
+            m.saveTurnMemento(makeSnapshot(0), P1);
+            for (let i = 1; i <= 3; i++) hist.append(makeHistoryEntry(i));
+            expect(hist.hasEvictedSinceMemento()).toBe(true);
+
+            expect(reasonFromUndo(m, P1)).toBe('not_enough_history');
+        });
+
+        it('names max steps, not the evicted segment, for a player reading their own copy', () => {
+            // P1 has already undone, so the segment they would replay is the one
+            // the manager holds — the shared history's gap is not what refuses
+            // them, the step limit is.
+            const hist = new InMemoryActionHistory({ maxEntries: 2 });
+            const m = new InMemoryUndoManager(
+                hist,
+                { ...DEFAULT_UNDO_POLICY, maxUndoSteps: 1 },
+                countingReplay,
+            );
+            hist.append(makeHistoryEntry(1));
+            hist.append(makeHistoryEntry(2));
+            m.saveTurnMemento(makeSnapshot(0), P1);
+            hist.append(makeHistoryEntry(3));
+            hist.append(makeHistoryEntry(4));
+            m.undo(P1, 1);
+            hist.append(makeHistoryEntry(5));
+            expect(hist.hasEvictedSinceMemento()).toBe(true);
+
+            expect(reasonFromUndo(m, P1)).toBe('max_steps_reached');
+        });
+
+        it('falls through to max steps for an empty segment, as it did before', () => {
+            // Characterises a pre-existing quirk rather than endorsing it: the
+            // default policy is unlimited and no step has been taken, yet an
+            // empty segment answers with the step-limit code.
+            manager.saveTurnMemento(makeSnapshot(0), P1);
+
+            expect(reasonFromUndo(manager, P1)).toBe('max_steps_reached');
         });
     });
 

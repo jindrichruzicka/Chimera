@@ -53,11 +53,12 @@ Chimera's undo system combines two classical patterns:
 
 ### Turn Boundary Rules
 
-| Scenario                              | Behaviour                                 |
-| ------------------------------------- | ----------------------------------------- |
-| Undo within own turn (default policy) | Always allowed                            |
-| `END_TURN` already dispatched         | Undo blocked unless `crossTurnUndo: true` |
-| Undo past `TURN_MEMENTO_RETENTION=4`  | Blocked; memento no longer exists         |
+| Scenario                                                 | Behaviour                                                                                                |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Undo within own turn (default policy)                    | Allowed                                                                                                  |
+| `END_TURN` already dispatched                            | Undo blocked unless `crossTurnUndo: true`                                                                |
+| Undo past `TURN_MEMENTO_RETENTION=4`                     | Blocked; memento no longer exists                                                                        |
+| Eviction cut into the history recorded since the memento | Blocked; a player whose own undo already moved them onto the manager's copy of the segment is unaffected |
 
 ---
 

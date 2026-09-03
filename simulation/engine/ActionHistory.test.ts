@@ -412,3 +412,88 @@ describe('InMemoryActionHistory — sizeSinceLastMemento', () => {
         expectAgreesWithSlice(history, 1);
     });
 });
+
+// ─── hasEvictedSinceMemento ───────────────────────────────────────────────────
+
+describe('InMemoryActionHistory — hasEvictedSinceMemento', () => {
+    const CAP = 4;
+
+    /** Fills the history to the cap and marks the boundary on the live tail. */
+    const atBoundary = (): InMemoryActionHistory => {
+        const history = new InMemoryActionHistory({ maxEntries: CAP });
+        for (let i = 1; i <= CAP; i++) history.append(makeEntry(i, 1));
+        history.markMementoBoundary();
+        return history;
+    };
+
+    it('is false on construction', () => {
+        expect(new InMemoryActionHistory().hasEvictedSinceMemento()).toBe(false);
+    });
+
+    it('is false while appends stay below the cap', () => {
+        const history = new InMemoryActionHistory({ maxEntries: CAP });
+        history.append(makeEntry(1, 1));
+        history.markMementoBoundary();
+        history.append(makeEntry(2, 1));
+        expect(history.hasEvictedSinceMemento()).toBe(false);
+    });
+
+    it('is false while eviction is still dropping entries from before the boundary', () => {
+        const history = atBoundary();
+        // Exactly CAP evictions, and the history held CAP pre-boundary entries:
+        // every entry recorded since the boundary is still there.
+        for (let i = 1; i <= CAP; i++) history.append(makeEntry(CAP + i, 1));
+
+        expect(history.sinceLastMemento().map((e) => e.tickApplied)).toEqual([5, 6, 7, 8]);
+        expect(history.hasEvictedSinceMemento()).toBe(false);
+    });
+
+    it('is true once eviction drops an entry recorded after the boundary', () => {
+        const history = atBoundary();
+        for (let i = 1; i <= CAP + 1; i++) history.append(makeEntry(CAP + i, 1));
+
+        // Tick 5 was recorded after the boundary and is gone; what survives no
+        // longer starts where the memento's baseline left off.
+        expect(history.sinceLastMemento().map((e) => e.tickApplied)).toEqual([6, 7, 8, 9]);
+        expect(history.hasEvictedSinceMemento()).toBe(true);
+    });
+
+    it('is false again after markMementoBoundary re-anchors to the live tail', () => {
+        const history = atBoundary();
+        for (let i = 1; i <= CAP + 1; i++) history.append(makeEntry(CAP + i, 1));
+        expect(history.hasEvictedSinceMemento()).toBe(true);
+
+        history.markMementoBoundary();
+
+        expect(history.hasEvictedSinceMemento()).toBe(false);
+    });
+
+    it('is false for a pruneTo that stops below the boundary', () => {
+        const history = new InMemoryActionHistory();
+        history.append(makeEntry(1, 1));
+        history.append(makeEntry(2, 1));
+        history.append(makeEntry(3, 2));
+        history.markMementoBoundary();
+        history.append(makeEntry(4, 2));
+        history.append(makeEntry(5, 2));
+
+        history.pruneTo(2);
+
+        expect(history.hasEvictedSinceMemento()).toBe(false);
+    });
+
+    it('is true for a pruneTo that walks past the boundary', () => {
+        const history = new InMemoryActionHistory();
+        history.append(makeEntry(1, 1));
+        history.append(makeEntry(2, 1));
+        history.append(makeEntry(3, 2));
+        history.markMementoBoundary();
+        history.append(makeEntry(4, 2));
+        history.append(makeEntry(5, 2));
+
+        // Drops ticks 4 and 5, which were recorded after the boundary.
+        history.pruneTo(3);
+
+        expect(history.hasEvictedSinceMemento()).toBe(true);
+    });
+});

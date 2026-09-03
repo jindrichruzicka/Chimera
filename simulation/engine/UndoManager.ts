@@ -112,6 +112,13 @@ export interface ActionHistory {
      */
     sizeSinceLastMemento(): number;
     /**
+     * True when eviction has dropped at least one entry recorded since the last
+     * `markMementoBoundary()`, so what `sinceLastMemento()` returns no longer
+     * begins where that boundary was set. Cleared by the next
+     * `markMementoBoundary()`.
+     */
+    hasEvictedSinceMemento(): boolean;
+    /**
      * Removes all entries whose `turnNumber` is strictly less than `cutoff`.
      * Used for memory-bounded pruning (TURN_MEMENTO_RETENTION policy).
      */
@@ -219,6 +226,15 @@ export class InMemoryActionHistory implements ActionHistory {
      * does: `pruneTo` is reached from `ActionPipeline`'s `engine:end_turn` branch.
      */
     #overflowReported = false;
+    /**
+     * Set when `#clampMementoBoundary()` actually raises the boundary, which it
+     * does exactly when eviction has taken entries the boundary was in front of.
+     *
+     * The head cursor destroys those entries; nothing in `sinceLastMemento()`'s
+     * return value distinguishes a tail that starts at the boundary from one
+     * that starts after a gap, so the gap has to be recorded here.
+     */
+    #evictedSinceMemento = false;
     private readonly logger: Logger | undefined;
     private readonly maxEntries: number;
 
@@ -254,6 +270,9 @@ export class InMemoryActionHistory implements ActionHistory {
     markMementoBoundary(): void {
         this.mementoBoundary = this.entries.length;
         this.#clampMementoBoundary();
+        // The new baseline is anchored to the live tail, so whatever eviction
+        // took before it is no longer between a baseline and its segment.
+        this.#evictedSinceMemento = false;
     }
 
     sinceLastMemento(): readonly ActionHistoryEntry[] {
@@ -262,6 +281,10 @@ export class InMemoryActionHistory implements ActionHistory {
 
     sizeSinceLastMemento(): number {
         return this.entries.length - this.#mementoStart();
+    }
+
+    hasEvictedSinceMemento(): boolean {
+        return this.#evictedSinceMemento;
     }
 
     pruneTo(cutoff: number): void {
@@ -315,6 +338,7 @@ export class InMemoryActionHistory implements ActionHistory {
     #clampMementoBoundary(): void {
         if (this.mementoBoundary < this.head) {
             this.mementoBoundary = this.head;
+            this.#evictedSinceMemento = true;
         }
     }
 }
@@ -382,12 +406,15 @@ export class InMemoryUndoManager implements UndoManager {
         if (!this.mementos.has(playerId)) {
             return false;
         }
+        const virtual = this.virtualHistory.get(playerId);
+        if (virtual === undefined && this.history.hasEvictedSinceMemento()) {
+            return false;
+        }
         // Size, not the entries: this sits on the per-viewer broadcast
         // projection path, where `sinceLastMemento()` would copy a list that
         // grows to `MAX_ACTION_HISTORY_ENTRIES`. The per-player virtual history
         // is already an array this manager owns, so its length is free.
-        const effectiveSize =
-            this.virtualHistory.get(playerId)?.length ?? this.history.sizeSinceLastMemento();
+        const effectiveSize = virtual?.length ?? this.history.sizeSinceLastMemento();
         if (effectiveSize === 0) {
             return false;
         }
@@ -406,13 +433,7 @@ export class InMemoryUndoManager implements UndoManager {
 
     undo(playerId: PlayerId, steps = 1): BaseGameSnapshot {
         if (!this.canUndo(playerId)) {
-            throw new UndoNotAllowedError(
-                !this.currentPolicy.allowUndo
-                    ? 'policy_disallows'
-                    : !this.mementos.has(playerId)
-                      ? 'no_memento'
-                      : 'max_steps_reached',
-            );
+            throw new UndoNotAllowedError(this.refusalReason(playerId));
         }
 
         // canUndo() above verifies mementos.has(playerId), so this cannot be undefined.
@@ -482,6 +503,31 @@ export class InMemoryUndoManager implements UndoManager {
         this.virtualHistory.delete(playerId);
         this.redoBuffer.delete(playerId);
         this.undoStepsTaken.delete(playerId);
+    }
+
+    /**
+     * The reason `canUndo` refused. Which arm answers for which refusal — and in
+     * what order — is pinned by the `undo — refusal reason` describe block in
+     * `UndoManager.test.ts`.
+     *
+     * The evicted-segment arm reuses `not_enough_history` rather than minting a
+     * code: the entries between the memento's baseline and the surviving tail
+     * are exactly the history this undo needs and no longer has.
+     */
+    private refusalReason(playerId: PlayerId): string {
+        if (!this.currentPolicy.allowUndo) {
+            return 'policy_disallows';
+        }
+        if (!this.mementos.has(playerId)) {
+            return 'no_memento';
+        }
+        if (
+            this.virtualHistory.get(playerId) === undefined &&
+            this.history.hasEvictedSinceMemento()
+        ) {
+            return 'not_enough_history';
+        }
+        return 'max_steps_reached';
     }
 
     /**
