@@ -893,8 +893,20 @@ export function resolveRendererProtocolFilePath(
     return isWithinDirectory(root, candidate) ? candidate : null;
 }
 
+/**
+ * The table's keys are all lower-case and `path.extname` returns whatever the
+ * filename carries, so the extension is lowered before the lookup — otherwise
+ * `hero.PNG` misses a row that exists.
+ *
+ * The lowering is unconditional, so it applies to every row rather than to the
+ * media and image ones the defect was reported for — see the `Extension case`
+ * tests.
+ *
+ * `getAssetExtension` in the renderer's `AssetManager` normalises the same way.
+ */
 function contentTypeForPath(filePath: string): string {
-    return CONTENT_TYPES_BY_EXTENSION[path.extname(filePath)] ?? 'application/octet-stream';
+    const extension = path.extname(filePath).toLowerCase();
+    return CONTENT_TYPES_BY_EXTENSION[extension] ?? 'application/octet-stream';
 }
 
 function codeFromError(error: unknown): string | undefined {

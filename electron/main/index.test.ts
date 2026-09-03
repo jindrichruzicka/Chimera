@@ -1523,6 +1523,117 @@ describe('renderer app protocol', () => {
         expect(response.headers.get('content-type')).toBe('video/mp4');
     });
 
+    // ── Extension case ───────────────────────────────────────────────────────
+    //
+    // Capitalised extensions arrive from plenty of export pipelines. The file
+    // itself opens; only the table lookup misses, so the failure is a wrong
+    // content type rather than a 404 — and for a media row, a source the
+    // element will not play.
+    it('resolves a capitalised extension that IS in the table', () => {
+        const response = buildRendererProtocolResponse({
+            filePath: '/abs/path/games/tactics/assets/images/hero.PNG',
+            data: Buffer.from('fake-png-bytes'),
+            rangeHeader: null,
+        });
+
+        expect(response.headers.get('content-type')).toBe('image/png');
+    });
+
+    it.each([
+        ['clip.MP4', 'video/mp4'],
+        ['theme.MP3', 'audio/mpeg'],
+        ['sky.WebP', 'image/webp'],
+        ['step.Wav', 'audio/wav'],
+    ])('normalises the extension of %s to %s', (name, expected) => {
+        const response = buildRendererProtocolResponse({
+            filePath: `/abs/path/games/tactics/assets/${name}`,
+            data: Buffer.from('bytes'),
+            rangeHeader: null,
+        });
+
+        expect(response.headers.get('content-type')).toBe(expected);
+    });
+
+    it('answers a ranged request for a capitalised media file with 206', async () => {
+        // The two halves together: without the lookup the content type is
+        // octet-stream, which `isRangeCapableContentType` refuses, so the
+        // element gets a plain 200 and will not play.
+        const data = Buffer.from('0123456789'); // 10 bytes
+        const response = buildRendererProtocolResponse({
+            filePath: '/abs/path/games/tactics/assets/audio/theme.MP3',
+            data,
+            rangeHeader: 'bytes=2-5',
+        });
+
+        expect(response.status).toBe(206);
+        expect(response.headers.get('content-type')).toBe('audio/mpeg');
+        expect(response.headers.get('accept-ranges')).toBe('bytes');
+        expect(response.headers.get('content-range')).toBe('bytes 2-5/10');
+        await expect(response.text()).resolves.toBe('2345');
+    });
+
+    it.each([
+        ['notes.TXT', 'text/x-component; charset=utf-8'],
+        ['page.HTML', 'text/html; charset=utf-8'],
+        ['boot.JS', 'application/javascript; charset=utf-8'],
+        ['art.SVG', 'image/svg+xml; charset=utf-8'],
+    ])('reaches the non-asset rows too: %s resolves to %s', (name, expected) => {
+        // Listed so the lowering's reach is a recorded decision rather than a
+        // side effect nobody looked at. The protocol still serves only files
+        // under the renderer root or the game's own assets root, and each of
+        // these already served this way under its lower-case name.
+        const response = buildRendererProtocolResponse({
+            filePath: `/abs/path/renderer/out/${name}`,
+            data: Buffer.from('bytes'),
+            rangeHeader: null,
+        });
+
+        expect(response.headers.get('content-type')).toBe(expected);
+    });
+
+    it('still falls back for an unmapped extension, capitalised or not', () => {
+        // The fallback is correct and must survive the normalisation: lowering
+        // the case must not turn an unknown extension into a known one.
+        for (const name of ['knight.xyz', 'knight.XYZ']) {
+            const response = buildRendererProtocolResponse({
+                filePath: `/abs/path/games/tactics/assets/${name}`,
+                data: Buffer.from('bytes'),
+                rangeHeader: null,
+            });
+
+            expect(response.headers.get('content-type'), name).toBe('application/octet-stream');
+            expect(response.headers.get('accept-ranges'), name).toBeNull();
+        }
+    });
+
+    it('leaves the resolved FILE PATH case-sensitive, on BOTH resolution arms', () => {
+        // Paths are case-sensitive on Linux, so resolution must hand back the
+        // capitalisation the request carried — a normalisation applied there
+        // rather than at the lookup would fail to open the file at all.
+        //
+        // Both arms, because they return from different functions: a renderer
+        // asset resolves against the renderer root, a game asset against the
+        // game's assets root, and lowering either return is invisible to the
+        // other's fixture.
+        expect(
+            resolveRendererProtocolFilePath({
+                rendererRoot: '/abs/path/renderer/out',
+                gameAssetsRoot: '/abs/path/games',
+                requestUrl: 'chimera://renderer/Assets/Hero.PNG',
+                headers: new Headers(),
+            }),
+        ).toBe(path.join('/abs/path/renderer/out', 'Assets', 'Hero.PNG'));
+
+        expect(
+            resolveRendererProtocolFilePath({
+                rendererRoot: '/abs/path/renderer/out',
+                gameAssetsRoot: '/abs/path/games',
+                requestUrl: 'chimera://renderer/game-assets/tactics/images/Hero.PNG',
+                headers: new Headers(),
+            }),
+        ).toBe(path.join('/abs/path/games', 'tactics', 'assets', 'images', 'Hero.PNG'));
+    });
+
     // ── Audio formats a game ships ───────────────────────────────────────────
     //
     // The range behaviour is asserted, not just the content type: a
