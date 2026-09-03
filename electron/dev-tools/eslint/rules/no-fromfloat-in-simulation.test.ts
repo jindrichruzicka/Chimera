@@ -139,6 +139,17 @@ ruleTester.run('chimera/no-fromfloat-in-simulation', rule, {
             filename: 'apps/tactics/renderer/ai/useAiHints.ts',
             code: `${IMPORT_FIXED_POINT_ALIAS}\nconst z = fromFloat(1.25);`,
         },
+
+        // 12. `APP_AI_PATH`'s `ai` segment RIGHT BOUNDARY: the zone is the
+        // per-game directory named exactly `ai`, so a sibling directory whose
+        // name merely STARTS WITH `ai` (e.g. `aiHelpers/`, a plausible helper
+        // dir that is NOT the sanctioned AI zone) sits outside it. Give the
+        // `ai` segment a `[^/]*` suffix before its own trailing slash and
+        // `apps\/[^/]+\/ai[^/]*\/` matches `aiHelpers/` too, so it fires.
+        {
+            filename: 'apps/tactics/aiHelpers/util.ts',
+            code: `${IMPORT_FIXED_POINT_ALIAS}\nconst w = fromFloat(4.5);`,
+        },
     ],
 
     // ── Invalid — rule MUST fire ─────────────────────────────────────────────
