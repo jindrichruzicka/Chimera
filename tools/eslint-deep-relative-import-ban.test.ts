@@ -49,7 +49,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { execFile, spawnSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve, dirname, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -356,12 +356,30 @@ interface DeclaringBlock {
 }
 
 /**
+ * Config children this file has actually started. The memoisation test reads
+ * it: promise identity would pass a cache that still fires a child and throws
+ * the result away, and the count is what the property is about.
+ */
+let configChildRuns = 0;
+
+/**
  * Every config object that sets the rule, read out of a CHILD process:
  * `eslint.config.mjs` imports the compiled plugin, which a Vitest worker would
  * resolve through its own transform pipeline. Mirrors `probeConfig()` in
  * tools/eslint-dynamic-games-import-zone.test.ts.
+ *
+ * Asynchronous for the same reason that sibling is: a Vitest worker answers the
+ * pool's `onTaskUpdate` RPC only while its own event loop is free, and birpc's
+ * window is a fixed 60 s. A synchronous child holds the loop for as long as it
+ * runs, and it holds vitest's per-test timer with it — so under full-suite load
+ * the run ended with this file's slowest test recorded well past a timeout it
+ * could not be interrupted at, plus one unhandled `[vitest-worker]: Timeout
+ * calling "onTaskUpdate"`. With `execFile` the loop is idle while the child
+ * runs. Kept separate from the memoised accessor below so the test that pins
+ * that property always spawns, whatever order the file's tests run in.
  */
-function declaringBlocks(): readonly DeclaringBlock[] {
+async function loadDeclaringBlocks(): Promise<readonly DeclaringBlock[]> {
+    configChildRuns++;
     const script = `
         const config = (await import('./eslint.config.mjs')).default;
         const blocks = [];
@@ -388,15 +406,75 @@ function declaringBlocks(): readonly DeclaringBlock[] {
         }
         process.stdout.write(JSON.stringify(blocks));
     `;
-    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
-        cwd: repoRoot,
-        encoding: 'utf8',
-    });
-    if (result.error) throw result.error;
-    if (result.status !== 0) {
-        throw new Error(`could not load eslint.config.mjs: ${result.stderr}`);
+    return JSON.parse(
+        await runConfigChild(process.execPath, ['--input-type=module', '-e', script]),
+    ) as DeclaringBlock[];
+}
+
+/** The rejection `execFile` produces for a child that ran and exited non-zero. */
+interface ExitRejection {
+    readonly code: number;
+    readonly stdout: string;
+    readonly stderr: string;
+}
+
+/**
+ * Whether a rejection is a child that RAN and exited non-zero, as opposed to
+ * one that never ran or was cut short. Mirrors `isExitRejection()` in
+ * tools/eslint-dynamic-games-import-zone.test.ts.
+ *
+ * `code` is the discriminator, and it has to be: node attaches `stdout` and
+ * `stderr` to every `execFile` rejection, so a stderr check cannot separate the
+ * classes. A child that exited carries a numeric `code`; a missing binary
+ * carries `'ENOENT'`, output past `maxBuffer` carries
+ * `'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'`, and a signal kill carries none.
+ */
+function isExitRejection(error: unknown): error is ExitRejection {
+    if (typeof error !== 'object' || error === null) {
+        return false;
     }
-    return JSON.parse(result.stdout) as DeclaringBlock[];
+    const candidate = error as { code?: unknown; stdout?: unknown; stderr?: unknown };
+    return (
+        typeof candidate.code === 'number' &&
+        typeof candidate.stdout === 'string' &&
+        typeof candidate.stderr === 'string'
+    );
+}
+
+/**
+ * Run a child and return its stdout, reporting a config that failed to load
+ * under the message this file's callers expect.
+ *
+ * Only a child that ran and exited non-zero is that failure. Everything else —
+ * a missing binary, a signal kill, output past `maxBuffer` — is rethrown as it
+ * arrived, so it keeps its own message and cause instead of being flattened
+ * into a `could not load` line with an empty stderr behind it.
+ */
+async function runConfigChild(bin: string, args: readonly string[]): Promise<string> {
+    try {
+        const { stdout } = await execFileAsync(bin, [...args], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+        return stdout;
+    } catch (error) {
+        if (!isExitRejection(error)) {
+            throw error;
+        }
+        throw new Error(`could not load eslint.config.mjs: ${error.stderr}`);
+    }
+}
+
+/**
+ * The census, memoised: every call site below asks for the same answer, and
+ * each miss is another child process competing with the rest of the suite.
+ * Mirrors `resolutionCache` for the `--print-config` probes.
+ */
+let declaringBlocksCache: Promise<readonly DeclaringBlock[]> | undefined;
+
+function declaringBlocks(): Promise<readonly DeclaringBlock[]> {
+    declaringBlocksCache ??= loadDeclaringBlocks();
+    return declaringBlocksCache;
 }
 
 /**
@@ -468,13 +546,66 @@ function findGroup(resolved: ResolvedRestrictedImports, message: string) {
 }
 
 describe('deep-relative import ban — every block that sets the rule', () => {
-    it('classifies every config object that sets no-restricted-imports, and no other', () => {
+    it('leaves the worker event loop free while the config child runs', async () => {
+        // The defect class, not its spelling. A source-text check for
+        // `spawnSync` passes on any rename and says nothing about the loop.
+        //
+        // A Vitest worker answers the pool's `onTaskUpdate` RPC only while its
+        // own event loop is free, and birpc's window is a fixed 60 s. A
+        // synchronous child here holds the loop for as long as it runs, so
+        // under full-suite load the run ends with `[vitest-worker]: Timeout
+        // calling "onTaskUpdate"` — and vitest's per-test timer is blocked with
+        // it, which is why such a run overshoots the timeout it violated rather
+        // than landing on it.
+        //
+        // A macrotask is what separates the two: a `setTimeout` scheduled here
+        // cannot fire until a synchronous child returns, and does fire while an
+        // asynchronous one runs.
+        let macrotaskRan = false;
+        const timer = setTimeout(() => {
+            macrotaskRan = true;
+        }, 0);
+
+        const blocks = await loadDeclaringBlocks();
+        clearTimeout(timer);
+
+        expect(macrotaskRan).toBe(true);
+        // …and the load was not a no-op that returned before the loop could
+        // have been blocked in the first place.
+        expect(blocks.length).toBeGreaterThan(0);
+    });
+
+    it('runs no further config child once the census has been loaded', async () => {
+        // Every call site below asks for the same census. Each miss is another
+        // child process competing with the rest of the suite for the machine,
+        // which is the half of this file's flake that spawning asynchronously
+        // does not address.
+        //
+        // The floor first: a counter that never moved would satisfy the
+        // equality below exactly as well as a working cache does, so the
+        // equality alone cannot tell a live gauge from a dead one. Read through
+        // the loader rather than the accessor, so this holds whatever order the
+        // file's tests run in and whether or not the cache is already warm.
+        const runsBeforeLoad = configChildRuns;
+        await loadDeclaringBlocks();
+        expect(configChildRuns).toBeGreaterThan(runsBeforeLoad);
+
+        await declaringBlocks();
+        const runsAfterCensus = configChildRuns;
+
+        await declaringBlocks();
+        await declaringBlocks();
+
+        expect(configChildRuns).toBe(runsAfterCensus);
+    });
+
+    it('classifies every config object that sets no-restricted-imports, and no other', async () => {
         // The completeness check. A sixth zone added later — naming the rule
         // for its own boundary and, like all five before it, silently
         // replacing the base group — is invisible to a lint run and to every
         // per-zone probe below, which only ask about zones someone remembered
         // to list. This reds until the new block is classified above.
-        const declared = declaringBlocks().map((block) => signatureOf(block.files));
+        const declared = (await declaringBlocks()).map((block) => signatureOf(block.files));
 
         expect(declared.sort()).toEqual(CENSUS.map((row) => signatureOf(row.files)).sort());
     });
@@ -535,14 +666,14 @@ describe('deep-relative import ban — every block that sets the rule', () => {
         ]);
     });
 
-    it('matches each block to its disposition in the config source', () => {
+    it('matches each block to its disposition in the config source', async () => {
         // Read from the config module rather than `--print-config`, so this
         // sees what each block DECLARES rather than what wins for some file.
         // A zone whose group went missing resolves fine for any file a later
         // zone also matches; only the declaration says which block dropped it.
         // This is what covers every block, probe or no probe.
         const bySignature = new Map(
-            declaringBlocks().map((block) => [signatureOf(block.files), block]),
+            (await declaringBlocks()).map((block) => [signatureOf(block.files), block]),
         );
         const wrong = CENSUS.flatMap((row) => {
             const block = bySignature.get(signatureOf(row.files));
@@ -561,13 +692,13 @@ describe('deep-relative import ban — every block that sets the rule', () => {
         expect(wrong).toEqual([]);
     });
 
-    it('gives every copy of the group the base block’s message, verbatim', () => {
+    it('gives every copy of the group the base block’s message, verbatim', async () => {
         // Every copy, not just the four the zone probes reach: the base
         // block, the four this branch restored, and the app-root and
         // electron/main blocks that already had one. A copy reporting under
         // reworded prose stops the ban reading as one repo-wide rule, and
         // `--print-config` can only see the copy that wins for a given file.
-        const drifted = declaringBlocks()
+        const drifted = (await declaringBlocks())
             .filter((block) => block.patterns.includes(DEEP_RELATIVE))
             .filter((block) => block.deepRelativeMessage !== DEEP_RELATIVE_MESSAGE)
             .map((block) => signatureOf(block.files));
@@ -578,7 +709,8 @@ describe('deep-relative import ban — every block that sets the rule', () => {
         // lack: the config's own count of blocks carrying the group against the
         // number the census classifies as carrying it.
         expect(
-            declaringBlocks().filter((block) => block.patterns.includes(DEEP_RELATIVE)).length,
+            (await declaringBlocks()).filter((block) => block.patterns.includes(DEEP_RELATIVE))
+                .length,
         ).toBe(CENSUS.filter((row) => row.disposition === 'carries').length);
     });
 
@@ -590,6 +722,51 @@ describe('deep-relative import ban — every block that sets the rule', () => {
         const resolvedHere = [...ZONES.map((zone) => zone.probe), ...E2E_PROBES].sort();
 
         expect(resolvedHere).toEqual(CENSUS.flatMap((row) => [...row.probes]).sort());
+    });
+});
+
+describe('deep-relative import ban — a config child that fails', () => {
+    it('reports a child that ran and exited non-zero under its own stderr', () => {
+        // A child that genuinely fails to import a config module, so the
+        // message the wrapper adds is true of this fixture as well as of the
+        // caller it was written for.
+        return expect(
+            runConfigChild(process.execPath, [
+                '--input-type=module',
+                '-e',
+                "await import('./chimera-no-such-config.mjs');",
+            ]),
+        ).rejects.toThrow(/^could not load eslint\.config\.mjs: [\s\S]*ERR_MODULE_NOT_FOUND/);
+    });
+
+    it('rethrows a child that never ran, rather than flattening it to an empty message', () => {
+        // node attaches `stderr` to EVERY execFile rejection, so wrapping on a
+        // stderr check alone turns a missing binary into
+        // `could not load eslint.config.mjs: ` with the cause discarded — the
+        // one shape a reader cannot act on.
+        return expect(
+            runConfigChild(resolve(repoRoot, 'node_modules/.bin/chimera-no-such-binary'), []),
+        ).rejects.toThrow(/ENOENT/);
+    });
+
+    it('classifies only a numeric exit code as a child that ran and failed', () => {
+        expect(isExitRejection({ code: 1, stdout: '', stderr: 'SyntaxError' })).toBe(true);
+        // The three rejection shapes node produces for a child that did not
+        // run, or did not finish. All carry stdout and stderr, so `code` is the
+        // only discriminator.
+        expect(isExitRejection({ code: 'ENOENT', stdout: '', stderr: '' })).toBe(false);
+        expect(
+            isExitRejection({
+                code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
+                stdout: '',
+                stderr: '',
+            }),
+        ).toBe(false);
+        expect(
+            isExitRejection({ code: null, signal: 'SIGKILL', stdout: '', stderr: 'partial' }),
+        ).toBe(false);
+        expect(isExitRejection(new Error('boom'))).toBe(false);
+        expect(isExitRejection(null)).toBe(false);
     });
 });
 

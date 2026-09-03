@@ -15,8 +15,7 @@ const workspaceRoot = import.meta.dirname;
 // `spawnSync` eslint runs, measured on the CI runner at this very cap — ends
 // with every test green and one unhandled `[vitest-worker]: Timeout calling
 // "onTaskUpdate"`, which fails the run. The cure lives in the test file, which
-// must spawn asynchronously — `tools/eslint-dynamic-games-import-zone.test.ts`
-// and its tactics sibling do.
+// must spawn asynchronously.
 const MAX_TEST_FORKS = 1;
 
 const VIRTUAL_PREFIX = '\0chimera-raw-css:';
