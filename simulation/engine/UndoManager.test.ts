@@ -18,13 +18,11 @@
  *   5. UndoNotAllowedError is thrown (not swallowed) when undo is blocked.
  *   6. InMemoryActionHistory correctly implements ActionHistory.
  *   7. canRedo / redo work with the stored redo buffer.
- *
- * Simulation tests are pure functions — zero mocks required.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InMemoryUndoManager, InMemoryActionHistory, UndoNotAllowedError } from './UndoManager.js';
-import type { ActionHistoryEntry } from './UndoManager.js';
+import type { ActionHistory, ActionHistoryEntry } from './UndoManager.js';
 import { DEFAULT_UNDO_POLICY } from './UndoPolicy.js';
 import type { UndoPolicy } from './UndoPolicy.js';
 import type { BaseGameSnapshot, ActionEnvelope } from './types.js';
@@ -72,6 +70,23 @@ const countingReplay = (
     ...state,
     tick: state.tick + entries.length,
 });
+
+/**
+ * `ActionHistory` double whose every method is a spy, so a test can assert
+ * WHICH accessor a manager call reached. Both readers answer from the same
+ * array, so they cannot disagree by construction: an assertion below is about
+ * the call that was made, never about a stub that drifted.
+ */
+const makeSpyHistory = (entries: readonly ActionHistoryEntry[] = []) => {
+    const spy = {
+        append: vi.fn((_entry: ActionHistoryEntry): void => {}),
+        markMementoBoundary: vi.fn((): void => {}),
+        sinceLastMemento: vi.fn((): readonly ActionHistoryEntry[] => entries),
+        sizeSinceLastMemento: vi.fn((): number => entries.length),
+        pruneTo: vi.fn((_cutoff: number): void => {}),
+    };
+    return spy satisfies ActionHistory;
+};
 
 // ─── InMemoryActionHistory ─────────────────────────────────────────────────────
 
@@ -225,6 +240,69 @@ describe('InMemoryUndoManager', () => {
             m.undo(P1, 1);
             // After 1 undo step, maxUndoSteps reached — cannot undo further
             expect(m.canUndo(P1)).toBe(false);
+        });
+    });
+
+    // ─── canUndo — history access ────────────────────────────────────────────
+
+    describe('canUndo — history access', () => {
+        it('asks the history for its size and never materialises the entry array', () => {
+            // canUndo only needs to know whether the effective list is non-empty.
+            // Reading it through sinceLastMemento() copies a list that grows to
+            // MAX_ACTION_HISTORY_ENTRIES, on the per-viewer broadcast path.
+            const spy = makeSpyHistory([makeHistoryEntry(1)]);
+            const m = new InMemoryUndoManager(spy, DEFAULT_UNDO_POLICY, countingReplay);
+            m.saveTurnMemento(makeSnapshot(0), P1);
+
+            expect(m.canUndo(P1)).toBe(true);
+
+            expect(spy.sizeSinceLastMemento).toHaveBeenCalledTimes(1);
+            expect(spy.sinceLastMemento).not.toHaveBeenCalled();
+        });
+
+        it('answers false from a zero size without materialising the entry array', () => {
+            const spy = makeSpyHistory([]);
+            const m = new InMemoryUndoManager(spy, DEFAULT_UNDO_POLICY, countingReplay);
+            m.saveTurnMemento(makeSnapshot(0), P1);
+
+            expect(m.canUndo(P1)).toBe(false);
+
+            expect(spy.sizeSinceLastMemento).toHaveBeenCalledTimes(1);
+            expect(spy.sinceLastMemento).not.toHaveBeenCalled();
+        });
+
+        it('reads the per-player virtual history after an undo, touching neither history reader', () => {
+            const spy = makeSpyHistory([makeHistoryEntry(1), makeHistoryEntry(2)]);
+            const m = new InMemoryUndoManager(spy, DEFAULT_UNDO_POLICY, countingReplay);
+            m.saveTurnMemento(makeSnapshot(0), P1);
+            m.undo(P1, 1);
+            spy.sinceLastMemento.mockClear();
+            spy.sizeSinceLastMemento.mockClear();
+
+            // One entry remains in the virtual history, so undo is still allowed —
+            // and the answer comes from that per-player array, not from the shared
+            // history, which the undo has already diverged from.
+            expect(m.canUndo(P1)).toBe(true);
+
+            expect(spy.sizeSinceLastMemento).not.toHaveBeenCalled();
+            expect(spy.sinceLastMemento).not.toHaveBeenCalled();
+        });
+
+        it('does not reach the history at all when the policy or the memento short-circuits first', () => {
+            const spy = makeSpyHistory([makeHistoryEntry(1)]);
+            const blocked = new InMemoryUndoManager(
+                spy,
+                { ...DEFAULT_UNDO_POLICY, allowUndo: false },
+                countingReplay,
+            );
+            blocked.saveTurnMemento(makeSnapshot(0), P1);
+            expect(blocked.canUndo(P1)).toBe(false);
+
+            const noMemento = new InMemoryUndoManager(spy, DEFAULT_UNDO_POLICY, countingReplay);
+            expect(noMemento.canUndo(P1)).toBe(false);
+
+            expect(spy.sizeSinceLastMemento).not.toHaveBeenCalled();
+            expect(spy.sinceLastMemento).not.toHaveBeenCalled();
         });
     });
 

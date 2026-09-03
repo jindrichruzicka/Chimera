@@ -105,6 +105,13 @@ export interface ActionHistory {
      */
     sinceLastMemento(): readonly ActionHistoryEntry[];
     /**
+     * Number of entries `sinceLastMemento()` would return, without building the
+     * array. Callers that only need to know whether the segment is non-empty —
+     * `UndoManager.canUndo`, on the per-viewer broadcast projection path — must
+     * use this: the array `sinceLastMemento()` returns grows to the overflow cap.
+     */
+    sizeSinceLastMemento(): number;
+    /**
      * Removes all entries whose `turnNumber` is strictly less than `cutoff`.
      * Used for memory-bounded pruning (TURN_MEMENTO_RETENTION policy).
      */
@@ -250,7 +257,11 @@ export class InMemoryActionHistory implements ActionHistory {
     }
 
     sinceLastMemento(): readonly ActionHistoryEntry[] {
-        return this.entries.slice(Math.max(this.head, this.mementoBoundary));
+        return this.entries.slice(this.#mementoStart());
+    }
+
+    sizeSinceLastMemento(): number {
+        return this.entries.length - this.#mementoStart();
     }
 
     pruneTo(cutoff: number): void {
@@ -271,6 +282,15 @@ export class InMemoryActionHistory implements ActionHistory {
         if (this.#size() < this.maxEntries) {
             this.#overflowReported = false;
         }
+    }
+
+    /**
+     * Index the undoable segment starts at. Both readers derive from it; that
+     * they agree is pinned by the `sizeSinceLastMemento` describe block in
+     * `ActionHistory.test.ts`.
+     */
+    #mementoStart(): number {
+        return Math.max(this.head, this.mementoBoundary);
     }
 
     #size(): number {
@@ -362,8 +382,13 @@ export class InMemoryUndoManager implements UndoManager {
         if (!this.mementos.has(playerId)) {
             return false;
         }
-        const entries = this.getEffectiveEntries(playerId);
-        if (entries.length === 0) {
+        // Size, not the entries: this sits on the per-viewer broadcast
+        // projection path, where `sinceLastMemento()` would copy a list that
+        // grows to `MAX_ACTION_HISTORY_ENTRIES`. The per-player virtual history
+        // is already an array this manager owns, so its length is free.
+        const effectiveSize =
+            this.virtualHistory.get(playerId)?.length ?? this.history.sizeSinceLastMemento();
+        if (effectiveSize === 0) {
             return false;
         }
         if (this.currentPolicy.maxUndoSteps > 0) {

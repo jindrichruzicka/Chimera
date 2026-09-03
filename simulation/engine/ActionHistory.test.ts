@@ -328,3 +328,87 @@ describe('InMemoryActionHistory — overflow cap (Invariant #45)', () => {
         expect(ctx).toMatchObject({ capacity: cap });
     });
 });
+
+// ─── sizeSinceLastMemento ─────────────────────────────────────────────────────
+
+describe('InMemoryActionHistory — sizeSinceLastMemento', () => {
+    /**
+     * The contract is an equivalence, not a formula: whatever start index
+     * `sinceLastMemento()` slices from, the size query must report that slice's
+     * length. Each case asserts both sides at the same instant, so a reader that
+     * drifted from the slice fails here instead of returning a plausible number.
+     */
+    const expectAgreesWithSlice = (history: InMemoryActionHistory, expected: number): void => {
+        expect(history.sizeSinceLastMemento()).toBe(history.sinceLastMemento().length);
+        expect(history.sizeSinceLastMemento()).toBe(expected);
+    };
+
+    it('is 0 on construction', () => {
+        expectAgreesWithSlice(new InMemoryActionHistory(), 0);
+    });
+
+    it('counts every append while no boundary has been marked', () => {
+        const history = new InMemoryActionHistory();
+        history.append(makeEntry(1, 1));
+        history.append(makeEntry(2, 1));
+        history.append(makeEntry(3, 1));
+        expectAgreesWithSlice(history, 3);
+    });
+
+    it('is 0 immediately after markMementoBoundary', () => {
+        const history = new InMemoryActionHistory();
+        history.append(makeEntry(1, 1));
+        history.markMementoBoundary();
+        expectAgreesWithSlice(history, 0);
+    });
+
+    it('counts only the appends that followed markMementoBoundary', () => {
+        const history = new InMemoryActionHistory();
+        history.append(makeEntry(1, 1));
+        history.markMementoBoundary();
+        history.append(makeEntry(2, 1));
+        history.append(makeEntry(3, 1));
+        expectAgreesWithSlice(history, 2);
+    });
+
+    it('ignores a pruneTo that only dropped entries from below the boundary', () => {
+        // head lands strictly below mementoBoundary — the state that separates a
+        // reader counting from the head from one counting from the boundary.
+        const history = new InMemoryActionHistory();
+        history.append(makeEntry(1, 1));
+        history.append(makeEntry(2, 1));
+        history.append(makeEntry(3, 2));
+        history.markMementoBoundary();
+        history.append(makeEntry(4, 2));
+        history.append(makeEntry(5, 2));
+
+        history.pruneTo(2);
+
+        expectAgreesWithSlice(history, 2);
+    });
+
+    it('excludes the entries overflow eviction dropped', () => {
+        const cap = 4;
+        const history = new InMemoryActionHistory({ maxEntries: cap });
+        for (let i = 1; i <= cap; i++) history.append(makeEntry(i, i));
+        history.append(makeEntry(cap + 1, cap + 1));
+        expectAgreesWithSlice(history, cap);
+    });
+
+    it('holds across the compaction that reclaims tombstoned slots', () => {
+        const history = new InMemoryActionHistory();
+        history.append(makeEntry(1, 1));
+        history.append(makeEntry(2, 1));
+        history.append(makeEntry(3, 2));
+        history.markMementoBoundary();
+        history.append(makeEntry(4, 2));
+        history.append(makeEntry(5, 2));
+        history.append(makeEntry(6, 3));
+
+        // Drops five of the six entries, so the tombstoned prefix outgrows the
+        // live region and `#compactIfNeeded()` rebases both cursors.
+        history.pruneTo(3);
+
+        expectAgreesWithSlice(history, 1);
+    });
+});

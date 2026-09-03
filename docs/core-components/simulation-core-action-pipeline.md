@@ -275,7 +275,17 @@ interface ActionHistory {
      * is emitted — once per saturation episode, not once per eviction.
      */
     append(entry: ActionHistoryEntry): void;
+    /** Marks the current append position as the start of a new undoable segment. */
+    markMementoBoundary(): void;
     sinceLastMemento(): readonly ActionHistoryEntry[];
+    /**
+     * Length of what `sinceLastMemento()` would return, without building it.
+     * `UndoManager.canUndo` only asks whether that segment is non-empty and sits
+     * on the per-viewer broadcast projection path — `ActionPipeline` Stage 7 per
+     * seated player, then `StateBroadcaster.fanOutToSpectators` per spectator —
+     * so it reads the size, never the array.
+     */
+    sizeSinceLastMemento(): number;
     /**
      * Remove every ActionHistoryEntry whose turnNumber < cutoff (strict <, never <=).
      * Idempotent: calling pruneTo with an identical or lower cutoff is a no-op.
