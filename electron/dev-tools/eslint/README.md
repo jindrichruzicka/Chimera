@@ -42,7 +42,7 @@ Two facts the rule ids do not carry, and both are load-bearing:
 
 - **Zones are app-root-relative.** A game runs `eslint .` from its own app root, so the
   globs read `simulation/**`, not the monorepo's `apps/<game>/simulation/**`.
-- **Four of the six also need an `apps/<name>/` segment in the ABSOLUTE path**, because
+- **Four of the six also need an `apps/<name>/` segment in the filename**, because
   their own predicates read it. A scaffolded game satisfies that by living at
   `apps/<kebab>`; the same game at a bare project root loses `no-game-renderer-internals`,
   `no-raw-r3f-canvas`, and `no-unknown-token-overrides` silently, and `no-fromfloat-in-simulation` keeps only its

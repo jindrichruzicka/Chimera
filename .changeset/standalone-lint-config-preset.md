@@ -20,7 +20,7 @@ export default [
 ```
 
 It is an **overlay, not a base**. What comes back is the curated rule blocks and nothing
-else — no recommended sets, no parser options, no global `ignores`. Five rules travel:
+else — no recommended sets, no parser options, no global `ignores`. The rules that travel:
 `no-fromfloat-in-simulation` on `simulation/**` and `ai/**`, `no-hardcoded-design-values`
 on `screens/**` and its CSS modules, `no-unknown-token-overrides` on
 `styles/tokens-override.css`, and `no-game-renderer-internals` and `no-raw-r3f-canvas`
@@ -51,9 +51,9 @@ scoped to JS/TS files needs none of this.
 
 Two facts worth knowing before trusting a green run. The CSS arm **widens** what
 `eslint .` covers — it pulls `.css` files into a run that previously skipped them, which is
-how the token rules reach them at all. And four of the five rules require an
-`apps/<name>/` segment in the absolute path, because their own predicates read it: a game
-at `<project>/apps/<kebab>` gets all five, and the same game at a bare project root loses
+how the token rules reach them at all. And four of the curated rules require an
+`apps/<name>/` segment in the filename, because their own predicates read it: a game
+at `<project>/apps/<kebab>` satisfies that, and the same game at a bare project root loses
 `no-game-renderer-internals`, `no-raw-r3f-canvas`, and `no-unknown-token-overrides`
 silently.
 

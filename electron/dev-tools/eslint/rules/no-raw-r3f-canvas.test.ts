@@ -72,6 +72,14 @@ ruleTester.run('chimera/no-raw-r3f-canvas', rule, {
             code: `import { Canvas } from 'some-charting-lib';`,
         },
         {
+            // A game SURFACE — the shape the invalid cases use — at a bare
+            // project root. No `apps/<name>/` segment, so the predicate does
+            // not match and the rule is inert. This is the layout `preset.ts`
+            // warns a standalone game about.
+            filename: 'screens/GameScene.tsx',
+            code: `import { Canvas } from '@react-three/fiber';\nexport const S = () => <Canvas />;`,
+        },
+        {
             // Outside a game app the rule is inert — renderer-internal code
             // and tests keep raw/fake Canvas (Invariant #127 scopes game
             // surfaces only).

@@ -48,8 +48,9 @@
  *
  *   - Zone globs are relative to the game's app root, because `files` globs
  *     resolve against the directory ESLint runs in.
- *   - Four of the six rules additionally require an `apps/<name>/` segment in
- *     the ABSOLUTE path — their own predicates read it. A game at
+ *   - Four of the six rules additionally require an `apps/<name>/` segment in the
+ *     path — their own predicates read the segment, in a relative filename as
+ *     readily as an absolute one. A game at
  *     `<project>/apps/<kebab>` satisfies that; the same game at a bare project
  *     root loses `no-game-renderer-internals`, `no-raw-r3f-canvas`, and
  *     `no-unknown-token-overrides`

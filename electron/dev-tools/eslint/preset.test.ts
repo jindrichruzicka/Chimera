@@ -260,8 +260,9 @@ describe('overlay discipline', () => {
  *   - `files` globs resolve against the linter's CWD, which for a game is its
  *     own app root — so the zone globs are app-root-relative, as the manifest
  *     says;
- *   - a rule's own predicate reads the ABSOLUTE filename, and four of the six
- *     want an `apps/<name>/` segment in it.
+ *   - a rule's own predicate reads the filename, and four of the six want an
+ *     `apps/<name>/` segment in it — in a relative filename as readily as an
+ *     absolute one.
  *
  * Get either half wrong and the rules go quiet, which is why the game path
  * (`<project>/apps/<kebab>`) is modelled rather than a bare directory.

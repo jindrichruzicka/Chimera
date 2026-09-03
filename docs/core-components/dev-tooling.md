@@ -351,7 +351,7 @@ accident is distinguishable from one withheld on purpose.
 
 One property of that manifest is load-bearing and invisible from a rule id: **a rule fires
 only where the flat-config glob and the rule's own internal predicate agree**, and those
-predicates read the absolute filename. `no-fromfloat-in-simulation` wants a `/simulation/`
+predicates read the filename, relative or absolute. `no-fromfloat-in-simulation` wants a `/simulation/`
 segment **or** an `apps/<name>/ai/` one — so its `ai/**` zone is live only under `apps/`;
 `no-unknown-token-overrides` wants `apps/<name>/styles/tokens-override.css`;
 `no-game-renderer-internals` and `no-raw-r3f-canvas` want an `apps/<name>/` segment. A

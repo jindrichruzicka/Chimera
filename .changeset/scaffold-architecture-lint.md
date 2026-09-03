@@ -13,7 +13,7 @@ token rule guards, a screen `*.module.css` the playfield actually uses, and a pr
 dev-tool forwards, for a different reason: `eslint`'s bin is already at the root, but the
 config that drives it lives in the app.
 
-Five rules are live from the first commit: `fromFloat()` out of `simulation/` and `ai/`
+Live from the first commit: `fromFloat()` out of `simulation/` and `ai/`
 (with test files exempt, so a fixture builder does not red), design values through
 `var(--ch-*)` tokens in `screens/` and its CSS modules, only engine-declared tokens in the
 override stylesheet, the renderer's public barrels only, and no raw r3f `<Canvas>`

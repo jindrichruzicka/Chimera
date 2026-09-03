@@ -1,9 +1,9 @@
 /**
  * electron/dev-tools/eslint/curated-rules.ts
  *
- * The curated standalone lint rule set — which of the ten Chimera lint rules
- * a game gets once it leaves the monorepo, at what severity, on which of its
- * own zones. The reasoning behind each verdict lives in §4.32; this file is the
+ * The curated standalone lint rule set — which Chimera lint rules a game gets
+ * once it leaves the monorepo, at what severity, on which of its own zones. The
+ * reasoning behind each verdict lives in §4.32; this file is the
  * machine-readable form of it.
  *
  * This module is PURE DATA. It imports neither the rule modules nor the
@@ -17,13 +17,16 @@
  *   `eslint .` from there. The monorepo's apps-prefixed form would match
  *   nothing.
  * - A rule fires only where the glob AND the rule's own internal path predicate
- *   agree, and those predicates read the ABSOLUTE filename:
- *   `no-fromfloat-in-simulation` wants a `/simulation/` segment OR an
- *   `apps/<name>/ai/` one (so its `ai/**` zone is live only under `apps/`);
- *   `no-unknown-token-overrides` wants `apps/<name>/styles/tokens-override.css`;
- *   `no-game-renderer-internals` wants an `apps/<name>/` segment. A scaffolded
- *   game satisfies all of them because it lives at `apps/<kebab>` — which makes
- *   that layout part of this contract.
+ *   agree. What those predicates want is the `apps/<name>/` SEGMENT, not a
+ *   leading slash: they accept a relative filename as readily as an absolute
+ *   one. Four rules want it — `no-fromfloat-in-simulation` on its `ai/**` arm
+ *   (its other arm wants a `/simulation/` segment and is live anywhere);
+ *   `no-unknown-token-overrides`, at `apps/<name>/styles/tokens-override.css`;
+ *   `no-game-renderer-internals`; and `no-raw-r3f-canvas`. A scaffolded game
+ *   satisfies all four because it lives at `apps/<kebab>` — which makes that
+ *   layout part of this contract, and is why `preset.ts` spells out what a game
+ *   at a bare project root loses. See `no-raw-r3f-canvas.test.ts` for its
+ *   predicate under both filename shapes.
  *   `no-animation-derivation-in-reduce` declares no path predicate, so its zones
  *   below are its WHOLE scope and both of them stay live wherever the game sits.
  */
