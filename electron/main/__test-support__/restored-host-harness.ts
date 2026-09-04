@@ -143,8 +143,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
     const logger = createNoopLogger();
     const { contribution } = options;
     const gameId = contribution.gameId;
-    // mirrors index.ts: the match-history capability is resolved once and drives
-    // the undo policy, the action-history bound and the start-of-match memento.
+    // mirrors index.ts: the match-history capability is resolved once.
     const matchHistory = resolveMatchHistorySupport(contribution.manifest);
 
     // mirrors electron/main/index.ts::main() registry seeding

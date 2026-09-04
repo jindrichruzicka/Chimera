@@ -16,7 +16,7 @@
  * without the whole Electron composition root.
  */
 
-/** The perspective-replay slice this helper drives (privacy-safe, always saved). */
+/** The perspective-replay slice this helper drives (privacy-safe). */
 export interface PerspectiveExportPort {
     /** Finalise the in-progress perspective recording, resolving with its path. */
     exportCurrent(name?: string): Promise<string>;
@@ -45,9 +45,8 @@ export interface ExportMatchReplayDeps {
 }
 
 /**
- * Save the just-finished match: always the player's perspective replay, plus the
- * deterministic debug copy only in a non-packaged build that is actively recording
- * one.
+ * Save the just-finished match: the player's perspective replay, plus the
+ * deterministic debug copy only when one is actively being recorded.
  *
  * @param deps injected replay ports + the packaged build signal.
  * @param name optional user-entered replay name, stamped onto both saved files.

@@ -1867,9 +1867,10 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // of `seatRestoredRoster` (which then retries the start itself).
     let restoreSeatingActive = false;
 
-    // Joined-client perspective recording state. Non-null only inside a
-    // joined session: `onSessionJoined` arms it, the cleanup fn disarms it, and
-    // `onClientSnapshotReceived` lazily starts recording on the first snapshot
+    // Joined-client perspective recording state. Non-null only inside a joined
+    // session of a game that declares replay: `onSessionJoined` arms it then, the
+    // cleanup fn disarms it, and `onClientSnapshotReceived` lazily starts
+    // recording on the first snapshot
     // (the client has no session-start header — `viewerId` is read off the first
     // projected snapshot, which is always the local seat). Set back to null once
     // the match ends so trailing snapshots neither re-start nor record after
@@ -1908,10 +1909,9 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // exactOptionalPropertyTypes. Absent for a game that declares no content.
     const hostedContentDb = contentDbs.get(HOSTED_GAME_ID);
     // What match history this game asks the host to keep (§4.5, Invariant #45).
-    // Resolved once here, at the composition root, so the undo policy, the
-    // action-history bound and the start-of-match memento gate below cannot
-    // disagree; absent on the manifest it resolves off `realtime`, which for a
-    // turn-based game is the engine's pre-declaration behaviour.
+    // Resolved once here, at the composition root, so no consumer of it below can
+    // disagree with another; absent on the manifest it resolves off `realtime`,
+    // which for a turn-based game is the engine's pre-declaration behaviour.
     const hostedMatchHistory = resolveMatchHistorySupport(hostedGame.manifest);
     const hostedUndoPolicy = undoPolicyForMatchHistory(hostedMatchHistory);
 
@@ -2028,11 +2028,11 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // seed + actions (every seat's hidden info), so a packaged production
             // build never records them at all — the port is `undefined` there, so
             // there is nothing to leak via a shareable replay file (Invariants
-            // #71/#98). The host's own PERSPECTIVE recording (below) stays ungated:
-            // it is already fog-filtered and privacy-safe. Dev/e2e builds record the
-            // deterministic replay as before (a debug artifact).
+            // #71/#98). A game that declares no replay closes the same port for its
+            // own reason; the fog-filtered PERSPECTIVE recording below reads that
+            // declaration too, rather than any build signal.
             const replayPort: ReplayPort | undefined = createDeterministicReplayPort(
-                app.isPackaged,
+                { isPackaged: app.isPackaged, replayDeclared: hostedMatchHistory.replay },
                 replayManager,
             );
 
@@ -2089,8 +2089,8 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                                 simulationHostRef.current?.onGameEnd(snapshot, result);
                             },
                         },
-                        // Absent in a packaged build (deterministic recording is
-                        // disabled there); the pipeline already guards
+                        // Absent whenever `createDeterministicReplayPort`
+                        // declined; the pipeline already guards
                         // `replayPort !== undefined`, so `recordAction` is simply
                         // skipped — no "no recording in progress" throw.
                         ...(replayPort === undefined ? {} : { replayPort }),
@@ -2110,11 +2110,10 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // true. Declared here so `startSessionRecordings` can re-arm it.
             let hostPerspectiveActive = false;
 
-            // Begin (or re-arm) both host-side recordings. Extracted so
-            // return-to-lobby can restart recording for a fresh match —
-            // otherwise the restarted match would run with no replay and no host
-            // perspective recording. Called once now that `seed` and `gameConfig`
-            // are resolved, and again from `resetActiveSessionToLobby`.
+            // Begin (or re-arm) whichever host-side recordings this game asked
+            // for. Extracted so return-to-lobby restarts them for a fresh match.
+            // Called once now that `seed` and `gameConfig` are resolved, and again
+            // from `resetActiveSessionToLobby`.
             //
             // The replay `gameConfig` mirrors the inputs to
             // `buildInitialHostedSessionSnapshot` so a replay can reconstruct the
@@ -2130,9 +2129,19 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // re-arming, so a retained finished-but-unsaved recording is cleared first
             // and `startRecording` below never trips its "already in progress" guard.
             const startSessionRecordings = (): void => {
+                if (!hostedMatchHistory.replay) {
+                    // The game asked for no match recording. Neither recorder is
+                    // armed — including on the return-to-lobby re-arm, which routes
+                    // back through here — so `hostPerspectiveActive` stays false and
+                    // the per-broadcast `recordSnapshot` is never reached. The
+                    // deterministic `replayPort` is already `undefined` for the same
+                    // declaration, which is what keeps `recordAction` from driving a
+                    // recorder that never started (§4.28).
+                    return;
+                }
                 const playerDirectorySnapshot = playerDirectory.snapshot();
-                // Deterministic recording is disabled in packaged builds
-                // (`replayPort` is undefined there), so there is nothing to start.
+                // No port ⇒ deterministic recording was declined at the source, so
+                // there is nothing to start.
                 if (replayPort !== undefined) {
                     try {
                         replayPort.startRecording({
@@ -2760,9 +2769,9 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 replayManager.abortRecording();
                 hostPerspectiveActive = false;
                 perspectiveReplayPort.abort();
-                // Re-arm both recordings for the next match so a restarted match
-                // records a fresh replay + host perspective rather than running
-                // dark. Safe after the aborts above: the prior recording is cleared
+                // Re-arm whatever this game records, so a restarted match does
+                // not run darker than the first one did.
+                // Safe after the aborts above: the prior recording is cleared
                 // (or, for a just-finished match whose fire-and-forget finalise is
                 // still saving, gracefully dropped — see `startSessionRecordings`).
                 startSessionRecordings();
@@ -3254,7 +3263,9 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // started lazily on the first received snapshot (in
             // `onClientSnapshotReceived`) since the client has no session-start
             // header; the cleanup fn below aborts anything still in progress.
-            clientPerspective = { started: false };
+            // A game that declares no replay records no perspective on a joined
+            // client either: leaving this null is what the per-snapshot arm reads.
+            clientPerspective = hostedMatchHistory.replay ? { started: false } : null;
             joinedSessionActive = true;
             const clientCommitments = new SessionCommitmentRuntime();
             const unsubSnapshotCommitments = transport.onSnapshotReceived((snapshot) => {

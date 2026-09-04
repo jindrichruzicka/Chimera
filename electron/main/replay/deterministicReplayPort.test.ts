@@ -33,15 +33,37 @@ describe('createDeterministicReplayPort', () => {
     it('returns undefined in a packaged build (deterministic recording disabled at the source)', () => {
         const recorder = { startRecording: vi.fn(), recordAction: vi.fn() };
 
-        expect(createDeterministicReplayPort(true, recorder)).toBeUndefined();
+        expect(
+            createDeterministicReplayPort({ isPackaged: true, replayDeclared: true }, recorder),
+        ).toBeUndefined();
         // With no port the recorder is never wired, so it cannot be driven.
         expect(recorder.startRecording).not.toHaveBeenCalled();
+    });
+
+    it('returns undefined for a game that declares no replay, even in a dev/e2e build', () => {
+        const recorder = { startRecording: vi.fn(), recordAction: vi.fn() };
+
+        expect(
+            createDeterministicReplayPort({ isPackaged: false, replayDeclared: false }, recorder),
+        ).toBeUndefined();
+        expect(recorder.startRecording).not.toHaveBeenCalled();
+    });
+
+    it('returns undefined when both gates close', () => {
+        const recorder = { startRecording: vi.fn(), recordAction: vi.fn() };
+
+        expect(
+            createDeterministicReplayPort({ isPackaged: true, replayDeclared: false }, recorder),
+        ).toBeUndefined();
     });
 
     it('returns a port delegating to the recorder in a non-packaged (dev/e2e) build', () => {
         const recorder = { startRecording: vi.fn(), recordAction: vi.fn() };
 
-        const port = createDeterministicReplayPort(false, recorder);
+        const port = createDeterministicReplayPort(
+            { isPackaged: false, replayDeclared: true },
+            recorder,
+        );
 
         expect(port).toBeDefined();
         port?.startRecording(HEADER);

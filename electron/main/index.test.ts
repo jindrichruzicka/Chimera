@@ -24,6 +24,7 @@ import type {
 } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type * as LoadGameContentModule from './content/loadGameContent.js';
 import type * as FileReplayRepositoryModule from './replay/FileReplayRepository.js';
+import type * as DeterministicReplayPortModule from './replay/deterministicReplayPort.js';
 import type { ReplaySerializer } from '@chimera-engine/simulation/replay/index.js';
 import { makeReplayFile } from '@chimera-engine/simulation/replay/__test-support__/replayRepositoryContractTests.js';
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
@@ -459,6 +460,31 @@ vi.mock('./replay/FileReplayRepository.js', async (importOriginal) => {
     };
 });
 
+// ── Deterministic replay-port gate capture ───────────────────────────────────
+// Passes through to the real factory and records the gates the composition root
+// handed it. These cases run packaged, where the factory answers `undefined`
+// whatever the game declared — so the argument is what makes the composition
+// root's read of `matchHistory.replay` for the DETERMINISTIC port visible. What
+// the factory then does with each gate combination is pinned in
+// `deterministicReplayPort.test.ts`.
+const { deterministicGates } = vi.hoisted(() => ({
+    deterministicGates: { calls: [] as { isPackaged: boolean; replayDeclared: boolean }[] },
+}));
+
+vi.mock('./replay/deterministicReplayPort.js', async (importOriginal) => {
+    const actual = await importOriginal<typeof DeterministicReplayPortModule>();
+    return {
+        ...actual,
+        createDeterministicReplayPort: (
+            gates: DeterministicReplayPortModule.DeterministicReplayGates,
+            recorder: Parameters<typeof actual.createDeterministicReplayPort>[1],
+        ) => {
+            deterministicGates.calls.push({ ...gates });
+            return actual.createDeterministicReplayPort(gates, recorder);
+        },
+    };
+});
+
 // ── E2E hooks mock — captures getE2eHooks for wiring tests ────────────────────
 const { mockGetE2eHooks } = vi.hoisted(() => ({
     mockGetE2eHooks: vi.fn<() => unknown>(() => undefined),
@@ -690,6 +716,8 @@ const {
     PERSPECTIVE_REPLAY_SNAPSHOT_RANGE_CHANNEL,
     PERSPECTIVE_REPLAY_CLOSE_PLAYBACK_CHANNEL,
 } = await import('../preload/apis/perspective-replay-api.js');
+const { CURRENT_MATCH_REPLAY_PATH } =
+    await import('@chimera-engine/simulation/foundation/replay-bridge-contract.js');
 const { createNoopLogger } = await import('./logging/logger.js');
 const { ActionRegistry } = await import('@chimera-engine/simulation/engine/ActionRegistry.js');
 const { entityId, playerId } = await import('@chimera-engine/simulation/engine/types.js');
@@ -6236,6 +6264,8 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         ) => () => void;
         readonly onSessionJoined?: (transport: ClientTransport) => (() => void) | void;
         readonly onClientSnapshotReceived?: (snapshot: unknown, checksum: number) => void;
+        readonly onGameStartRequested?: (state: unknown) => void;
+        readonly onReturnToLobbyRequested?: (state: unknown) => void;
     }
 
     /** Flush pending microtasks + the fire-and-forget finalise promise. */
@@ -6281,13 +6311,21 @@ describe('main() — perspective replay recording (F44b T5)', () => {
      * because this describe does not clear ipcMain.handle between main() runs.
      */
     const saveCurrentPerspective = async (): Promise<void> => {
+        await exportCurrentPerspective();
+        await flush();
+    };
+
+    /**
+     * The registered export-current handler's own promise, so a test can assert
+     * how it REFUSES rather than only what it wrote.
+     */
+    const exportCurrentPerspective = async (): Promise<unknown> => {
         const exportCurrent = [...ipcMainHandle.mock.calls]
             .reverse()
             .find(([channel]) => channel === PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL)?.[1] as
             | (() => unknown)
             | undefined;
-        await Promise.resolve(exportCurrent?.());
-        await flush();
+        return Promise.resolve(exportCurrent?.());
     };
 
     beforeEach(() => {
@@ -6347,6 +6385,142 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         expect(file.viewerId).toBe(hostId);
         expect(file.frames.map((f) => f.tick)).toStrictEqual([0, 1, 2]);
         expect(file.durationTicks).toBe(2);
+    });
+
+    describe('a game that declares no replay', () => {
+        /** Turn-based, so `realtime` is not what the host could be reading. */
+        const declined = (): MainGameContribution[] =>
+            makeMatchHistoryTestContributions({ undo: true, replay: false });
+
+        it.each([
+            ['declines it for a game that declares no replay', declined, false],
+            ['leaves it open for a game that declares nothing', makeTestContributions, true],
+        ])(
+            'hands the deterministic port factory the resolved capability — %s',
+            async (_label, makeContributions, expected) => {
+                await main(makeContributions());
+                deterministicGates.calls.length = 0;
+
+                getLobbyOptions().onSessionHosted?.(makeHostTransport(), {
+                    hostId: playerId('host-gates'),
+                    maxPlayers: 1,
+                });
+
+                expect(deterministicGates.calls).toStrictEqual([
+                    { isPackaged: true, replayDeclared: expected },
+                ]);
+            },
+        );
+
+        it('arms no host perspective recording at all', async () => {
+            const start = vi.spyOn(PerspectiveReplayManager.prototype, 'start');
+            try {
+                await main(declined());
+                start.mockClear();
+
+                getLobbyOptions().onSessionHosted?.(makeHostTransport(), {
+                    hostId: playerId('host-declined'),
+                    maxPlayers: 1,
+                });
+
+                expect(start).not.toHaveBeenCalled();
+            } finally {
+                start.mockRestore();
+            }
+        });
+
+        it('retains no frame across a whole match, and an explicit save writes nothing', async () => {
+            await main(declined());
+            const hostId = playerId('host-declined-frames');
+
+            getLobbyOptions().onSessionHosted?.(makeHostTransport(), { hostId, maxPlayers: 1 });
+
+            const recipient = mockStateBroadcasterInstance.registerRendererRecipient.mock.calls.at(
+                -1,
+            )?.[0] as HostRecipient | undefined;
+            recipient?.sendSnapshot(makeSnapshot(hostId, 0));
+            recipient?.sendSnapshot(makeSnapshot(hostId, 1));
+            recipient?.sendSnapshot(makeSnapshot(hostId, 2, { winnerIds: [hostId] }));
+
+            await flush();
+
+            // The save path degrades the way it already does for any match that
+            // was never recorded: the export handler REJECTS, which is what a
+            // renderer invoke sees, rather than crashing the host or writing a
+            // frameless file.
+            await expect(exportCurrentPerspective()).rejects.toThrow(
+                /exportCurrent: no recording in progress/,
+            );
+            expect(perspectiveSaves.value).toHaveLength(0);
+        });
+
+        it('refuses the current-match preview rather than serving an empty one', async () => {
+            // The post-game "Replay" affordance a game screen may offer opens the
+            // in-memory recording through this sentinel. A declining game has none,
+            // so the invoke rejects — the same refusal any never-recorded match
+            // already gets, surfaced to the renderer rather than crashing the host
+            // or handing back a frameless playback.
+            await main(declined());
+            getLobbyOptions().onSessionHosted?.(makeHostTransport(), {
+                hostId: playerId('host-declined-preview'),
+                maxPlayers: 1,
+            });
+
+            const openPlayback = [...ipcMainHandle.mock.calls]
+                .reverse()
+                .find(([channel]) => channel === PERSPECTIVE_REPLAY_OPEN_PLAYBACK_CHANNEL)?.[1] as
+                | ((event: unknown, replayPath: unknown) => unknown)
+                | undefined;
+
+            await expect(
+                Promise.resolve(openPlayback?.(undefined, CURRENT_MATCH_REPLAY_PATH)),
+            ).rejects.toThrow(/getCurrentFile: no recording in progress/);
+        });
+
+        it('records no frame on a joined client either', async () => {
+            const start = vi.spyOn(PerspectiveReplayManager.prototype, 'start');
+            try {
+                await main(declined());
+                const clientId = playerId('client-declined');
+                start.mockClear();
+
+                getLobbyOptions().onSessionJoined?.(makeClientTransport());
+                getLobbyOptions().onClientSnapshotReceived?.(makeSnapshot(clientId, 0), 0);
+                getLobbyOptions().onClientSnapshotReceived?.(makeSnapshot(clientId, 1), 0);
+
+                await flush();
+
+                expect(start).not.toHaveBeenCalled();
+                await expect(exportCurrentPerspective()).rejects.toThrow(
+                    /exportCurrent: no recording in progress/,
+                );
+                expect(perspectiveSaves.value).toHaveLength(0);
+            } finally {
+                start.mockRestore();
+            }
+        });
+
+        it('does not re-arm the perspective recording on return to lobby', async () => {
+            const start = vi.spyOn(PerspectiveReplayManager.prototype, 'start');
+            try {
+                await main(declined());
+                const hostId = playerId('host-declined-relobby');
+                const options = getLobbyOptions();
+                options.onSessionHosted?.(makeHostTransport(), { hostId, maxPlayers: 1 });
+                const lobbyState = {
+                    info: { sessionId: 'declined-rtl', hostId, gameId: 'tactics' },
+                    players: [{ playerId: hostId, displayName: 'Host', ready: true }],
+                };
+                options.onGameStartRequested?.(lobbyState);
+                start.mockClear();
+
+                options.onReturnToLobbyRequested?.(lobbyState);
+
+                expect(start).not.toHaveBeenCalled();
+            } finally {
+                start.mockRestore();
+            }
+        });
     });
 
     it('host egress: skips frames projected for a different seat (post-handoff lock, #98)', async () => {

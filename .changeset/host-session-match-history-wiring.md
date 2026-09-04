@@ -16,9 +16,8 @@ only `undo`. A game that keeps undo gets `DEFAULT_UNDO_POLICY` itself; one that 
 same policy with `allowUndo` false. The manager stays in `PipelineContext` either way, so `engine:undo`
 still enters through the Stage 3 intercept and is refused there with `policy_disallows` (Invariant #7).
 
-The composition root resolves the capability once from the hosted game's manifest and drives three
-things from that one value: the policy, the history bound, and whether the start-of-match memento is
-minted. The turn handover keeps seeding the next player's memento from inside `ActionPipeline`'s
+The composition root resolves the capability once from the hosted game's manifest, so no consumer of
+it can disagree with another. The turn handover keeps seeding the next player's memento from inside `ActionPipeline`'s
 `engine:end_turn` branch, which this change does not touch; what a declining game loses is the
 start-of-match baseline, which is refreshed only by that same handover.
 
