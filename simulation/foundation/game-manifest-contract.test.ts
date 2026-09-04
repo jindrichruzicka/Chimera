@@ -2,17 +2,21 @@ import { describe, expect, it } from 'vitest';
 
 import {
     DEFAULT_CURSOR_HOTSPOT,
+    DEFAULT_REALTIME_RETAIN_ACTIONS,
     DEFAULT_TICK_RATE_MS,
     DEFAULT_WINDOW_TITLE,
     firstLanguageCode,
+    MAX_ACTION_HISTORY_ENTRIES,
     resolveGameCursor,
     resolveGameLanguages,
     resolveGameLogoScreen,
+    resolveMatchHistorySupport,
     resolveSpectatorSupport,
     resolveTickerHz,
     resolveWindowTitle,
     type GameLanguage,
     type GameLogoScreen,
+    type GameMatchHistorySupport,
     type GameSpectatorSupport,
     type GameManifest,
 } from './game-manifest-contract.js';
@@ -360,5 +364,226 @@ describe('resolveSpectatorSupport', () => {
         const resolved = resolveSpectatorSupport(manifest);
         expect(manifest.spectators).toEqual({ mode: 'perspective' });
         expect(resolved).not.toBe(spectators);
+    });
+});
+
+describe('resolveMatchHistorySupport', () => {
+    it('defaults a turn-based game to undo + replay with the full action-history ceiling', () => {
+        expect(resolveMatchHistorySupport(makeManifest({ realtime: false }))).toEqual({
+            undo: true,
+            replay: true,
+            retainActions: MAX_ACTION_HISTORY_ENTRIES,
+        });
+    });
+
+    it("resolves today's exact constants for a turn-based game with no declaration", () => {
+        // Pins the byte-for-byte no-op requirement: the retention bound a
+        // declaration-free turn-based game gets is the pre-feature constant.
+        expect(MAX_ACTION_HISTORY_ENTRIES).toBe(10_000);
+        expect(resolveMatchHistorySupport(makeManifest()).retainActions).toBe(10_000);
+        expect(resolveMatchHistorySupport(makeManifest()).undo).toBe(true);
+    });
+
+    it('defaults a realtime game to no undo, replay on, and the realtime retention bound', () => {
+        expect(resolveMatchHistorySupport(makeManifest({ realtime: true }))).toEqual({
+            undo: false,
+            replay: true,
+            retainActions: DEFAULT_REALTIME_RETAIN_ACTIONS,
+        });
+    });
+
+    it('bounds the realtime default below the turn-based ceiling', () => {
+        expect(DEFAULT_REALTIME_RETAIN_ACTIONS).toBeGreaterThan(0);
+        expect(DEFAULT_REALTIME_RETAIN_ACTIONS).toBeLessThan(MAX_ACTION_HISTORY_ENTRIES);
+        expect(Number.isInteger(DEFAULT_REALTIME_RETAIN_ACTIONS)).toBe(true);
+    });
+
+    it('falls back to the turn-based defaults when there is no manifest at all', () => {
+        expect(resolveMatchHistorySupport(undefined)).toEqual({
+            undo: true,
+            replay: true,
+            retainActions: MAX_ACTION_HISTORY_ENTRIES,
+        });
+    });
+
+    it('keys the default off the same realtime reading resolveTickerHz uses', () => {
+        // A manifest whose `realtime` is truthy but not `true` still runs a
+        // ticker, so it must also get the realtime match-history default —
+        // otherwise a realtime host would arm turn-based retention.
+        const forged = makeManifest({ realtime: 1 as unknown as boolean });
+        expect(resolveTickerHz(forged)).not.toBeNull();
+        expect(resolveMatchHistorySupport(forged).undo).toBe(false);
+        expect(resolveMatchHistorySupport(forged).retainActions).toBe(
+            DEFAULT_REALTIME_RETAIN_ACTIONS,
+        );
+    });
+
+    it('lets a turn-based game declare itself out of undo and replay', () => {
+        const manifest = makeManifest({
+            realtime: false,
+            matchHistory: { undo: false, replay: false },
+        });
+        expect(resolveMatchHistorySupport(manifest)).toEqual({
+            undo: false,
+            replay: false,
+            retainActions: MAX_ACTION_HISTORY_ENTRIES,
+        });
+    });
+
+    it('lets a realtime game declare itself back INTO undo and out of replay', () => {
+        const manifest = makeManifest({
+            realtime: true,
+            matchHistory: { undo: true, replay: false },
+        });
+        expect(resolveMatchHistorySupport(manifest)).toEqual({
+            undo: true,
+            replay: false,
+            retainActions: DEFAULT_REALTIME_RETAIN_ACTIONS,
+        });
+    });
+
+    it('honours a declared retainActions within the ceiling', () => {
+        const manifest = makeManifest({
+            realtime: true,
+            matchHistory: { undo: false, replay: true, retainActions: 250 },
+        });
+        expect(resolveMatchHistorySupport(manifest).retainActions).toBe(250);
+    });
+
+    it('honours a declared retainActions exactly ON the ceiling', () => {
+        const manifest = makeManifest({
+            realtime: true,
+            matchHistory: {
+                undo: false,
+                replay: true,
+                retainActions: MAX_ACTION_HISTORY_ENTRIES,
+            },
+        });
+        expect(resolveMatchHistorySupport(manifest).retainActions).toBe(MAX_ACTION_HISTORY_ENTRIES);
+    });
+
+    it('honours a declared retainActions of exactly 1 — the low boundary', () => {
+        const manifest = makeManifest({
+            realtime: true,
+            matchHistory: { undo: false, replay: true, retainActions: 1 },
+        });
+        expect(resolveMatchHistorySupport(manifest).retainActions).toBe(1);
+    });
+
+    it.each([
+        ['zero', 0],
+        ['negative', -5],
+        ['non-integer', 12.5],
+        ['above the ceiling', MAX_ACTION_HISTORY_ENTRIES + 1],
+        ['NaN', Number.NaN],
+        ['Infinity', Number.POSITIVE_INFINITY],
+    ])(
+        'drops a %s retainActions and falls back to the realtime default without throwing',
+        (_label, retainActions) => {
+            const manifest = makeManifest({
+                realtime: true,
+                matchHistory: { undo: false, replay: true, retainActions },
+            });
+            expect(() => resolveMatchHistorySupport(manifest)).not.toThrow();
+            expect(resolveMatchHistorySupport(manifest).retainActions).toBe(
+                DEFAULT_REALTIME_RETAIN_ACTIONS,
+            );
+        },
+    );
+
+    it('drops a non-number retainActions and falls back to the turn-based default', () => {
+        // Deliberately forges a declaration the types forbid, to exercise the
+        // resolver's never-throws guarantee against malformed runtime input.
+        const malformed = {
+            undo: true,
+            replay: true,
+            retainActions: '500',
+        } as unknown as GameMatchHistorySupport;
+        const manifest = makeManifest({ realtime: false, matchHistory: malformed });
+        expect(() => resolveMatchHistorySupport(manifest)).not.toThrow();
+        expect(resolveMatchHistorySupport(manifest).retainActions).toBe(MAX_ACTION_HISTORY_ENTRIES);
+    });
+
+    it('drops a non-boolean undo and falls back to the realtime default for that field only', () => {
+        // Deliberately forges a declaration the types forbid, to exercise the
+        // resolver's never-throws guarantee against malformed runtime input.
+        const malformed = {
+            undo: 'yes',
+            replay: false,
+        } as unknown as GameMatchHistorySupport;
+        const manifest = makeManifest({ realtime: true, matchHistory: malformed });
+        expect(resolveMatchHistorySupport(manifest)).toEqual({
+            undo: false,
+            replay: false,
+            retainActions: DEFAULT_REALTIME_RETAIN_ACTIONS,
+        });
+    });
+
+    it('falls back a non-boolean replay to the REPLAY default, not the undo one', () => {
+        // On this fork `fallback.undo` and `fallback.replay` differ, so a
+        // fallback read off the wrong field flips the resolved value.
+        const malformed = {
+            undo: false,
+            replay: 'on',
+        } as unknown as GameMatchHistorySupport;
+        const manifest = makeManifest({ realtime: true, matchHistory: malformed });
+        expect(resolveMatchHistorySupport(manifest).replay).toBe(true);
+    });
+
+    it('falls back a non-boolean undo to the UNDO default, not the replay one', () => {
+        // Mirror of the case above, on the same fork.
+        const malformed = {
+            undo: 'on',
+            replay: true,
+        } as unknown as GameMatchHistorySupport;
+        const manifest = makeManifest({ realtime: true, matchHistory: malformed });
+        expect(resolveMatchHistorySupport(manifest).undo).toBe(false);
+    });
+
+    it('drops a non-boolean replay and falls back to the turn-based default for that field only', () => {
+        // Deliberately forges a declaration the types forbid, to exercise the
+        // resolver's never-throws guarantee against malformed runtime input.
+        const malformed = {
+            undo: false,
+            replay: null,
+        } as unknown as GameMatchHistorySupport;
+        const manifest = makeManifest({ realtime: false, matchHistory: malformed });
+        expect(resolveMatchHistorySupport(manifest)).toEqual({
+            undo: false,
+            replay: true,
+            retainActions: MAX_ACTION_HISTORY_ENTRIES,
+        });
+    });
+
+    it('drops a null matchHistory without throwing and falls back to every default', () => {
+        const malformed = null as unknown as GameMatchHistorySupport;
+        const manifest = makeManifest({ realtime: false, matchHistory: malformed });
+        expect(() => resolveMatchHistorySupport(manifest)).not.toThrow();
+        expect(resolveMatchHistorySupport(manifest)).toEqual({
+            undo: true,
+            replay: true,
+            retainActions: MAX_ACTION_HISTORY_ENTRIES,
+        });
+    });
+
+    it('drops a non-object matchHistory and falls back to every default', () => {
+        // Deliberately forges a declaration the types forbid, to exercise the
+        // resolver's never-throws guarantee against malformed runtime input.
+        const malformed = 'undo' as unknown as GameMatchHistorySupport;
+        const manifest = makeManifest({ realtime: true, matchHistory: malformed });
+        expect(() => resolveMatchHistorySupport(manifest)).not.toThrow();
+        expect(resolveMatchHistorySupport(manifest)).toEqual({
+            undo: false,
+            replay: true,
+            retainActions: DEFAULT_REALTIME_RETAIN_ACTIONS,
+        });
+    });
+
+    it('does not mutate the declaration and returns a fresh object', () => {
+        const matchHistory = { undo: true, replay: false, retainActions: 42 } as const;
+        const manifest = makeManifest({ realtime: true, matchHistory });
+        const resolved = resolveMatchHistorySupport(manifest);
+        expect(manifest.matchHistory).toEqual({ undo: true, replay: false, retainActions: 42 });
+        expect(resolved).not.toBe(matchHistory);
     });
 });

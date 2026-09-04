@@ -21,6 +21,7 @@
  *          injected caller's responsibility, enforced by test doubles.
  */
 
+import { MAX_ACTION_HISTORY_ENTRIES } from '../foundation/game-manifest-contract.js';
 import type { Logger } from '../foundation/logging.js';
 import type { BaseGameSnapshot, ActionEnvelope, PlayerId } from './types.js';
 import { DEFAULT_UNDO_POLICY } from './UndoPolicy.js';
@@ -37,15 +38,10 @@ import type { UndoPolicy } from './UndoPolicy.js';
  */
 export const TURN_MEMENTO_RETENTION = 4;
 
-/**
- * Safety-net upper bound on the number of entries in `InMemoryActionHistory`.
- * Every `append()` that would exceed this cap evicts the oldest entry; the
- * `action-history:overflow` warn reports the SATURATION, once per episode,
- * rather than once per eviction (see the latch on `InMemoryActionHistory`).
- *
- * Architecture: §4.5, Invariant #45
- */
-export const MAX_ACTION_HISTORY_ENTRIES = 10_000;
+// The action-history entry ceiling is declared in
+// `../foundation/game-manifest-contract.js`, where the manifest resolver clamps
+// against it; re-exported here for importers of this module.
+export { MAX_ACTION_HISTORY_ENTRIES };
 
 // ─── Data types ───────────────────────────────────────────────────────────────
 

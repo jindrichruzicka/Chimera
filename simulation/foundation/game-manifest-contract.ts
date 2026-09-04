@@ -1,8 +1,7 @@
 // simulation/foundation/game-manifest-contract.ts
 //
 // Per-game manifest: the small, pure-data descriptor each game declares about
-// itself (display name, window title, real-time loop mode, optional icon,
-// hardware-cursor textures, logo screen and UI languages). Lives in the
+// itself — identity, loop mode, and optional capability declarations. Lives in the
 // `simulation/foundation/` leaf with zero platform imports so BOTH the main process (window title +
 // RealtimeTicker) and the renderer (game-shell display name, cursor token
 // overrides) read one source of truth.
@@ -19,6 +18,27 @@ export const DEFAULT_WINDOW_TITLE = 'Chimera';
  * baseline (`TICK_BUDGET_MS = 16`, see {@link simulation/foundation/perf-budget.ts}).
  */
 export const DEFAULT_TICK_RATE_MS = 50;
+
+/**
+ * Safety-net upper bound on the number of entries an engine action history
+ * retains, and the ceiling a game's `matchHistory.retainActions` declaration
+ * may not exceed. Also the turn-based default: a game that declares nothing
+ * gets exactly this bound, which is what `InMemoryActionHistory` has always
+ * applied. Declared here, in the contract leaf, because the manifest resolver
+ * clamps against it; `simulation/engine/UndoManager.ts` re-exports it for the
+ * history implementation and its existing consumers.
+ *
+ * Architecture: §4.5, Invariant #45
+ */
+export const MAX_ACTION_HISTORY_ENTRIES = 10_000;
+
+/**
+ * Default `retainActions` bound for a real-time game that declares no
+ * `matchHistory`. Held well under {@link MAX_ACTION_HISTORY_ENTRIES}, since the
+ * same fork defaults `undo` off and a history no undo replays is a diagnostic
+ * tail rather than a replay baseline.
+ */
+export const DEFAULT_REALTIME_RETAIN_ACTIONS = 1_000;
 
 /**
  * Named cursor roles a game may re-texture. Mirrors the engine's
@@ -83,6 +103,25 @@ export interface GameSpectatorSupport {
      * hotkey. Reserved for future 'public'/'omniscient' modes.
      */
     readonly mode: 'perspective';
+}
+
+/**
+ * What match history a game declares it needs. Absent on the manifest ⇒ the
+ * {@link GameManifest.realtime}-keyed defaults of
+ * {@link resolveMatchHistorySupport} apply. Pure data (Invariant #1): host
+ * wiring, never a reducer input.
+ */
+export interface GameMatchHistorySupport {
+    /** Whether the game wants `engine:undo` / `engine:redo` available. */
+    readonly undo: boolean;
+    /** Whether the game wants the match recorded for replay. */
+    readonly replay: boolean;
+    /**
+     * Override for the action-history entry bound. Must be a positive integer
+     * no greater than {@link MAX_ACTION_HISTORY_ENTRIES}; anything else is
+     * dropped in favour of the default for the game's `realtime` mode.
+     */
+    readonly retainActions?: number;
 }
 
 /** Everything a game declares about itself, independent of platform layer. */
@@ -152,6 +191,12 @@ export interface GameManifest {
      * Pure data here — no admission or projection logic (Invariant #1).
      */
     readonly spectators?: GameSpectatorSupport;
+    /**
+     * Optional match-history capability declaration; see
+     * {@link resolveMatchHistorySupport} for how an absent field resolves.
+     * Pure data here — the host, not the simulation, acts on it (Invariant #1).
+     */
+    readonly matchHistory?: GameMatchHistorySupport;
 }
 
 /** Resolve the OS window title for a (possibly absent) game manifest. */
@@ -295,4 +340,48 @@ export function resolveSpectatorSupport(
         return undefined;
     }
     return { mode };
+}
+
+/**
+ * Resolve a manifest's match-history capability into a TOTAL declaration: every
+ * field present, so the host never re-implements a default. Absent fields key
+ * off {@link GameManifest.realtime} — a real-time game defaults to no undo and
+ * the tighter {@link DEFAULT_REALTIME_RETAIN_ACTIONS} bound, everything else to
+ * undo on and {@link MAX_ACTION_HISTORY_ENTRIES}, which is byte-for-byte the
+ * pre-declaration behaviour. `realtime` is read for truthiness so this fork and
+ * {@link resolveTickerHz}'s cannot disagree about which games are real-time.
+ *
+ * Never throws: unlike {@link resolveTickerHz}, this governs an optional
+ * capability, so malformed input is dropped per field (following
+ * {@link resolveGameLanguages}) and a bad manifest degrades rather than
+ * bricking the boot. Never mutates the input — returns a fresh object.
+ */
+export function resolveMatchHistorySupport(
+    manifest: GameManifest | undefined,
+): Required<GameMatchHistorySupport> {
+    const realtime = Boolean(manifest?.realtime);
+    const fallback: Required<GameMatchHistorySupport> = realtime
+        ? { undo: false, replay: true, retainActions: DEFAULT_REALTIME_RETAIN_ACTIONS }
+        : { undo: true, replay: true, retainActions: MAX_ACTION_HISTORY_ENTRIES };
+    const declared: unknown = manifest?.matchHistory;
+    if (typeof declared !== 'object' || declared === null) {
+        return fallback;
+    }
+    const candidate = declared as {
+        readonly undo?: unknown;
+        readonly replay?: unknown;
+        readonly retainActions?: unknown;
+    };
+    const retainActions = candidate.retainActions;
+    return {
+        undo: typeof candidate.undo === 'boolean' ? candidate.undo : fallback.undo,
+        replay: typeof candidate.replay === 'boolean' ? candidate.replay : fallback.replay,
+        retainActions:
+            typeof retainActions === 'number' &&
+            Number.isInteger(retainActions) &&
+            retainActions > 0 &&
+            retainActions <= MAX_ACTION_HISTORY_ENTRIES
+                ? retainActions
+                : fallback.retainActions,
+    };
 }
