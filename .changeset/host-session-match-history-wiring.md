@@ -27,8 +27,8 @@ start-of-match baseline, which is refreshed only by that same handover.
 `apps/action` declares none either, but it is `realtime: true`, so it resolves to undo off, replay on
 and a 1,000-entry history where the host previously gave it `DEFAULT_UNDO_POLICY`, a start-of-match
 memento and 10,000 entries. Its Ctrl+Z binding is the engine default spread into the app's settings
-schema; it survives, and now reaches an action the host rejects rather than a rewind. Withholding the
-binding is a renderer change that lands separately.
+schema; it survives, and the seat's projected `undoMeta.canUndo` is now `false`, which is what the
+renderer's own key handler returns on.
 
 Prose the change falsified is repaired rather than left standing: `InMemoryActionHistory`'s
 `maxEntries` option is documented as a host knob rather than a test-only override, and Invariant #45,

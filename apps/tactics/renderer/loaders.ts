@@ -14,7 +14,10 @@ import type {
     LoadedRendererGame,
     LoadedRendererGameShell,
 } from '@chimera-engine/renderer/game';
-import { resolveGameLanguages } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
+import {
+    resolveGameLanguages,
+    resolveMatchHistorySupport,
+} from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 
 import { tacticsManifest } from '../manifest.js';
 import { TACTICS_INPUT_ACTIONS } from './input-actions.js';
@@ -31,6 +34,10 @@ export async function loadTacticsRendererGame(): Promise<LoadedRendererGame> {
     return {
         registry: screenModule.TacticsGameScreenRegistry,
         assetManifest: assetManifestModule.tacticsAssetManifest,
+        // The manifest's match-history capability, RESOLVED; see
+        // `LoadedRendererGame.matchHistory` for why the renderer needs it
+        // forwarded rather than read.
+        matchHistory: resolveMatchHistorySupport(tacticsManifest),
         // Read back off the shell rather than re-stated: the same array reaches
         // both payloads, so the engine's app-boot registration and `GameShell`'s
         // re-registration cannot disagree about what an id means (§4.26). Spread

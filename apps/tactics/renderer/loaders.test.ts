@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import { resolveMatchHistorySupport } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import { tacticsMainMenuDefinition } from '../shell/main-menu.js';
 import { tacticsManifest } from '../manifest.js';
 import { TACTICS_INPUT_ACTIONS } from './input-actions.js';
@@ -12,6 +13,15 @@ describe('tactics renderer loaders', () => {
         expect(game.registry.playfield).toBeDefined();
         expect(game.assetManifest?.gameId).toBe('tactics');
         expect(game.inputActions?.map((action) => action.id)).toContain('game:end-turn');
+    });
+
+    it('forwards the resolved match-history capability, so the renderer keeps undo', async () => {
+        // Tactics is turn-based and declares nothing, which resolves to undo
+        // on — the behaviour it had before the field existed.
+        const game = await loadTacticsRendererGame();
+
+        expect(game.matchHistory).toStrictEqual(resolveMatchHistorySupport(tacticsManifest));
+        expect(game.matchHistory?.undo).toBe(true);
     });
 
     // The SHELL payload is the one a menu route loads, so it is the payload

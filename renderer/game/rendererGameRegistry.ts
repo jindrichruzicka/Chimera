@@ -11,6 +11,7 @@ import type {
     GameCursorImage,
     GameCursorRole,
     GameLanguage,
+    GameMatchHistorySupport,
 } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
 import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
@@ -259,6 +260,23 @@ export interface LoadedRendererGame {
     readonly assetManifest?: AssetManifest;
     readonly inputActions?: readonly InputAction[];
     readonly shell?: LoadedRendererGameShell;
+    /**
+     * The game's RESOLVED match-history capability
+     * (`resolveMatchHistorySupport(manifest)`), forwarded from the game's own
+     * `renderer/loaders.ts`.
+     *
+     * A second declaration rather than a read of the manifest: manifest data
+     * reaches the renderer only as registration payload, the same path
+     * {@link GameTranslations.languages} and {@link LoadedRendererGameShell.cursor}
+     * take (Invariants #80/#94).
+     *
+     * Of the three resolved fields only `undo` is read: it decides whether
+     * `/game` registers the `engine:undo`/`engine:redo` key actions and hands the
+     * shell their handlers. Absent ⇒ undo is offered, which is what every game
+     * got before the field existed. Nothing in the renderer reads `replay` or
+     * `retainActions`; they arrive because the resolver returns them.
+     */
+    readonly matchHistory?: Required<GameMatchHistorySupport>;
 }
 
 export class UnknownRendererGameError extends Error {

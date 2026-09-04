@@ -268,8 +268,16 @@ export default function GamePage(): React.ReactElement | null {
         },
         [snapshot, sendAction, currentTick, loadedGame],
     );
-    useInputAction('engine:undo', onUndoKey);
-    useInputAction('engine:redo', onRedoKey);
+    // A game that declares no undo gets NO key registration — the hook call
+    // stays unconditional (rules of hooks) and its subscription is what is
+    // withheld, so the bound key reaches nothing rather than reaching a handler
+    // that ignores it. Absent declaration ⇒ offered, as before the field existed.
+    // Held off until the game has loaded, because until then the capability is
+    // not merely absent but unknown, and a key registered on the way in would
+    // have to be torn down again.
+    const undoOffered = loadedGame !== null && (loadedGame.matchHistory?.undo ?? true);
+    useInputAction('engine:undo', onUndoKey, { enabled: undoOffered });
+    useInputAction('engine:redo', onRedoKey, { enabled: undoOffered });
     useInputAction('game:end-turn', onEndTurnKey);
 
     // Whether GameShell can MOUNT: snapshot + game + manager all present. It is
@@ -396,12 +404,18 @@ export default function GamePage(): React.ReactElement | null {
                 menuMounted={beat.revealed}
                 revealPhase={beat.phase}
                 onScenePending={setScenePending}
-                onUndo={() =>
-                    dispatchGameAction(snapshot, resolvedPlayerId, 'engine:undo', { steps: 1 })
-                }
-                onRedo={() =>
-                    dispatchGameAction(snapshot, resolvedPlayerId, 'engine:redo', { steps: 1 })
-                }
+                {...(undoOffered
+                    ? {
+                          onUndo: () =>
+                              dispatchGameAction(snapshot, resolvedPlayerId, 'engine:undo', {
+                                  steps: 1,
+                              }),
+                          onRedo: () =>
+                              dispatchGameAction(snapshot, resolvedPlayerId, 'engine:redo', {
+                                  steps: 1,
+                              }),
+                      }
+                    : {})}
                 onEndTurn={() =>
                     dispatchGameAction(snapshot, resolvedPlayerId, 'engine:end_turn', {})
                 }

@@ -133,7 +133,18 @@ type InputActionId = string;
 type InputCallback = (event: InputEvent) => void;
 const inputActionCallbacks = new Map<InputActionId, InputCallback>();
 vi.mock('../../input/useInputAction.js', () => ({
-    useInputAction: (id: InputActionId, cb: InputCallback) => {
+    // Mirrors the real hook's `enabled` contract: a disabled call registers
+    // NOTHING, rather than a callback the manager would still reach. What the
+    // real hook does with the option is pinned in `useInputAction.test.tsx`.
+    useInputAction: (
+        id: InputActionId,
+        cb: InputCallback,
+        options?: { readonly enabled?: boolean },
+    ) => {
+        if (options?.enabled === false) {
+            inputActionCallbacks.delete(id);
+            return;
+        }
         inputActionCallbacks.set(id, cb);
     },
 }));
@@ -1099,5 +1110,92 @@ describe('GamePage — in-game save', () => {
         expect(useToastStore.getState().queue.some((toast) => toast.severity === 'success')).toBe(
             false,
         );
+    });
+});
+
+describe('GamePage — the declared undo capability', () => {
+    /** The shape a game's own `renderer/loaders.ts` forwards. */
+    const withMatchHistory = (
+        matchHistory: { undo: boolean; replay: boolean; retainActions: number } | undefined,
+    ): void => {
+        loadRendererGameMock.mockResolvedValue(
+            matchHistory === undefined
+                ? { registry: testRegistry }
+                : { registry: testRegistry, matchHistory },
+        );
+    };
+
+    it('registers no undo key until the game payload has resolved', async () => {
+        // Before the loader resolves the capability is UNKNOWN, not absent. A
+        // registration made on the way in would have to be torn down once the
+        // payload said no undo — and would be live for the window in between.
+        withMatchHistory({ undo: true, replay: true, retainActions: 10_000 });
+        mockSnapshot = makeSnapshot({ undoMeta: { canUndo: true, canRedo: false } });
+        renderGamePage();
+
+        expect(inputActionCallbacks.has('engine:undo')).toBe(false);
+        expect(inputActionCallbacks.has('engine:redo')).toBe(false);
+
+        await screen.findByTestId('game-canvas');
+        expect(inputActionCallbacks.has('engine:undo')).toBe(true);
+        expect(inputActionCallbacks.has('engine:redo')).toBe(true);
+    });
+
+    it('registers no engine:undo or engine:redo key action', async () => {
+        withMatchHistory({ undo: false, replay: true, retainActions: 1000 });
+        mockSnapshot = makeSnapshot({ undoMeta: { canUndo: true, canRedo: true } });
+        renderGamePage();
+        await screen.findByTestId('game-canvas');
+
+        expect(inputActionCallbacks.has('engine:undo')).toBe(false);
+        expect(inputActionCallbacks.has('engine:redo')).toBe(false);
+        // The unrelated registration on the same route is untouched, so the
+        // assertion above is about undo and not about registration failing.
+        expect(inputActionCallbacks.has('game:end-turn')).toBe(true);
+    });
+
+    it('withholds the undo and redo handlers from the shell, so the HUD pair is inert', async () => {
+        withMatchHistory({ undo: false, replay: true, retainActions: 1000 });
+        // canUndo/canRedo are true and the match is live, so the ONLY thing that
+        // can disable the pair is the withheld handler.
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot({ undoMeta: { canUndo: true, canRedo: true } });
+        renderGamePage();
+
+        const undo = await screen.findByTestId('undo');
+        const redo = await screen.findByTestId('redo');
+        expect(undo).toBeDisabled();
+        expect(redo).toBeDisabled();
+
+        fireEvent.click(undo);
+        fireEvent.click(redo);
+        expect(mockSendAction).not.toHaveBeenCalled();
+        // End turn is still offered, so "everything is disabled" is not what
+        // this measured.
+        expect(await screen.findByTestId('end-turn')).not.toBeDisabled();
+    });
+
+    it.each([
+        ['an explicit undo: true declaration', { undo: true, replay: true, retainActions: 10_000 }],
+        ['no declaration at all', undefined],
+    ])('keeps both registrations and both handlers for %s', async (_label, matchHistory) => {
+        withMatchHistory(matchHistory);
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot({ undoMeta: { canUndo: true, canRedo: true } });
+        renderGamePage();
+
+        const undo = await screen.findByTestId('undo');
+        expect(undo).not.toBeDisabled();
+        expect(await screen.findByTestId('redo')).not.toBeDisabled();
+        expect(inputActionCallbacks.has('engine:undo')).toBe(true);
+        expect(inputActionCallbacks.has('engine:redo')).toBe(true);
+
+        fireEvent.click(undo);
+        expect(mockSendAction).toHaveBeenCalledWith({
+            type: 'engine:undo',
+            playerId: 'p1',
+            tick: 5,
+            payload: { steps: 1 },
+        });
     });
 });

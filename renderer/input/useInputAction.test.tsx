@@ -204,3 +204,74 @@ describe('useInputAction — subscription lifecycle', () => {
         );
     });
 });
+
+describe('useInputAction — the enabled option', () => {
+    let manager: ReturnType<typeof createManagerStub>;
+
+    beforeEach(() => {
+        manager = createManagerStub();
+    });
+
+    it('subscribes when no options are supplied', () => {
+        renderHook(() => useInputAction('engine:undo', vi.fn()), {
+            wrapper: createWrapper(manager),
+        });
+
+        expect(manager.onAction).toHaveBeenCalledOnce();
+    });
+
+    it('subscribes when explicitly enabled', () => {
+        renderHook(() => useInputAction('engine:undo', vi.fn(), { enabled: true }), {
+            wrapper: createWrapper(manager),
+        });
+
+        expect(manager.onAction).toHaveBeenCalledOnce();
+    });
+
+    it('registers NOTHING when disabled — not a callback that ignores the press', () => {
+        renderHook(() => useInputAction('engine:undo', vi.fn(), { enabled: false }), {
+            wrapper: createWrapper(manager),
+        });
+
+        expect(manager.onAction).not.toHaveBeenCalled();
+    });
+
+    it('subscribes when enabled flips true, and unsubscribes when it flips false', () => {
+        const unsubscribeSpy = vi.fn();
+        manager.onAction.mockImplementation(
+            (_id: InputActionId, _cb: (event: InputEvent) => void) => unsubscribeSpy,
+        );
+
+        const { rerender } = renderHook(
+            ({ enabled }: { enabled: boolean }) =>
+                useInputAction('engine:undo', vi.fn(), { enabled }),
+            { initialProps: { enabled: false }, wrapper: createWrapper(manager) },
+        );
+        expect(manager.onAction).not.toHaveBeenCalled();
+
+        rerender({ enabled: true });
+        expect(manager.onAction).toHaveBeenCalledOnce();
+        expect(unsubscribeSpy).not.toHaveBeenCalled();
+
+        rerender({ enabled: false });
+        expect(unsubscribeSpy).toHaveBeenCalledOnce();
+        expect(manager.onAction).toHaveBeenCalledOnce();
+    });
+
+    it('does not re-subscribe when a caller passes a fresh options object each render', () => {
+        // The `/game` route builds `{ enabled: undoOffered }` inline, so the
+        // options object identity changes on every render while the flag does
+        // not. Reading the flag off the object into the effect's dependencies
+        // would tear the subscription down and rebuild it each time.
+        const { rerender } = renderHook(
+            ({ enabled }: { enabled: boolean }) =>
+                useInputAction('engine:undo', vi.fn(), { enabled }),
+            { initialProps: { enabled: true }, wrapper: createWrapper(manager) },
+        );
+
+        rerender({ enabled: true });
+        rerender({ enabled: true });
+
+        expect(manager.onAction).toHaveBeenCalledOnce();
+    });
+});

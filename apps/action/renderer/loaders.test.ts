@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import { resolveMatchHistorySupport } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 
 import { ACTION_GAME_ID } from '../simulation/constants.js';
 import { actionAssetManifest } from '../asset-manifest.js';
@@ -32,6 +33,14 @@ describe('action renderer loaders', () => {
 
         expect(game.assetManifest).toBe(actionAssetManifest);
         expect(game.assetManifest?.gameId).toBe(ACTION_GAME_ID);
+    });
+
+    it('forwards the resolved match-history capability, which withholds undo', async () => {
+        // The action app is real-time, which resolves to no undo.
+        const game = await loadActionRendererGame();
+
+        expect(game.matchHistory).toStrictEqual(resolveMatchHistorySupport(actionManifest));
+        expect(game.matchHistory?.undo).toBe(false);
     });
 
     // The SHELL payload is the one a menu route loads, so it is the payload that
