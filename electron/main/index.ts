@@ -94,6 +94,7 @@ import type { GameContent } from '@chimera-engine/simulation/foundation/game-con
 import {
     DEFAULT_WINDOW_TITLE,
     resolveGameLogoScreen,
+    resolveMatchHistorySupport,
     resolveSpectatorSupport,
     resolveTickerHz,
     resolveWindowTitle,
@@ -109,7 +110,11 @@ import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { RealtimeTicker } from './runtime/RealtimeTicker.js';
 import { resolveE2eForcedTickerHz } from './runtime/e2e-realtime-seam.js';
 import { restampForHeartbeatHost } from './runtime/realtime-input.js';
-import { buildHostSessionPipeline, type ReplayPort } from './runtime/HostSessionPipeline.js';
+import {
+    buildHostSessionPipeline,
+    undoPolicyForMatchHistory,
+    type ReplayPort,
+} from './runtime/HostSessionPipeline.js';
 import { runRevealSync } from './runtime/RevealOrchestrator.js';
 import { FileReplayRepository } from './replay/FileReplayRepository.js';
 import { ReplayManager } from './replay/replay-manager.js';
@@ -1902,6 +1907,13 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // Captured once so the conditional spread below narrows `db` correctly under
     // exactOptionalPropertyTypes. Absent for a game that declares no content.
     const hostedContentDb = contentDbs.get(HOSTED_GAME_ID);
+    // What match history this game asks the host to keep (§4.5, Invariant #45).
+    // Resolved once here, at the composition root, so the undo policy, the
+    // action-history bound and the start-of-match memento gate below cannot
+    // disagree; absent on the manifest it resolves off `realtime`, which for a
+    // turn-based game is the engine's pre-declaration behaviour.
+    const hostedMatchHistory = resolveMatchHistorySupport(hostedGame.manifest);
+    const hostedUndoPolicy = undoPolicyForMatchHistory(hostedMatchHistory);
 
     // Session tickets remember which seat this client held per match so the next
     // joinLobby can present them as JOIN claims and reclaim the seat on a
@@ -2083,6 +2095,8 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                         // skipped — no "no recording in progress" throw.
                         ...(replayPort === undefined ? {} : { replayPort }),
                         logger: lobbyLogger,
+                        undoPolicy: hostedUndoPolicy,
+                        retainActions: hostedMatchHistory.retainActions,
                         // Inject the loaded ContentDatabase into PipelineContext.db so
                         // reducers can read this game's content (Invariant #46: absent
                         // when the game declares none).
@@ -3351,10 +3365,14 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // Seed the turn-start memento only for the active (first-to-act) player.
             // Seeding every player would make non-active players eligible to undo the
             // host's actions, violating the per-turn ownership rule in
-            // undo-redo-policy.md §60 and the per-viewer contract.
+            // undo-redo-policy.md and the per-viewer contract.
             // Non-active players receive their memento when engine:end_turn fires and
             // their turn begins.
-            saveInitialTurnMemento?.(firstPlayer);
+            // Skipped entirely for a game that declares no undo — pinned by
+            // index.test.ts's start-of-match memento cases.
+            if (hostedMatchHistory.undo) {
+                saveInitialTurnMemento?.(firstPlayer);
+            }
             // Fire the match-start lifecycle, with the roster now final. Placed
             // behind the memento seed: `onGameStart` reaches an AI brain's state
             // machine synchronously and its dispatch runs straight back out

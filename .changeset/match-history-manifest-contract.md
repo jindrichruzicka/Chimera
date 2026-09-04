@@ -7,9 +7,8 @@ match history the host should keep.
 
 A game had no way to tell the host it needs no undo, no replay recording, or a tighter action-history
 bound. The mechanical knobs already existed — `InMemoryActionHistory({ maxEntries })` and
-`UndoPolicy.allowUndo` — with no production caller and no contract to drive them from. This adds the
-declaration and its resolver only; the host and renderer wiring land in sibling tasks, so nothing
-reads the field yet.
+`UndoPolicy.allowUndo` — with no contract to drive them from. This adds the declaration and its
+resolver.
 
 `GameMatchHistorySupport` carries `undo`, `replay` and an optional `retainActions`.
 `resolveMatchHistorySupport(manifest)` returns all three, defaulting absent fields off

@@ -7,12 +7,11 @@ per append.
 
 `InMemoryActionHistory.append()` warned inside its eviction branch, and that branch is taken on
 every append once the history is full. For a turn-based game that is nearly free: `pruneTo` runs on
-`engine:end_turn` and keeps the history far below the 10,000-entry safety net, so the warn fires
-only when pruning is genuinely broken — which is what it was written for.
+`engine:end_turn` and keeps the history far below its cap, so the warn fires only when pruning is
+genuinely broken — which is what it was written for.
 
-A game that dispatches no `engine:end_turn` never runs that prune, so the safety net is the bound it
-operates against. At 10 Hz the history fills after about sixteen minutes, and every append after
-that evicts.
+A game that dispatches no `engine:end_turn` never runs that prune, so the cap is the bound it
+operates against: the history fills, and every append after that evicts.
 
 Saturation is a state transition — retention has just become lossy — not a per-append event. A
 private latch is raised on the first eviction — not on reaching the cap, since a full history that

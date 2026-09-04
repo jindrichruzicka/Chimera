@@ -41,6 +41,8 @@ import {
 } from '@chimera-engine/simulation/engine/UndoManager.js';
 import type { ActionHistoryEntry } from '@chimera-engine/simulation/engine/UndoManager.js';
 import { DEFAULT_UNDO_POLICY } from '@chimera-engine/simulation/engine/UndoPolicy.js';
+import type { UndoPolicy } from '@chimera-engine/simulation/engine/UndoPolicy.js';
+import type { GameMatchHistorySupport } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type { RecordedAction, ReplayHeader } from '@chimera-engine/simulation/replay/index.js';
 import type { ContentDatabase } from '@chimera-engine/simulation/content/index.js';
 import type { Logger } from '../logging/logger.js';
@@ -179,6 +181,35 @@ export interface HostSessionPipelineOptions {
      * game content. Absent for games that declare no content (Invariant #46).
      */
     readonly db?: ContentDatabase;
+    /**
+     * Undo policy for this session's `InMemoryUndoManager`. Absent ⇒
+     * {@link DEFAULT_UNDO_POLICY}, so a caller that declares nothing gets the
+     * turn-based behaviour unchanged. Derive it from the hosted game's manifest
+     * with {@link undoPolicyForMatchHistory} (§4.5).
+     */
+    readonly undoPolicy?: UndoPolicy;
+    /**
+     * Entry bound for this session's `InMemoryActionHistory`. Absent ⇒ the
+     * engine ceiling `MAX_ACTION_HISTORY_ENTRIES`, the bound the history has
+     * always applied. Supply the hosted game's resolved
+     * `matchHistory.retainActions` (Invariant #45).
+     */
+    readonly retainActions?: number;
+}
+
+/**
+ * Map a game's resolved match-history capability onto an {@link UndoPolicy}.
+ *
+ * Only `undo` reaches the policy. A game that keeps undo gets
+ * {@link DEFAULT_UNDO_POLICY} itself, so turn-based behaviour is unchanged; one
+ * that declares none gets the same policy with `allowUndo` false, which makes
+ * `UndoManager` refuse through `canUndo`/`undo` while the manager stays in
+ * `PipelineContext` — the refusal has to reach the Stage 3 intercept
+ * (Invariant #7), and removing the manager would instead let `engine:undo`
+ * through as an ordinary engine action.
+ */
+export function undoPolicyForMatchHistory(support: Required<GameMatchHistorySupport>): UndoPolicy {
+    return support.undo ? DEFAULT_UNDO_POLICY : { ...DEFAULT_UNDO_POLICY, allowUndo: false };
 }
 
 /**
@@ -267,9 +298,12 @@ export function buildHostSessionPipeline(
         typeof broadcastTickFnOrOptions === 'function' ? broadcastTickFnOrOptions : undefined;
     const resolvedOptions =
         typeof broadcastTickFnOrOptions === 'function' ? options : broadcastTickFnOrOptions;
-    const history = new InMemoryActionHistory(
-        resolvedOptions?.logger !== undefined ? { logger: resolvedOptions.logger } : undefined,
-    );
+    const history = new InMemoryActionHistory({
+        ...(resolvedOptions?.logger === undefined ? {} : { logger: resolvedOptions.logger }),
+        ...(resolvedOptions?.retainActions === undefined
+            ? {}
+            : { maxEntries: resolvedOptions.retainActions }),
+    });
     const reducer = new StateReducer(registry);
 
     /**
@@ -294,7 +328,11 @@ export function buildHostSessionPipeline(
             base,
         );
 
-    const undoManager = new InMemoryUndoManager(history, DEFAULT_UNDO_POLICY, replay);
+    const undoManager = new InMemoryUndoManager(
+        history,
+        resolvedOptions?.undoPolicy ?? DEFAULT_UNDO_POLICY,
+        replay,
+    );
 
     const pipeline = new ActionPipeline(registry, {
         ...(resolvedOptions?.gameId !== undefined ? { gameId: resolvedOptions.gameId } : {}),

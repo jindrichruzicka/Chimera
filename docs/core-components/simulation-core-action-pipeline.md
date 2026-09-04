@@ -270,9 +270,9 @@ interface UndoManager {
 
 interface ActionHistory {
     /**
-     * Append a new entry to the history. If the history exceeds MAX_ACTION_HISTORY_ENTRIES,
-     * the oldest entry is evicted and an `action-history:overflow` warn carrying `capacity`
-     * is emitted — once per saturation episode, not once per eviction.
+     * Append a new entry to the history. If the history exceeds the entry cap it was
+     * constructed with, the oldest entry is evicted and an `action-history:overflow` warn
+     * carrying `capacity` is emitted — once per saturation episode, not once per eviction.
      */
     append(entry: ActionHistoryEntry): void;
     /** Marks the current append position as the start of a new undoable segment. */
@@ -344,10 +344,10 @@ Floats are permitted inside the renderer (camera, animation, UI) but must never 
 
 ### ActionHistory Bounding
 
-| Constant                     | Value    | Role                                                                                                                   |
-| ---------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `TURN_MEMENTO_RETENTION`     | `4`      | Turns of undo reach; mementoes older than this are evicted                                                             |
-| `MAX_ACTION_HISTORY_ENTRIES` | `10_000` | Safety-net memory cap; overflow evicts on every append and warns `action-history:overflow` once per saturation episode |
+| Constant                     | Value    | Role                                                                                                                                                                                              |
+| ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TURN_MEMENTO_RETENTION`     | `4`      | Turns of undo reach; mementoes older than this are evicted                                                                                                                                        |
+| `MAX_ACTION_HISTORY_ENTRIES` | `10_000` | Turn-based default entry cap, and the ceiling for a game's declared `matchHistory.retainActions`; overflow evicts on every append and warns `action-history:overflow` once per saturation episode |
 
 ---
 
@@ -423,7 +423,7 @@ export default MoveEntityAction;
 - **Invariant #12** — `ActionPipeline` steps are invariant in order; games supply strategies, not ordering.
 - **Invariant #43** — `validate()` and `reduce()` must not call `Math.random`, `Date.now`, or any I/O.
 - **Invariant #44** — All arithmetic `GameSnapshot` fields must be integers.
-- **Invariant #45** — `ActionHistory` is bounded by `TURN_MEMENTO_RETENTION=4` and cap `10_000`.
+- **Invariant #45** — `ActionHistory` is bounded by `TURN_MEMENTO_RETENTION=4` and by the entry cap its session resolved.
 
 ---
 

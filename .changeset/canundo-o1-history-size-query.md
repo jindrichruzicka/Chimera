@@ -9,7 +9,7 @@ Answer `UndoManager.canUndo` from an O(1) history size query instead of a copy o
 fresh array. It sits on the per-viewer broadcast projection path — `ActionPipeline` Stage 7 projects
 once per seated player, and `StateBroadcaster.fanOutToSpectators` projects again for each spectator's
 followed seat — and in a game that dispatches no `engine:end_turn` the segment is never re-based by a
-memento boundary, so its length grows to the `MAX_ACTION_HISTORY_ENTRIES` safety net.
+memento boundary, so its length grows to the history's cap.
 
 `ActionHistory` gains `sizeSinceLastMemento(): number`. This is a required member, so any
 implementer of the interface must add it. It and `sinceLastMemento()` now both derive their start

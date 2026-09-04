@@ -238,9 +238,9 @@ export class InMemoryActionHistory implements ActionHistory {
     constructor(options?: {
         readonly logger?: Logger;
         /**
-         * Override the overflow cap — intended for unit tests only.
-         * Production callers should not set this; it defaults to
-         * `MAX_ACTION_HISTORY_ENTRIES`.
+         * Override the overflow cap; defaults to
+         * `MAX_ACTION_HISTORY_ENTRIES`. The host supplies a game's declared
+         * `matchHistory.retainActions` here (§4.5).
          */
         readonly maxEntries?: number;
     }) {
@@ -409,8 +409,8 @@ export class InMemoryUndoManager implements UndoManager {
         }
         // Size, not the entries: this sits on the per-viewer broadcast
         // projection path, where `sinceLastMemento()` would copy a list that
-        // grows to `MAX_ACTION_HISTORY_ENTRIES`. The per-player virtual history
-        // is already an array this manager owns, so its length is free.
+        // grows to the history's cap. The per-player virtual history is already
+        // an array this manager owns, so its length is free.
         const effectiveSize = virtual?.length ?? this.history.sizeSinceLastMemento();
         if (effectiveSize === 0) {
             return false;

@@ -11,7 +11,7 @@
  * symbol it reproduces; the wiring *shape* of the real composition root stays
  * locked by the mocked #823/#826 suites in `index.test.ts`.
  *
- * Deliberate omissions (renderer-/FS-facing, not load-bearing for the restore
+ * Omitted here (renderer-/FS-facing, not load-bearing for the restore
  * protocol): renderer egress + host perspective recording, replay recording,
  * `RealtimeTicker` (null for turn-based games), auto local-seat handoff, E2E
  * hooks, chat relay / profile gate, and the debug bridge.
@@ -33,6 +33,7 @@ import type {
 } from '@chimera-engine/networking';
 import type { WireCommitmentReveal } from '@chimera-engine/simulation/foundation/messages.js';
 import type { GameLobbySetup } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import { resolveMatchHistorySupport } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera-engine/simulation/engine/EngineActions.js';
 import type {
@@ -67,7 +68,10 @@ import {
     createSyntheticAIPlayerId,
     resolveAgentSlot,
 } from '../runtime/HostedSessionAgents.js';
-import { buildHostSessionPipeline } from '../runtime/HostSessionPipeline.js';
+import {
+    buildHostSessionPipeline,
+    undoPolicyForMatchHistory,
+} from '../runtime/HostSessionPipeline.js';
 import { runRevealSync } from '../runtime/RevealOrchestrator.js';
 import { wireDefaultSceneActions } from '../runtime/SceneActionWiring.js';
 import { SessionCommitmentRuntime, SessionRuntime } from '../runtime/SessionRuntime.js';
@@ -139,6 +143,9 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
     const logger = createNoopLogger();
     const { contribution } = options;
     const gameId = contribution.gameId;
+    // mirrors index.ts: the match-history capability is resolved once and drives
+    // the undo policy, the action-history bound and the start-of-match memento.
+    const matchHistory = resolveMatchHistorySupport(contribution.manifest);
 
     // mirrors electron/main/index.ts::main() registry seeding
     const gameRegistry = new ActionRegistry();
@@ -238,6 +245,8 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                             simulationHostRef.current?.onGameEnd(snapshot, result);
                         },
                     },
+                    undoPolicy: undoPolicyForMatchHistory(matchHistory),
+                    retainActions: matchHistory.retainActions,
                     logger,
                 },
             );
@@ -741,7 +750,9 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                     ...(setup !== undefined ? { setup } : {}),
                 },
             });
-            saveInitialTurnMemento?.(firstPlayer);
+            if (matchHistory.undo) {
+                saveInitialTurnMemento?.(firstPlayer);
+            }
             // mirrors index.ts: fire the match-start lifecycle last, so a roster
             // that `seatLobbyAgentsForGameStart` just completed starts over the
             // started snapshot.

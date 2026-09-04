@@ -250,7 +250,7 @@ describe('InMemoryUndoManager', () => {
         it('asks the history for its size and never materialises the entry array', () => {
             // canUndo only needs to know whether the effective list is non-empty.
             // Reading it through sinceLastMemento() copies a list that grows to
-            // MAX_ACTION_HISTORY_ENTRIES, on the per-viewer broadcast path.
+            // the history's cap, on the per-viewer broadcast path.
             const spy = makeSpyHistory([makeHistoryEntry(1)]);
             const m = new InMemoryUndoManager(spy, DEFAULT_UNDO_POLICY, countingReplay);
             m.saveTurnMemento(makeSnapshot(0), P1);

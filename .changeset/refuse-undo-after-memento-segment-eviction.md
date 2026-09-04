@@ -11,10 +11,9 @@ returns begins later than the baseline it is relative to. The entries in between
 `undo()` replayed the remainder onto the stale baseline and returned a snapshot that is neither the
 pre-undo state nor any state the match had been in, with no error.
 
-Two evictors reach that clamp: the `MAX_ACTION_HISTORY_ENTRIES` overflow cap in `append()`, and
-`pruneTo()` walking past the boundary. A realtime game is where the cap bites — it dispatches no
-`engine:end_turn`, so it neither prunes nor re-takes a memento, and the cap is the bound it operates
-against.
+Two evictors reach that clamp: the overflow cap in `append()`, and `pruneTo()` walking past the
+boundary. A realtime game is where the cap bites — it dispatches no `engine:end_turn`, so it neither
+prunes nor re-takes a memento.
 
 `ActionHistory` gains `hasEvictedSinceMemento(): boolean`. It is a required member, so every
 implementer must add it. `InMemoryActionHistory` raises the flag where `#clampMementoBoundary()`

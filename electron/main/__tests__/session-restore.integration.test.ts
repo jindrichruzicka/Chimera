@@ -31,7 +31,7 @@
  * Architecture: §4.11 / §4.14 · Invariants verified: #24, #25, #26, #41.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { InMemoryMultiplayerProvider } from '@chimera-engine/networking/provider/InMemoryMultiplayerProvider.js';
 import type {
@@ -41,6 +41,11 @@ import type {
 } from '@chimera-engine/simulation/engine/types.js';
 import { entityId, gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
 import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
+import {
+    InMemoryUndoManager,
+    UndoNotAllowedError,
+} from '@chimera-engine/simulation/engine/UndoManager.js';
+import type { GameMatchHistorySupport } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import {
     ALLOW_SPECTATORS_DEFAULT,
     ALLOW_SPECTATORS_PARAM,
@@ -166,6 +171,19 @@ function recordingContribution(
     };
 }
 
+/** The tactics contribution with an explicit match-history declaration. */
+function matchHistoryContribution(matchHistory: GameMatchHistorySupport): MainGameContribution {
+    return { ...contribution, manifest: { ...contribution.manifest, matchHistory } };
+}
+
+function undoAction(actor: string, tick: number): ActionEnvelope {
+    return { type: 'engine:undo', playerId: playerId(actor), tick, payload: {} };
+}
+
+function endTurnAction(actor: string, tick: number): ActionEnvelope {
+    return { type: 'engine:end_turn', playerId: playerId(actor), tick, payload: {} };
+}
+
 function moveAction(
     actor: string,
     tick: number,
@@ -249,6 +267,111 @@ describe('the harness mirrors the composition root it stands in for', () => {
 
         expect(seen.called, 'the game’s buildInitialEntities hook never ran').toBe(true);
         expect(seen.setup?.playerAttributes[hostInfo.hostId]?.['color']).toBe('teal');
+    });
+
+    // The harness reproduces the composition root's three match-history reads.
+    // Its default fixture declares none, which resolves to exactly the values
+    // `buildHostSessionPipeline` falls back to — so only a fixture that declares
+    // something can tell the wiring from its absence.
+
+    it('seeds the start-of-match memento, so undo rewinds through the mirrored wiring', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const host = buildHost(provider);
+        const hostInfo = await host.lobbyManager.hostLobby({
+            gameId: TACTICS_GAME_ID,
+            maxPlayers: 2,
+        });
+        await host.lobbyManager.updatePlayerReadyState(true);
+        await flushProviderEvents();
+        await host.lobbyManager.startGame();
+        await flushProviderEvents();
+
+        const runtime = host.activeRuntime()!;
+        const startTick = runtime.getSnapshot().tick;
+        host.dispatchHostAction(
+            moveAction(String(hostInfo.hostId), runtime.getSnapshot().tick, HOST_UNIT, 0, 1),
+        );
+        expect(runtime.getSnapshot().tick).toBeGreaterThan(startTick);
+
+        host.dispatchHostAction(undoAction(String(hostInfo.hostId), runtime.getSnapshot().tick));
+        expect(runtime.getSnapshot().tick).toBe(startTick);
+    });
+
+    it('skips the start-of-match memento for a game that declares no undo', async () => {
+        const saveTurnMemento = vi.spyOn(InMemoryUndoManager.prototype, 'saveTurnMemento');
+        try {
+            const provider = new InMemoryMultiplayerProvider();
+            const host = buildHost(
+                provider,
+                matchHistoryContribution({ undo: false, replay: true }),
+            );
+            await host.lobbyManager.hostLobby({ gameId: TACTICS_GAME_ID, maxPlayers: 2 });
+            await host.lobbyManager.updatePlayerReadyState(true);
+            await flushProviderEvents();
+            saveTurnMemento.mockClear();
+            await host.lobbyManager.startGame();
+            await flushProviderEvents();
+
+            expect(saveTurnMemento).not.toHaveBeenCalled();
+        } finally {
+            saveTurnMemento.mockRestore();
+        }
+    });
+
+    it('arms the no-undo policy, so the memento a turn handover seeds still cannot be undone', async () => {
+        // The handover memento comes from ActionPipeline's engine:end_turn
+        // branch, which no gate here touches — so the policy is the only thing
+        // left refusing, and this is what measures that it was passed.
+        const provider = new InMemoryMultiplayerProvider();
+        const host = buildHost(provider, matchHistoryContribution({ undo: false, replay: true }));
+        const hostInfo = await host.lobbyManager.hostLobby({
+            gameId: TACTICS_GAME_ID,
+            maxPlayers: 2,
+        });
+        await host.lobbyManager.updatePlayerReadyState(true);
+        await flushProviderEvents();
+        await host.lobbyManager.startGame();
+        await flushProviderEvents();
+
+        const runtime = host.activeRuntime()!;
+        const actor = String(hostInfo.hostId);
+        host.dispatchHostAction(moveAction(actor, runtime.getSnapshot().tick, HOST_UNIT, 0, 1));
+        host.dispatchHostAction(endTurnAction(actor, runtime.getSnapshot().tick));
+        host.dispatchHostAction(moveAction(actor, runtime.getSnapshot().tick, HOST_UNIT, 0, 2));
+
+        expect(() =>
+            host.dispatchHostAction(undoAction(actor, runtime.getSnapshot().tick)),
+        ).toThrow(UndoNotAllowedError);
+    });
+
+    it('bounds the mirrored action history to the declared retainActions', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const host = buildHost(
+            provider,
+            matchHistoryContribution({ undo: true, replay: true, retainActions: 2 }),
+        );
+        const hostInfo = await host.lobbyManager.hostLobby({
+            gameId: TACTICS_GAME_ID,
+            maxPlayers: 2,
+        });
+        await host.lobbyManager.updatePlayerReadyState(true);
+        await flushProviderEvents();
+        await host.lobbyManager.startGame();
+        await flushProviderEvents();
+
+        const runtime = host.activeRuntime()!;
+        const actor = String(hostInfo.hostId);
+        // Three appends past a bound of two: overflow eviction cuts into the
+        // segment since the memento, so undo refuses rather than replaying onto
+        // a baseline the surviving tail no longer starts at. At the engine
+        // ceiling the same three moves undo cleanly.
+        for (const y of [1, 2, 3]) {
+            host.dispatchHostAction(moveAction(actor, runtime.getSnapshot().tick, HOST_UNIT, 0, y));
+        }
+
+        expect(() =>
+            host.dispatchHostAction(undoAction(actor, runtime.getSnapshot().tick)),
+        ).toThrow(UndoNotAllowedError);
     });
 });
 

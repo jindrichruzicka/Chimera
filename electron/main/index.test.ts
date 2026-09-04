@@ -18,7 +18,10 @@ import type {
 import { sceneId, type SceneRegistry } from '@chimera-engine/simulation/scene/index.js';
 import type { LogEntry, LogLevel } from '@chimera-engine/simulation/foundation/logging.js';
 import type { ChimeraRendererUrl, MainGameContribution } from './index.js';
-import type { GameManifest } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
+import type {
+    GameManifest,
+    GameMatchHistorySupport,
+} from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type * as LoadGameContentModule from './content/loadGameContent.js';
 import type * as FileReplayRepositoryModule from './replay/FileReplayRepository.js';
 import type { ReplaySerializer } from '@chimera-engine/simulation/replay/index.js';
@@ -780,6 +783,37 @@ function makeRealtimeTestContributions(): MainGameContribution[] {
     return makeTestContributions().map((contribution) => ({
         ...contribution,
         manifest: { ...contribution.manifest, realtime: true, tickRateMs: REALTIME_TICK_MS },
+    }));
+}
+
+/** Tactics with an explicit match-history declaration on its manifest. */
+function makeMatchHistoryTestContributions(
+    matchHistory: GameMatchHistorySupport,
+): MainGameContribution[] {
+    return makeTestContributions().map((contribution) => ({
+        ...contribution,
+        manifest: { ...contribution.manifest, matchHistory },
+    }));
+}
+
+/**
+ * Tactics with an explicit no-undo match-history declaration. Turn-based, so
+ * `realtime` cannot be what the host reads to reach the no-undo wiring.
+ */
+function makeNoUndoTestContributions(): MainGameContribution[] {
+    return makeMatchHistoryTestContributions({ undo: false, replay: true });
+}
+
+/**
+ * The real-time tactics contribution declaring undo back ON. The mirror of
+ * `makeNoUndoTestContributions`: `realtime` alone would resolve undo off here,
+ * so a host reading the manifest field instead of the resolved capability
+ * behaves differently on exactly these two fixtures.
+ */
+function makeRealtimeUndoTestContributions(): MainGameContribution[] {
+    return makeRealtimeTestContributions().map((contribution) => ({
+        ...contribution,
+        manifest: { ...contribution.manifest, matchHistory: { undo: true, replay: true } },
     }));
 }
 
@@ -3194,7 +3228,7 @@ describe('main', () => {
         // Regression guard for BLOCK-2: onGameStartRequested must NOT seed a
         // turn-start memento for non-active players. Seeding every player made
         // guests eligible to undo the host's actions, violating the per-turn
-        // ownership rule in undo-redo-policy.md §60 and the per-viewer contract
+        // ownership rule in undo-redo-policy.md and the per-viewer contract
         // in undo-wiring.integration.test.ts:326.
         mockLobbyManagerCtor.mockClear();
         mockDefaultStateProjectorCtor.mockClear();
@@ -3992,6 +4026,237 @@ describe('main', () => {
         } finally {
             teardown?.();
             saveTurnMemento.mockRestore();
+        }
+    });
+
+    it('does not seed the start-of-match memento when the hosted game declares no undo', async () => {
+        mockLobbyManagerCtor.mockClear();
+        const saveTurnMemento = vi.spyOn(InMemoryUndoManager.prototype, 'saveTurnMemento');
+        let teardown: (() => void) | void = undefined;
+        try {
+            await main(makeNoUndoTestContributions());
+
+            const { transport, options } = makeSpectatorSessionHarness();
+            const hostId = playerId('host-memento-declined');
+            teardown = options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+
+            saveTurnMemento.mockClear();
+            options?.onGameStartRequested?.({
+                info: { sessionId: 'session-memento-declined', hostId, gameId: 'tactics' },
+                players: [{ playerId: hostId, displayName: 'Host', ready: true }],
+                agentSlots: [{ slotIndex: 1, kind: 'ai' }],
+            });
+
+            // No baseline exists at all, so there is nothing a stale-baseline
+            // undo could replay onto.
+            expect(saveTurnMemento).not.toHaveBeenCalled();
+        } finally {
+            teardown?.();
+            saveTurnMemento.mockRestore();
+        }
+    });
+
+    it('does not seed the start-of-match memento for a real-time game, which defaults to no undo', async () => {
+        mockLobbyManagerCtor.mockClear();
+        const saveTurnMemento = vi.spyOn(InMemoryUndoManager.prototype, 'saveTurnMemento');
+        let teardown: (() => void) | void = undefined;
+        try {
+            await main(makeRealtimeTestContributions());
+
+            const { transport, options } = makeSpectatorSessionHarness();
+            const hostId = playerId('host-memento-realtime');
+            teardown = options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+
+            saveTurnMemento.mockClear();
+            options?.onGameStartRequested?.({
+                info: { sessionId: 'session-memento-realtime', hostId, gameId: 'tactics' },
+                players: [{ playerId: hostId, displayName: 'Host', ready: true }],
+                agentSlots: [{ slotIndex: 1, kind: 'ai' }],
+            });
+
+            expect(saveTurnMemento).not.toHaveBeenCalled();
+        } finally {
+            teardown?.();
+            saveTurnMemento.mockRestore();
+        }
+    });
+
+    it('seeds the start-of-match memento for a real-time game that declares undo back on', async () => {
+        mockLobbyManagerCtor.mockClear();
+        const saveTurnMemento = vi.spyOn(InMemoryUndoManager.prototype, 'saveTurnMemento');
+        let teardown: (() => void) | void = undefined;
+        try {
+            await main(makeRealtimeUndoTestContributions());
+
+            const { transport, options } = makeSpectatorSessionHarness();
+            const hostId = playerId('host-memento-realtime-undo');
+            teardown = options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+
+            saveTurnMemento.mockClear();
+            options?.onGameStartRequested?.({
+                info: { sessionId: 'session-memento-realtime-undo', hostId, gameId: 'tactics' },
+                players: [{ playerId: hostId, displayName: 'Host', ready: true }],
+                agentSlots: [{ slotIndex: 1, kind: 'ai' }],
+            });
+
+            // The gate reads the RESOLVED capability, not `manifest.realtime`.
+            expect(saveTurnMemento).toHaveBeenCalledOnce();
+        } finally {
+            teardown?.();
+            saveTurnMemento.mockRestore();
+        }
+    });
+
+    /**
+     * The turn handover seeds the next player's memento from inside
+     * `ActionPipeline`'s `engine:end_turn` branch — a path the start-of-match
+     * gate above never touches. So a game that declares no undo still HAS a
+     * memento once a turn changes hands, and the only thing left refusing undo
+     * is the policy the composition root armed. That makes these two the pin
+     * for the policy actually reaching the hosted pipeline.
+     */
+    it.each([
+        [
+            'keeps undo eligible after a turn handover for a game that declares nothing',
+            makeTestContributions,
+            true,
+        ],
+        [
+            'leaves undo ineligible after a turn handover for a game that declares no undo',
+            makeNoUndoTestContributions,
+            false,
+        ],
+    ])('%s', async (_label, makeContributions, expectedCanUndo) => {
+        mockLobbyManagerCtor.mockClear();
+        mockDefaultStateProjectorCtor.mockClear();
+        mockSimulationHostInstance.afterTick.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main(makeContributions());
+
+        const { transport, options, capturedActionRef } = makeSpectatorSessionHarness();
+        const hostId = playerId('host-handover-undo');
+        const guestId = playerId('guest-handover-undo');
+        const teardown = options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+        try {
+            options?.onGameStartRequested?.({
+                info: { sessionId: 'session-handover-undo', hostId, gameId: 'tactics' },
+                players: [
+                    { playerId: hostId, displayName: 'Host', ready: true },
+                    { playerId: guestId, displayName: 'Guest', ready: true },
+                ],
+            });
+
+            const sendAction = capturedActionRef.current;
+            if (sendAction === undefined) {
+                throw new Error('Expected hosted session to subscribe to incoming actions');
+            }
+            // Read the live tick off the host's own fan-out rather than counting
+            // actions: an auto-end-turn would otherwise silently desynchronise
+            // every later envelope's tick and each action would be dropped.
+            const liveTick = (): number => {
+                const calls = mockSimulationHostInstance.afterTick.mock.calls;
+                const last = calls.at(-1)?.[0] as { readonly tick: number } | undefined;
+                if (last === undefined) {
+                    throw new Error('Expected the host to have fanned out at least one snapshot');
+                }
+                return last.tick;
+            };
+
+            sendAction(hostId, {
+                type: 'tactics:move_unit',
+                playerId: hostId,
+                tick: 1,
+                payload: { unitId: 'unit-1', x: 1, y: 0 },
+            });
+            // Hands the turn over, which is what seeds the guest's memento.
+            sendAction(hostId, {
+                type: 'engine:end_turn',
+                playerId: hostId,
+                tick: liveTick(),
+                payload: {},
+            });
+            // One action after that memento: `canUndo` reports false on an empty
+            // segment, so without this the assertion would hold for the wrong reason.
+            sendAction(guestId, {
+                type: 'engine:tick',
+                playerId: guestId,
+                tick: liveTick(),
+                payload: { seed: 7 },
+            });
+
+            expect(capturedDefaultStateProjectorOptions.current?.getUndoMeta?.(guestId)).toEqual({
+                canUndo: expectedCanUndo,
+                canRedo: false,
+            });
+        } finally {
+            teardown?.();
+        }
+    });
+
+    /**
+     * The declared bound is observable through undo eligibility: once overflow
+     * eviction cuts into the segment since a memento, `canUndo` refuses rather
+     * than replay onto a baseline the surviving tail no longer starts at. Three
+     * appends past a bound of 2 reach that state; at the engine ceiling they do
+     * not, so the same fixture answers differently for the two bounds.
+     */
+    it.each([
+        ['bounds the hosted action history to the declared retainActions', 2, false],
+        [
+            'leaves the hosted action history at the engine ceiling when none is declared',
+            undefined,
+            true,
+        ],
+    ])('%s', async (_label, retainActions, expectedCanUndo) => {
+        mockLobbyManagerCtor.mockClear();
+        mockDefaultStateProjectorCtor.mockClear();
+        mockSimulationHostInstance.afterTick.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main(
+            makeMatchHistoryTestContributions({
+                undo: true,
+                replay: true,
+                ...(retainActions === undefined ? {} : { retainActions }),
+            }),
+        );
+
+        const { transport, options, capturedActionRef } = makeSpectatorSessionHarness();
+        const hostId = playerId('host-retain-actions');
+        const teardown = options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+        try {
+            options?.onGameStartRequested?.({
+                info: { sessionId: 'session-retain-actions', hostId, gameId: 'tactics' },
+                players: [{ playerId: hostId, displayName: 'Host', ready: true }],
+                agentSlots: [{ slotIndex: 1, kind: 'ai' }],
+            });
+
+            const sendAction = capturedActionRef.current;
+            if (sendAction === undefined) {
+                throw new Error('Expected hosted session to subscribe to incoming actions');
+            }
+            const liveTick = (): number => {
+                const calls = mockSimulationHostInstance.afterTick.mock.calls;
+                const last = calls.at(-1)?.[0] as { readonly tick: number } | undefined;
+                return last?.tick ?? 1;
+            };
+
+            for (let i = 0; i < 3; i++) {
+                sendAction(hostId, {
+                    type: 'engine:tick',
+                    playerId: hostId,
+                    tick: liveTick(),
+                    payload: { seed: 7 },
+                });
+            }
+
+            expect(capturedDefaultStateProjectorOptions.current?.getUndoMeta?.(hostId)).toEqual({
+                canUndo: expectedCanUndo,
+                canRedo: false,
+            });
+        } finally {
+            teardown?.();
         }
     });
 
