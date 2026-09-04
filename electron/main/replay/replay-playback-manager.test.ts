@@ -19,6 +19,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera-engine/simulation/engine/EngineActions.js';
 import { TickContractError } from '@chimera-engine/simulation/engine/index.js';
+import { UndoNotAllowedError } from '@chimera-engine/simulation/engine/UndoManager.js';
 import type { ActionDefinition } from '@chimera-engine/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
 import type { ReplayFile } from '@chimera-engine/simulation/replay/index.js';
@@ -473,6 +474,103 @@ describe('ReplayPlaybackManager', () => {
 
             expect(manager.snapshotAt(0).tick).toBe(0);
         });
+    });
+
+    /**
+     * What a recorded `engine:undo` does here, which is the ground the call
+     * site's "engine defaults" comment stands on. Both arms end playback; they
+     * differ in which error, and in how far the replay got first.
+     */
+    describe('a recording carrying an engine:undo', () => {
+        function makeManagerFor(actions: ReplayFile['actions']): ReplayPlaybackManager {
+            const file: ReplayFile = { ...makeReplayFile(1), actions };
+            return new ReplayPlaybackManager(
+                makeRegistry(),
+                (gameId) => (gameId === 'tactics' ? passthroughRules : undefined),
+                { load: () => Promise.resolve(file), getCurrentMatchFile: () => file },
+                makeLogger(),
+            );
+        }
+
+        const undoAt = (tick: number, seat: typeof P1): ReplayFile['actions'][number] => ({
+            tick,
+            playerId: seat,
+            action: { type: 'engine:undo', playerId: seat, tick, payload: { steps: 1 } },
+        });
+
+        it('ends playback at the undo even where the memento it needs exists, because the reconstruction moves the tick BACKWARDS', async () => {
+            // `engine:end_turn` mints a memento on this path too — the
+            // pipeline's own branch seeds one whenever the turn clock advances.
+            // So this undo is ACCEPTED, and what refuses it is the tick
+            // contract, not a policy.
+            const manager = makeManagerFor([
+                {
+                    tick: 0,
+                    playerId: P1,
+                    action: { type: 'engine:end_turn', playerId: P1, tick: 0, payload: {} },
+                },
+                {
+                    tick: 1,
+                    playerId: P2,
+                    action: { type: 'game:advance', playerId: P2, tick: 1, payload: {} },
+                },
+                undoAt(2, P2),
+            ]);
+            await manager.open('/replays/undo-after-handover.chimera-replay');
+
+            // Everything before the undo replays, so the refusal is about the
+            // undo and not about the file.
+            expect(manager.snapshotAt(2).tick).toBe(2);
+
+            // Captured from ONE call, not asserted twice: the first attempt
+            // takes the undo step, so a second one is refused by the step
+            // counter instead and never reaches the tick contract again.
+            // The message is what carries the DIRECTION — `step()` refuses any
+            // delta other than +1, so the class alone would be satisfied by a
+            // forward-by-two reconstruction too.
+            let thrown: unknown;
+            try {
+                manager.snapshotAt(3);
+            } catch (error) {
+                thrown = error;
+            }
+            expect(thrown).toBeInstanceOf(DeterminismError);
+            expect((thrown as Error).message).toMatch(/advanced to 1 instead of 3/u);
+        });
+
+        it('ends it one layer earlier where no turn handover minted a memento', async () => {
+            const manager = makeManagerFor([undoAt(0, P1)]);
+            await manager.open('/replays/undo-first.chimera-replay');
+
+            // The REASON, not just the class: `no_memento` is what says this
+            // refusal came from the seat state, so threading the declared policy
+            // — which would answer `policy_disallows` before this arm is
+            // reached — is a change this case sees.
+            expect(() => manager.snapshotAt(1)).toThrow(UndoNotAllowedError);
+            expect(() => manager.snapshotAt(1)).toThrow(/no_memento/u);
+        });
+    });
+
+    /** The `retainActions` half of the call site's comment. */
+    it('replays without raising action-history:overflow on the playback log', async () => {
+        const sink = createMemorySink();
+        const logger = createLogger({
+            source: { process: 'main', module: 'test' },
+            sink,
+        });
+        const file = makeReplayFile(5);
+        const manager = new ReplayPlaybackManager(
+            makeRegistry(),
+            (gameId) => (gameId === 'tactics' ? passthroughRules : undefined),
+            { load: () => Promise.resolve(file), getCurrentMatchFile: () => file },
+            logger,
+        );
+        await manager.open('/replays/five-actions.chimera-replay');
+        manager.snapshotAt(5);
+
+        expect(sink.entries.filter((entry) => entry.message === 'action-history:overflow')).toEqual(
+            [],
+        );
     });
 
     describe('close', () => {

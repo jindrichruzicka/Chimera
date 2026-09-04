@@ -138,6 +138,22 @@ export class ReplayPlaybackManager {
         // history) rather than a replay-only shortcut. The broadcast and
         // autosave ports are no-ops — playback projects outside the pipeline and
         // never persists.
+        //
+        // The recorded game's declared `undoPolicy` and `retainActions` (§4.5,
+        // Invariant #45) are deliberately absent, because neither can change
+        // what playback PRODUCES. A recorded `engine:undo` ends the replay
+        // whatever wiring it meets: Stage 3 hands back a reconstruction of an
+        // earlier tick, never `tick + 1`, so `ReplayPlayer.step()` refuses it
+        // (§4.28, Invariant #42) — and where the seat has no memento the
+        // pipeline refuses one layer earlier instead. All the declared policy
+        // decides is which of those errors ends it.
+        //
+        // `retainActions` would additionally reach `InMemoryActionHistory` as
+        // `maxEntries` beside the real logger passed below, so a recording
+        // longer than the game's bound would raise `action-history:overflow` on
+        // the PLAYBACK log — a host-time saturation reported against a history
+        // no host is filling. Both halves are held by cases in this module's
+        // test.
         const { pipeline } = buildHostSessionPipeline(this.#registry, () => undefined, {
             gameId: file.gameId,
             savePort: { autoSave: () => Promise.resolve() },
