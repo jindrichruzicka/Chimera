@@ -6,12 +6,27 @@
  * shipped build does about it: no undo control on the match route, and the bound
  * undo key rewinds nothing.
  *
- * Three separate withholdings have to hold at once for the second half — the
- * host arms a refusing policy, mints no start-of-match memento, and the renderer
- * registers no key subscription — and each is unit tested in isolation against a
- * double (`HostSessionPipeline.test.ts`, `electron/main/index.test.ts`,
- * `renderer/app/game/page.test.tsx`). What this adds is the real binding, in the
- * real build, reaching nothing.
+ * WHAT THIS SPEC DOES NOT MEASURE. Neither assertion below fails if the host's
+ * undo withholding is reverted, and the reason differs per half. The control
+ * count is a statement about this app's OWN HUD: `ActionGameHud` draws no undo
+ * pair under any manifest, so the count reads zero on a build that arms undo too.
+ * The key half is a conjunction of three withholdings — the host arms a refusing
+ * policy, mints no start-of-match memento, and the renderer registers no key
+ * subscription — so reverting any one of them leaves the other two refusing.
+ *
+ * The projected `undoMeta` is not the missing witness either: with the policy and
+ * the memento arms BOTH reverted, this seat still reports `canUndo: false`
+ * (measured; a `canUndo: true` forced at the projector does reach this spec, so
+ * the reading is live and the build is current). Whatever keeps the seat
+ * ineligible here is upstream of the declaration, so no reading available at this
+ * seam separates an armed build from a withholding one.
+ *
+ * The per-arm kills therefore live entirely in the unit tests —
+ * `HostSessionPipeline.test.ts` for the policy, `electron/main/index.test.ts` for
+ * the memento, `renderer/app/game/page.test.tsx` for the key subscription. What
+ * this spec adds is that the shipped route offers no undo and the real Ctrl+Z
+ * binding rewinds nothing, which is the user-facing claim; it is not evidence for
+ * the mechanism.
  *
  * Whether the manifest DECLARES that capability or inherits it from the
  * real-time default is not what this measures — the two resolve identically, as
