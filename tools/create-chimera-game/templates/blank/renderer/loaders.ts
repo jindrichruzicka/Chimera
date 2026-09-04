@@ -30,6 +30,7 @@ import type {
     LoadedRendererGameShell,
 } from '@chimera-engine/renderer/game';
 
+import { resolveMatchHistorySupport } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import { __gameCamel__Manifest } from '../manifest.js';
 import { __gameCamel__ShellAssetManifest } from '../shell-asset-manifest.js';
 import { gameFonts } from '../shell/fonts.js';
@@ -105,6 +106,11 @@ export async function load__GamePascal__RendererGame(): Promise<LoadedRendererGa
     return {
         registry: screenModule.__GamePascal__GameScreenRegistry,
         assetManifest: assetManifestModule.__gameCamel__AssetManifest,
+        // The manifest's match-history capability, RESOLVED. The renderer never
+        // reads the manifest itself, so forwarding it here is what lets the
+        // engine's /game route know whether to offer undo — without this line a
+        // game that wants no undo still gets its undo key bound.
+        matchHistory: resolveMatchHistorySupport(__gameCamel__Manifest),
         // Read BACK off the shell rather than restated: the same array reaches
         // both payloads, so the engine's app-boot registration and the game
         // shell's cannot disagree about what an id means. Spread rather than

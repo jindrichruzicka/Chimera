@@ -58,7 +58,71 @@ Chimera's undo system combines two classical patterns:
 | Undo within own turn (default policy)                    | Allowed                                                                                                  |
 | `END_TURN` already dispatched                            | Undo blocked unless `crossTurnUndo: true`                                                                |
 | Undo past `TURN_MEMENTO_RETENTION=4`                     | Blocked; memento no longer exists                                                                        |
+| The game declares no undo                                | Refused by the policy (`policy_disallows`); no start-of-match memento exists either                      |
 | Eviction cut into the history recorded since the memento | Blocked; a player whose own undo already moved them onto the manager's copy of the segment is unaffected |
+
+---
+
+## Declared match history
+
+A game states what history it needs the host to keep, on its manifest:
+
+```typescript
+interface GameMatchHistorySupport {
+    undo: boolean;
+    replay: boolean;
+    retainActions?: number; // positive integer ≤ MAX_ACTION_HISTORY_ENTRIES
+}
+
+interface GameManifest {
+    // …
+    matchHistory?: GameMatchHistorySupport;
+}
+```
+
+`resolveMatchHistorySupport(manifest)` answers all three fields, so no caller
+re-implements a default. Absent fields key off `realtime`:
+
+| `realtime` | `undo`  | `replay` | `retainActions`                   |
+| ---------- | ------- | -------- | --------------------------------- |
+| `false`    | `true`  | `true`   | `MAX_ACTION_HISTORY_ENTRIES`      |
+| `true`     | `false` | `true`   | `DEFAULT_REALTIME_RETAIN_ACTIONS` |
+
+The turn-based row is what the engine did before the field existed, so a
+turn-based game that declares nothing is unaffected by the field. `realtime` is
+read for truthiness, the same reading `resolveTickerHz` uses, so the two forks
+cannot disagree about which games are real-time. The resolver never throws:
+malformed input is dropped per field, following `resolveGameLanguages` rather
+than `resolveTickerHz`, so a bad manifest degrades instead of bricking a boot.
+
+### What the host does with it
+
+The composition root resolves the capability once. What `undo` drives from that
+one value:
+
+- **The policy.** `undoPolicyForMatchHistory` maps `undo` onto an
+  `UndoPolicy`: `true` gives `DEFAULT_UNDO_POLICY` itself, `false` gives the same
+  policy with `allowUndo: false`. The manager stays in `PipelineContext` either
+  way — the refusal has to reach the Stage 3 intercept (Invariant #7), and
+  removing the manager would instead let `engine:undo` through as an ordinary
+  engine action and append it to history.
+- **The history bound.** `retainActions` becomes `InMemoryActionHistory`'s
+  `maxEntries` (Invariant #45).
+- **The start-of-match memento.** A game declaring no undo mints none. The turn
+  handover is untouched: `ActionPipeline`'s `engine:end_turn` branch still seeds
+  the next player's memento, and the policy is what refuses undo against it.
+
+### What the renderer does with it
+
+Manifest data reaches the renderer only as registration payload — the renderer
+package is import-banned from `apps/*` (§3). A game forwards its **resolved**
+capability on
+`LoadedRendererGame.matchHistory` from its own `renderer/loaders.ts`, and the
+`/game` route reads `undo` for two surfaces: it passes `enabled: false` to the
+`engine:undo` / `engine:redo` `useInputAction` registrations, so no key
+subscription exists at all, and it withholds `onUndo`/`onRedo` from `GameShell`
+rather than passing disabled handlers. The engine shell draws no undo control of
+its own, so a game's HUD receives `undoDisabled: true`.
 
 ---
 

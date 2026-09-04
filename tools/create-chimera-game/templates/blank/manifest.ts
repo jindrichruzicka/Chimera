@@ -29,6 +29,13 @@ import { __GAME_CONSTANT___GAME_ID } from './simulation/constants.js';
  * `renderer/public/chimera_logo.mp4`; dev boots skip it and go straight to
  * the main menu. Remove the field to skip it in packaged builds too, or point
  * the route at your own page for a custom logo/intro sequence.
+ *
+ * `matchHistory` (optional) says what history the host should keep for a match:
+ * whether undo is offered, whether the match is recorded for replay, and how many
+ * actions to retain. Absent, it follows `realtime` — a turn-based game gets undo,
+ * replay and the engine's full retention; a real-time one gets no undo, replay,
+ * and a tighter bound, since an arena with no turn to end has no baseline to undo
+ * back to. Declare it to say otherwise, or to state the intent explicitly.
  */
 export const __gameCamel__Manifest: GameManifest = {
     gameId: __GAME_CONSTANT___GAME_ID,
@@ -40,4 +47,7 @@ export const __gameCamel__Manifest: GameManifest = {
     //     default: { image: 'cursors/default.png', hotspot: { x: 0, y: 0 } },
     // },
     logoScreen: { route: '/logo-screen' },
+    // Uncomment to state the intent explicitly, or to differ from what
+    // `realtime` implies:
+    // matchHistory: { undo: true, replay: true },
 };

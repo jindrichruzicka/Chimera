@@ -164,7 +164,7 @@ re-exports:
 
 | Symbol                      | Kind  | Why a game needs it                                                                                                   |
 | --------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------- |
-| `useInputAction`            | value | run a callback when a declared action fires                                                                           |
+| `useInputAction`            | value | run a callback when a declared action fires; its optional third argument is `{ enabled }`                             |
 | `useInputManager`           | value | hold the manager, for the held-key recipe below                                                                       |
 | `InputManagerProvider`      | value | what a game's own component tests mount to satisfy the hooks                                                          |
 | `InputManagerProviderProps` | type  | the provider's props                                                                                                  |
@@ -173,11 +173,20 @@ re-exports:
 | `InputEvent`                | type  | the callback payload, needed by any handler extracted out of JSX                                                      |
 | `InputManager`              | type  | the return type of `useInputManager`                                                                                  |
 
-**What stays internal, and why.** The eight names above are the whole re-export list —
-`renderer/input/__tests__/input-barrel-side-effects.test.ts` pins it as a closed set — so
-`createInputManager`, `createInputActionRegistry`, `createKeyBindingRepository`, the
-registry and repository interfaces, the context objects, `KeyBinding`, `EngineBindings`,
-`RebindResult` and the input error classes stay behind it. The reasons: the manager is an
+**Subscribing conditionally.** `useInputAction(id, callback, { enabled: false })`
+registers NOTHING — it is not a callback that ignores the press, and the subscription is
+established and torn down as the flag flips. That is what lets a caller withhold an
+action without moving the hook call behind a condition. The engine uses it on `/game` for
+`engine:undo` / `engine:redo` when the game declares no undo (§4.5). `enabled` is read as
+a primitive into the effect's dependencies, so passing a fresh options literal each render
+does not re-subscribe. `UseInputActionOptions` is deliberately NOT on the barrel: a call
+site passes an object literal.
+
+**What stays internal, and why.** The names in the table above are the whole re-export
+list — `renderer/input/__tests__/input-barrel-side-effects.test.ts` pins it as a closed
+set — so everything else `renderer/input/` defines stays behind it, the manager and
+registry factories, the repository, the context objects and the input error classes among
+them. The reasons: the manager is an
 app-lifetime singleton (see Lifecycle Ownership
 above), and a second one attaches a second set of listeners and double-dispatches every
 action. Registration is engine-side and already complete — see

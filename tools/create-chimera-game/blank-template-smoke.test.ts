@@ -1236,6 +1236,31 @@ describe('blank template shell contributions', () => {
         expect(source.text).not.toContain('screenModule.__GamePascal__INPUT_ACTIONS');
     });
 
+    it('forwards the manifest match-history capability, RESOLVED, on the game payload', async () => {
+        // The renderer reads the capability off this payload, not off the
+        // manifest: without the forward the /game route offers undo, and a game
+        // that wants none still gets its undo key bound. Asserted as the exact
+        // initialiser text, because forwarding the RAW field, or resolving
+        // against no manifest, is lint-clean, typecheck-clean and silently wrong.
+        const gamePayload = returnedPayload(
+            loaderBody(await loadersSource(), 'load__GamePascal__RendererGame'),
+        );
+
+        expect(payloadFields(gamePayload).get('matchHistory')).toBe(
+            'resolveMatchHistorySupport(__gameCamel__Manifest)',
+        );
+    });
+
+    it('leaves the manifest match-history declaration commented out, so the defaults are what a fresh game gets', async () => {
+        // The template's own manifest is turn-based. An uncommented declaration
+        // would make every scaffolded game ship an override it did not choose,
+        // and the commented form is what the manifest prose points at.
+        const manifest = await read('manifest.ts');
+
+        expect(manifest).toContain('    // matchHistory: { undo: true, replay: true },');
+        expect(manifest).not.toMatch(/^\s+matchHistory:/mu);
+    });
+
     it('ships an empty shell inventory at the SECOND basename the asset validator opens', async () => {
         // `chimera-validate-assets` matches a manifest on the WHOLE basename
         // against a closed two-name set. A shell inventory under any other name
@@ -1431,6 +1456,8 @@ describe('blank template shell contributions', () => {
         // the shell mounts, main menu included. A React component or a `three`
         // module named here would put this game's rendering in front of the
         // menu; the component-valued slots go through the dynamic import below.
+        // The manifest contract qualifies: it is pure resolvers over plain data,
+        // with no DOM, React or rendering in it.
         const source = await loadersSource();
         const valueImports = source.statements
             .filter(ts.isImportDeclaration)
@@ -1443,6 +1470,7 @@ describe('blank template shell contributions', () => {
             '../shell-asset-manifest.js',
             '../shell/fonts.js',
             './input-actions.js',
+            '@chimera-engine/simulation/foundation/game-manifest-contract.js',
         ]);
     });
 

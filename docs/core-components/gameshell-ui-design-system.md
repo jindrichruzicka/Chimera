@@ -141,10 +141,11 @@ surface (`tick`, undo/redo/end-turn disabled states, and guarded handlers) from 
 `PlayerSnapshot` plus injected action callbacks. Game HUD components should render those props and
 call `handleUndo`, `handleRedo`, and `handleEndTurn`; they should not construct `engine:undo`,
 `engine:redo`, or `engine:end_turn` actions themselves. If a game omits `hud`, `GameShell` renders
-the engine fallback HUD with the stable `hud-tick`, `undo`, `redo`, and `end-turn` test IDs.
+the engine fallback HUD, which draws End Turn alone, under the stable `end-turn` test ID.
 
-Game-provided HUDs that replace the fallback should preserve those test IDs for the equivalent
-controls when the E2E page object needs to drive the match generically.
+Game-provided HUDs should carry the stable test IDs for the equivalent controls they DO draw —
+`hud-tick`, `undo`, `redo`, `end-turn` — when the E2E page object needs to drive the match
+generically.
 
 When `PlayerSnapshot.gameResult` is non-null, `GameShell` renders `registry.gameResultBanner`
 with `{ gameResult, localPlayerId }`. If the game omits the slot, `GameShell` uses the engine
