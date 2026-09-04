@@ -16,9 +16,7 @@ have to hold at once there — the host arms a refusing policy, mints no start-o
 the renderer registers no key subscription — and each is unit tested in isolation against a double.
 The spec drives the shipped path into a match, moves the seat's primitive so there is something an
 undo could take back, presses the engine's default undo binding, and asserts the primitive stayed
-where the move left it while the HUD clock kept advancing. Run against a manifest declaring
-`undo: true` it fails with the primitive back at its starting cell, which is what makes it a
-measurement rather than a green assertion. It is NOT sensitive to whether the capability was declared
+where the move left it while the HUD clock kept advancing. It is NOT sensitive to whether the capability was declared
 or inherited: the two resolve identically, which is the manifest test's job to say.
 
 The companion case asserts the match route renders no `undo` or `redo` control. Neither the engine

@@ -13,9 +13,9 @@
  * NOT A CLOCK, though. What the bridge answers with is the last snapshot the
  * host actually SENT, and a beat that changed nothing takes the engine's
  * clock-only path — the renderer's tick advances while no new snapshot is
- * broadcast. So `tick` is deliberately not read here: the live clock is the HUD's
- * own readout (`ActionMatchPage.hudTick`), and a spec that wants to let time pass
- * waits on that.
+ * broadcast. The live clock is the HUD's own readout
+ * (`ActionMatchPage.hudTick`), and a spec that wants to let time pass waits on
+ * that.
  *
  * The narrowing goes through the app's OWN `isActionPrimitiveEntity` — the guard
  * the reducers and the scene model use — so a record this suite accepts is a
@@ -57,6 +57,7 @@ export interface ActionSetupProjection {
 interface SnapshotProjection {
     readonly viewerId?: unknown;
     readonly tick?: unknown;
+    readonly undoMeta?: unknown;
     readonly entities?: unknown;
     readonly setup?: unknown;
 }
@@ -156,4 +157,38 @@ export async function readActionSetup(page: Page): Promise<ActionSetupProjection
     if (typeof record.playerAttributes !== 'object' || record.playerAttributes === null)
         return null;
     return setup as ActionSetupProjection;
+}
+
+/**
+ * The seat's undo eligibility, paired with the tick of the projection it was
+ * read off.
+ *
+ * The pairing is the point. `undoMeta` is derived per PROJECTION, and a
+ * real-time host broadcasts only a beat that changed something, so a seat can
+ * hold a start-of-match reading while its clock runs on for minutes. That reading says
+ * `canUndo: false` on a build with undo ARMED, because at `engine:start_game`
+ * the seat has nothing to undo yet.
+ *
+ * `projectedTick` is what separates the two: a reading whose tick has moved past
+ * an earlier one came from a later projection. It is the identity of the
+ * broadcast the `undoMeta` beside it belongs to, not a clock.
+ */
+export async function readUndoProjection(page: Page): Promise<{
+    readonly projectedTick: number;
+    readonly canUndo: boolean;
+    readonly canRedo: boolean;
+} | null> {
+    const snapshot = await readSnapshot(page);
+    if (snapshot === null) {
+        return null;
+    }
+    const { tick, undoMeta } = snapshot;
+    if (typeof tick !== 'number' || typeof undoMeta !== 'object' || undoMeta === null) {
+        return null;
+    }
+    const meta = undoMeta as { canUndo?: unknown; canRedo?: unknown };
+    if (typeof meta.canUndo !== 'boolean' || typeof meta.canRedo !== 'boolean') {
+        return null;
+    }
+    return { projectedTick: tick, canUndo: meta.canUndo, canRedo: meta.canRedo };
 }

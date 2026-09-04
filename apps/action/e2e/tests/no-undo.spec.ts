@@ -6,27 +6,30 @@
  * shipped build does about it: no undo control on the match route, and the bound
  * undo key rewinds nothing.
  *
- * WHAT THIS SPEC DOES NOT MEASURE. Neither assertion below fails if the host's
- * undo withholding is reverted, and the reason differs per half. The control
- * count is a statement about this app's OWN HUD: `ActionGameHud` draws no undo
- * pair under any manifest, so the count reads zero on a build that arms undo too.
- * The key half is a conjunction of three withholdings — the host arms a refusing
- * policy, mints no start-of-match memento, and the renderer registers no key
+ * WHAT THIS SPEC DOES AND DOES NOT MEASURE. The control count is a statement
+ * about this app's OWN HUD: `ActionGameHud` draws no undo pair under any
+ * manifest, so the count reads zero on a build that arms undo too. The rewind
+ * half is a conjunction of three withholdings — the host arms a refusing policy,
+ * mints no start-of-match memento, and the renderer registers no key
  * subscription — so reverting any one of them leaves the other two refusing.
  *
- * The projected `undoMeta` is not the missing witness either: with the policy and
- * the memento arms BOTH reverted, this seat still reports `canUndo: false`
- * (measured; a `canUndo: true` forced at the projector does reach this spec, so
- * the reading is live and the build is current). Whatever keeps the seat
- * ineligible here is upstream of the declaration, so no reading available at this
- * seam separates an armed build from a withholding one.
+ * The seat's projected `undoMeta` IS a witness of the two HOST arms together,
+ * and the reading below is taken off a projection whose tick has advanced past
+ * the pre-move one. Freshness is the whole trick: `undoMeta` is derived per
+ * projection, a real-time host broadcasts only a beat that changed something,
+ * and an idle match therefore leaves a seat holding the start-of-match
+ * projection — which reads `canUndo: false` on a build with undo ARMED too,
+ * because at `engine:start_game` the seat has nothing to undo yet.
+ * `electron/main/index.test.ts` measures that start-of-match refusal. Read
+ * stale, it looked like an ineligibility upstream of the declaration.
  *
- * The per-arm kills therefore live entirely in the unit tests —
+ * What that reading does NOT do is separate the two host arms: reverting either
+ * alone still reads false. It says nothing about the renderer's key subscription
+ * either. The per-arm kills therefore live in the unit tests —
  * `HostSessionPipeline.test.ts` for the policy, `electron/main/index.test.ts` for
  * the memento, `renderer/app/game/page.test.tsx` for the key subscription. What
- * this spec adds is that the shipped route offers no undo and the real Ctrl+Z
- * binding rewinds nothing, which is the user-facing claim; it is not evidence for
- * the mechanism.
+ * this spec adds is that the shipped route offers no undo control, the seat's own
+ * projection refuses it, and the real Ctrl+Z binding rewinds nothing.
  *
  * Whether the manifest DECLARES that capability or inherits it from the
  * real-time default is not what this measures — the two resolve identically, as
@@ -41,6 +44,7 @@ import { expect, test } from '../fixtures/electron.fixture';
 import {
     cellOf,
     readSeatPrimitive,
+    readUndoProjection,
     readViewerId,
     type ActionCell,
 } from '../helpers/action-snapshot';
@@ -84,6 +88,12 @@ test.describe('Action undo is withheld', () => {
         const start = await readOwnCell();
         expect(start).not.toBeNull();
 
+        // The projection this seat holds BEFORE it has moved. Kept only as the
+        // baseline the post-move reading must be newer than — its own `canUndo`
+        // says nothing, because an armed build reads false here too.
+        const beforeMove = await readUndoProjection(mainWindow);
+        expect(beforeMove, 'the match projected no undo meta').not.toBeNull();
+
         // Move, so there IS something an undo could take back — and so the key
         // path is proven live before the undo key is sent, rather than assumed.
         await match.holdKey('ArrowRight', HOLD_MS);
@@ -92,6 +102,19 @@ test.describe('Action undo is withheld', () => {
             .toBeGreaterThan(start?.x ?? 0);
         const moved = await readOwnCell();
         expect(moved).not.toBeNull();
+
+        // The seat's own undo eligibility, off a projection the move forced the
+        // host to broadcast. Both fields are read from ONE record so the
+        // freshness claim and the refusal are the same reading: a `canUndo:
+        // false` off a projection still stamped `beforeMove.projectedTick` would
+        // be the start-of-match answer, which an armed build gives too.
+        const afterMove = await readUndoProjection(mainWindow);
+        expect(afterMove).toStrictEqual({
+            projectedTick: expect.any(Number),
+            canUndo: false,
+            canRedo: false,
+        });
+        expect(afterMove?.projectedTick).toBeGreaterThan(beforeMove?.projectedTick ?? 0);
 
         const tickBefore = await match.hudTick();
 

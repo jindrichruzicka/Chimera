@@ -4288,6 +4288,124 @@ describe('main', () => {
         }
     });
 
+    /**
+     * A query made AFTER the start-of-match memento is seeded and before the
+     * first entry is appended reports `canUndo: false` even with undo ARMED:
+     * `saveTurnMemento` sets the boundary in front of `engine:start_game`, the
+     * only entry so far, so `sizeSinceLastMemento()` is zero and the
+     * empty-segment arm refuses. One appended entry flips the same seat.
+     *
+     * That window is not the one a seat's PROJECTION is taken in — the case
+     * below pins where that falls — but the refusal it reports is the one a
+     * real-time seat keeps while the match stays idle, and reading it stale is
+     * what made the action seat look ineligible upstream of its declaration.
+     * `apps/action/e2e/tests/no-undo.spec.ts` therefore pairs its refusal
+     * assertion with a projection-tick comparison, and this is the case that
+     * says why it has to.
+     */
+    it('projects no undo eligibility at match start, and eligibility after the first entry, for an undo-armed real-time game', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockDefaultStateProjectorCtor.mockClear();
+        mockSimulationHostInstance.afterTick.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main(makeRealtimeUndoTestContributions());
+
+        const { transport, options, capturedActionRef } = makeSpectatorSessionHarness();
+        const hostId = playerId('host-start-of-match-undo');
+        const teardown = options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+        try {
+            options?.onGameStartRequested?.({
+                info: { sessionId: 'session-start-of-match-undo', hostId, gameId: 'tactics' },
+                players: [{ playerId: hostId, displayName: 'Host', ready: true }],
+                agentSlots: [{ slotIndex: 1, kind: 'ai' }],
+            });
+
+            // Undo is armed and the memento IS seeded here — the refusal below is
+            // the empty segment, not a missing baseline, which the second half
+            // proves by flipping it with one entry and nothing else.
+            expect(capturedDefaultStateProjectorOptions.current?.getUndoMeta?.(hostId)).toEqual({
+                canUndo: false,
+                canRedo: false,
+            });
+
+            const sendAction = capturedActionRef.current;
+            if (sendAction === undefined) {
+                throw new Error('Expected hosted session to subscribe to incoming actions');
+            }
+            const calls = mockSimulationHostInstance.afterTick.mock.calls;
+            const liveTick =
+                (calls.at(-1)?.[0] as { readonly tick: number } | undefined)?.tick ?? 1;
+            sendAction(hostId, {
+                type: 'engine:tick',
+                playerId: hostId,
+                tick: liveTick,
+                payload: { seed: 7 },
+            });
+
+            expect(capturedDefaultStateProjectorOptions.current?.getUndoMeta?.(hostId)).toEqual({
+                canUndo: true,
+                canRedo: false,
+            });
+        } finally {
+            teardown?.();
+        }
+    });
+
+    /**
+     * Where a seat's start-of-match PROJECTION falls relative to its memento.
+     *
+     * `engine:start_game` broadcasts from Stage 7, inside
+     * `sessionRuntime.applyAction`, and the start-of-match memento is seeded
+     * after that call returns. So the projection a seat holds at match start was
+     * taken while `mementos` held no entry for it, and on an undo-ARMED build
+     * that `canUndo: false` is the missing-memento arm — not the empty segment
+     * the case above queries, which answers a query made after the seed.
+     */
+    it('broadcasts the start-of-match snapshot before seeding the memento', async () => {
+        mockLobbyManagerCtor.mockClear();
+        browserWindowInstances.length = 0;
+
+        const original = InMemoryUndoManager.prototype.saveTurnMemento;
+        let wavesWhenSeeded: number | null = null;
+        const saveTurnMemento = vi
+            .spyOn(InMemoryUndoManager.prototype, 'saveTurnMemento')
+            .mockImplementation(function (
+                this: InstanceType<typeof InMemoryUndoManager>,
+                ...args: Parameters<typeof original>
+            ) {
+                wavesWhenSeeded ??= mockStateBroadcasterInstance.broadcastWave.mock.calls.length;
+                original.apply(this, args);
+            });
+        let teardown: (() => void) | void = undefined;
+        try {
+            await main(makeRealtimeUndoTestContributions());
+
+            const { transport, options } = makeSpectatorSessionHarness();
+            const hostId = playerId('host-wave-before-memento');
+            teardown = options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+
+            // Both counters are scoped to the start request itself: cleared here,
+            // read after, so neither carries a wave the hosting phase sent.
+            mockStateBroadcasterInstance.broadcastWave.mockClear();
+            wavesWhenSeeded = null;
+
+            options?.onGameStartRequested?.({
+                info: { sessionId: 'session-wave-before-memento', hostId, gameId: 'tactics' },
+                players: [{ playerId: hostId, displayName: 'Host', ready: true }],
+                agentSlots: [{ slotIndex: 1, kind: 'ai' }],
+            });
+
+            expect(saveTurnMemento).toHaveBeenCalledOnce();
+            // The seat was already projected to before it had a baseline to
+            // undo to.
+            expect(wavesWhenSeeded).toBeGreaterThan(0);
+        } finally {
+            teardown?.();
+            saveTurnMemento.mockRestore();
+        }
+    });
+
     it('starts an under-cap match when the host closes the roster early (host + one AI in a 3-seat lobby)', async () => {
         mockLobbyManagerCtor.mockClear();
         mockSimulationHostInstance.onGameStart.mockClear();
