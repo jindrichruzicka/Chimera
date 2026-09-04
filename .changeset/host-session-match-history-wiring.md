@@ -24,9 +24,8 @@ start-of-match baseline, which is refreshed only by that same handover.
 `apps/tactics` declares no `matchHistory`, so it resolves to undo on, replay on and the
 `MAX_ACTION_HISTORY_ENTRIES` bound — the values the host already used, unchanged.
 
-`apps/action` declares none either, but it is `realtime: true`, so it resolves to undo off, replay on
-and a 1,000-entry history where the host previously gave it `DEFAULT_UNDO_POLICY`, a start-of-match
-memento and 10,000 entries. Its Ctrl+Z binding is the engine default spread into the app's settings
+`apps/action` is `realtime: true`, so it resolves to undo off, replay on and a 1,000-entry history
+where the host previously gave it `DEFAULT_UNDO_POLICY`, a start-of-match memento and 10,000 entries. Its Ctrl+Z binding is the engine default spread into the app's settings
 schema; it survives, and the seat's projected `undoMeta.canUndo` is now `false`, which is what the
 renderer's own key handler returns on.
 

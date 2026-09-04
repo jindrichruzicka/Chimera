@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { resolveGameLanguages } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
+import {
+    resolveGameLanguages,
+    resolveMatchHistorySupport,
+} from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 
 import { ACTION_GAME_ID, ACTION_TICK_RATE_MS } from './simulation/constants.js';
 import { actionManifest } from './manifest.js';
@@ -51,5 +54,29 @@ describe('actionManifest', () => {
 
     it('admits no spectators', () => {
         expect(actionManifest.spectators).toBeUndefined();
+    });
+
+    it('declares no undo and keeps replay recording', () => {
+        expect(actionManifest.matchHistory).toStrictEqual({ undo: false, replay: true });
+    });
+
+    it('leaves retainActions to the real-time default', () => {
+        // Declared explicitly for `undo`/`replay` because the intent is worth
+        // reading off the manifest; the retention bound has no such intent, so
+        // it stays whatever the mode resolves to.
+        expect(actionManifest.matchHistory?.retainActions).toBeUndefined();
+    });
+
+    it('resolves to the same capability the real-time default would give it', () => {
+        // Asserted through the engine's own reader: the declaration is
+        // documentation, not a behaviour change, so removing it must resolve
+        // identically.
+        const { matchHistory: _declared, ...undeclared } = actionManifest;
+
+        expect(resolveMatchHistorySupport(actionManifest)).toStrictEqual(
+            resolveMatchHistorySupport(undeclared),
+        );
+        expect(resolveMatchHistorySupport(actionManifest).undo).toBe(false);
+        expect(resolveMatchHistorySupport(actionManifest).replay).toBe(true);
     });
 });

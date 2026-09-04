@@ -36,7 +36,6 @@ describe('action renderer loaders', () => {
     });
 
     it('forwards the resolved match-history capability, which withholds undo', async () => {
-        // The action app is real-time, which resolves to no undo.
         const game = await loadActionRendererGame();
 
         expect(game.matchHistory).toStrictEqual(resolveMatchHistorySupport(actionManifest));

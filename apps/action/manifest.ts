@@ -19,6 +19,11 @@ import { ACTION_GAME_ID, ACTION_TICK_RATE_MS } from './simulation/constants.js';
  * dev-warning that the app's only translation bundle matches no declared
  * language.
  *
+ * `matchHistory` states what a real-time game's default already resolves to,
+ * because the intent is worth reading off the manifest rather than inferring it
+ * from the loop mode: this arena offers no undo, and keeps replay recording.
+ * `retainActions` is left to the real-time default.
+ *
  * The rest of the surface is deliberately EMPTY. No `cursor`, no `logoScreen`,
  * no `icon`, no `spectators`: this app ships no cursor art, no boot sequence and
  * no spectator mode, and an option declared here before anything reads it is a
@@ -30,4 +35,5 @@ export const actionManifest: GameManifest = {
     realtime: true,
     tickRateMs: ACTION_TICK_RATE_MS,
     languages: [{ code: 'en-US', label: 'English' }],
+    matchHistory: { undo: false, replay: true },
 };

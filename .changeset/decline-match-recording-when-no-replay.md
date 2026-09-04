@@ -21,5 +21,4 @@ current-match playback sentinel refuse exactly as they already do for a match th
 the IPC invoke rejects and no file is written. A game whose post-game screen opens the current match
 (as `apps/tactics` does) reaches that refusal rather than a crash or a frameless playback.
 
-A game that declares nothing is unchanged: `apps/tactics` resolves to `replay: true` and records as
-before, and `apps/action` does too until it declares otherwise.
+A game that resolves to `replay: true` records exactly as before.

@@ -26,7 +26,6 @@ absent, so no key is registered on the way in and torn down after.
 
 `apps/tactics` is turn-based and declares nothing, so it resolves to undo on: it keeps both key
 registrations and both handlers.
-`apps/action` is real-time and declares nothing, so it resolves to undo off: its Ctrl+Z now reaches no
-listener at all. It reached one before, but that listener returns on `!snapshot.undoMeta.canUndo`,
+`apps/action` is real-time, so it resolves to undo off: its Ctrl+Z now reaches no listener at all. It reached one before, but that listener returns on `!snapshot.undoMeta.canUndo`,
 which the host has projected `false` for this game since the host-side sibling landed — so what this
 removes is the registration, not a live dispatch.
