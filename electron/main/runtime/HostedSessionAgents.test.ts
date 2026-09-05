@@ -207,7 +207,7 @@ describe('buildDefaultAIPlayerAgent', () => {
         expect(snapshot.turnNumber).toBeGreaterThanOrEqual(4);
     });
 
-    // The host re-ticks every agent inside its own dispatch (`dispatchAiAction`
+    // The host re-ticks its agents inside its own dispatch (`dispatchAiAction`
     // → `runHostAction` → `afterTick` → `tickAll`), which is what lets a policy
     // spend a whole turn in one go. A policy that re-asks for an unchanged
     // snapshot therefore recurses to the drive-depth cap instead of settling.
@@ -297,7 +297,7 @@ describe('buildDefaultAIPlayerAgent', () => {
             // The re-entrancy guard only spans one pump. Repeat delivery at an
             // unchanged tick is what the tick latch is for: the counter is
             // advanced by individual reducers, not by the pipeline, so any two
-            // host actions whose reducers leave it alone re-tick every agent
+            // host actions whose reducers leave it alone re-tick the agent
             // with a snapshot it has already acted on.
             const result = driveOneIdleTick(makeTurnClockLessSnapshot(), { outerTicks: 3 });
 

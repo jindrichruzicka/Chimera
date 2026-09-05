@@ -48,6 +48,20 @@ export interface PlayerAgent {
      * since HumanPlayerAgent lifecycle methods are no-ops (Invariant #16).
      */
     readonly omniscient: boolean;
+    /**
+     * Whether this agent consumes the per-beat `onTick` delivery.
+     *
+     * `AgentManager.tickAll` builds a `PlayerSnapshot` for each agent it
+     * ticks, so an agent whose `onTick` discards its argument makes that work
+     * pure waste — O(entities) per human seat per beat, growing with the tick
+     * rate. An agent declaring `false` is skipped entirely on the beat path:
+     * no projection, no `onTick` call. It still receives `onGameStart` and
+     * `onGameEnd`.
+     *
+     * The flag, not `kind`, is what the coordinator reads: `HumanPlayerAgent`
+     * declares `false`, `AIPlayerAgent` declares `true`.
+     */
+    readonly observesTicks: boolean;
     onTick(snapshot: PlayerSnapshot, tick: number): void;
     onGameStart(snapshot: PlayerSnapshot): void;
     onGameEnd(snapshot: PlayerSnapshot, result: GameResult): void;
@@ -64,11 +78,13 @@ export interface AIPlayerAgentOptions {
  *
  * Human actions arrive through IPC (not through the agent system), so every
  * lifecycle method is intentionally empty. The empty bodies are valid per the
- * `ai/` lint exception for no-op stubs.
+ * `ai/` lint exception for no-op stubs. Because `onTick` would discard its
+ * snapshot, the agent opts out of the per-beat delivery altogether.
  */
 export class HumanPlayerAgent implements PlayerAgent {
     readonly kind = 'human' as const;
     readonly omniscient = false as const;
+    readonly observesTicks = false as const;
 
     constructor(readonly playerId: PlayerId) {}
 
@@ -101,6 +117,7 @@ export class HumanPlayerAgent implements PlayerAgent {
 export class AIPlayerAgent<TParams extends AIParams = AIParams> implements PlayerAgent {
     readonly kind = 'ai' as const;
     readonly omniscient: boolean;
+    readonly observesTicks = true as const;
 
     constructor(
         readonly playerId: PlayerId,

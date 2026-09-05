@@ -31,6 +31,9 @@ interface PlayerAgent {
     readonly playerId: PlayerId;
     readonly kind: 'human' | 'ai';
     readonly omniscient: boolean;
+    // false → AgentManager.tickAll neither projects for nor ticks this agent;
+    // onGameStart / onGameEnd are still delivered. The flag, not `kind`, is read.
+    readonly observesTicks: boolean;
     onTick(snapshot: PlayerSnapshot, tick: number): void;
     onGameStart(snapshot: PlayerSnapshot): void;
     onGameEnd(snapshot: PlayerSnapshot, result: GameResult): void;
@@ -40,10 +43,12 @@ interface AIPlayerAgentOptions {
     readonly omniscient?: boolean;
 }
 
-// Human agent is a no-op stub — human actions arrive through IPC, not here
+// Human agent is a no-op stub — human actions arrive through IPC, not here,
+// so it opts out of the per-beat projection its onTick would discard
 class HumanPlayerAgent implements PlayerAgent {
     readonly kind = 'human' as const;
     readonly omniscient = false as const;
+    readonly observesTicks = false as const;
     constructor(readonly playerId: PlayerId) {}
     onTick() {}
     onGameStart() {}
@@ -53,6 +58,7 @@ class HumanPlayerAgent implements PlayerAgent {
 class AIPlayerAgent implements PlayerAgent {
     readonly kind = 'ai' as const;
     readonly omniscient: boolean;
+    readonly observesTicks = true as const;
 
     constructor(playerId: PlayerId, brain: AIBrain, options: AIPlayerAgentOptions = {}) {
         this.omniscient = options.omniscient ?? false;
@@ -70,7 +76,8 @@ class AIPlayerAgent implements PlayerAgent {
 
 interface AgentManager {
     registerAgent(agent: PlayerAgent): void;
-    // Projects GameSnapshot per AI player, forwards to each agent
+    // Projects GameSnapshot per tick-observing agent and forwards it; an agent
+    // with observesTicks: false is neither projected for nor ticked
     tickAll(fullState: GameSnapshot, tick: number, projector: StateProjector): void;
     onGameStart(fullState: GameSnapshot, projector: StateProjector): void;
     onGameEnd(fullState: GameSnapshot, result: GameResult, projector: StateProjector): void;

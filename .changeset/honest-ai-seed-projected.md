@@ -39,7 +39,7 @@ never end its turn. It now gates on `snapshot.isMyTurn`, the projected turn sign
 tactics policy already used, which also carries a game's `resolveIsMyTurn` override for
 simultaneous-turn modes.
 
-Making a dead policy live required bounding it, because the host re-ticks every agent from inside
+Making a dead policy live required bounding it, because the host re-ticks its agents from inside
 its own dispatch — the mechanism that lets a policy spend a whole turn in one go is also the one
 that lets an unconditional policy recurse to the drive-depth cap. The policy now:
 

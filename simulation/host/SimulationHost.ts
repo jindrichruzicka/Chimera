@@ -74,7 +74,8 @@ export class SimulationHost<TAgent = unknown> {
     }
 
     /**
-     * Fan-out the per-tick event to all registered agents.
+     * Fan-out the per-tick event to the registered agents. Which of them
+     * observe ticks is the coordinator's decision.
      *
      * Call this synchronously after each simulation tick completes (i.e.
      * after `SessionRuntime.applyAction()` returns), before the broadcaster

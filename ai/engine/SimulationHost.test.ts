@@ -60,14 +60,15 @@ const identityProjector: StateProjector = {
 };
 
 /**
- * Create a mock PlayerAgent that satisfies the interface.
+ * Create a mock tick-observing PlayerAgent that satisfies the interface.
  * `PlayerAgent` is an interface so object literals work without casting.
  */
-function makeMockAgent(id: PlayerId, kind: 'human' | 'ai' = 'human'): PlayerAgent {
+function makeMockAgent(id: PlayerId, kind: 'human' | 'ai' = 'ai'): PlayerAgent {
     return {
         playerId: id,
         kind,
         omniscient: false,
+        observesTicks: true,
         onTick: vi.fn(),
         onGameStart: vi.fn(),
         onGameEnd: vi.fn(),
@@ -131,7 +132,7 @@ describe('SimulationHost.afterTick', () => {
         expect(agent.onTick).toHaveBeenNthCalledWith(2, expect.objectContaining({ tick: 7 }), 7);
     });
 
-    it('fans out to all registered agents on every tick', () => {
+    it('fans out to both registered agents on a tick', () => {
         const agent1 = makeMockAgent(P1);
         const agent2 = makeMockAgent(P2);
         manager.registerAgent(agent1);

@@ -5,11 +5,13 @@
  * Architecture reference: §4.9 — AI Framework and Agent System
  *
  * Invariants upheld:
- *   #17 — tickAll(), onGameStart() and onGameEnd() each call
- *          projector.project() for every honest agent before invoking its
- *          lifecycle method, so an honest AI player receives a projected
- *          PlayerSnapshot, never a raw GameSnapshot. Human agents are included
- *          in the uniform fan-out (HumanPlayerAgent.onTick is a no-op).
+ *   #17 — an honest agent receives projector.project(fullState), never a raw
+ *          GameSnapshot, on every lifecycle call delivered to it: onGameStart()
+ *          and onGameEnd() for every registered agent, tickAll() for the
+ *          agents that observe ticks. An agent that declares
+ *          `observesTicks: false` (HumanPlayerAgent) is skipped by tickAll —
+ *          nothing is projected for it and nothing is delivered to it — so
+ *          the skip opens no path to unprojected state.
  *          Scope note: this covers delivery to an ALREADY-CONSTRUCTED agent.
  *          The snapshot an agent is seeded with at construction is gated by the
  *          host shell's agent factory under the same invariant.
@@ -37,12 +39,12 @@ import type { PlayerAgent, GameResult } from './PlayerAgent.js';
  *   - Duplicate registration of the same `playerId` is a no-op; a warning is
  *     logged and the original entry is kept.
  *
- * Lifecycle fan-out (uniform for all agent kinds):
- *   - `tickAll` / `onGameStart` / `onGameEnd` each call `projector.project()`
- *     for every registered agent to obtain a `PlayerSnapshot`, then forward
- *     the projected snapshot to the corresponding agent lifecycle method.
- *   - `HumanPlayerAgent` lifecycle methods are no-ops, so the uniform path
- *     adds no observable behaviour for human slots.
+ * Lifecycle fan-out:
+ *   - `onGameStart` / `onGameEnd` call `projector.project()` for every
+ *     registered agent to obtain a `PlayerSnapshot`, then forward the
+ *     projected snapshot to the corresponding agent lifecycle method.
+ *   - `tickAll` does the same per beat, but only for agents that declare
+ *     `observesTicks: true`; see `PlayerAgent.observesTicks` for why.
  */
 export class AgentManager implements AgentCoordinator<PlayerAgent> {
     private readonly agents = new Map<PlayerId, PlayerAgent>();
@@ -91,10 +93,11 @@ export class AgentManager implements AgentCoordinator<PlayerAgent> {
     }
 
     /**
-     * Fan-out the per-tick lifecycle to all registered agents.
+     * Fan-out the per-tick lifecycle to the registered agents that observe ticks.
      *
-     * For each agent: projects `fullState` through `projector.project()` to
+     * For each such agent: projects `fullState` through `projector.project()` to
      * obtain the agent's `PlayerSnapshot`, then calls `agent.onTick(snapshot, tick)`.
+     * An agent with `observesTicks: false` is skipped before either step.
      *
      * Invariant #17: honest agents receive a `PlayerSnapshot` from the projector.
      * Omniscient agents receive a `PlayerSnapshot` built from the full state via spread
@@ -103,6 +106,9 @@ export class AgentManager implements AgentCoordinator<PlayerAgent> {
      */
     public tickAll(fullState: BaseGameSnapshot, tick: number, projector: StateProjector): void {
         for (const agent of this.agents.values()) {
+            if (!agent.observesTicks) {
+                continue;
+            }
             const isMyTurn = this.computeIsMyTurn(fullState, agent.playerId);
             const snapshot: PlayerSnapshot = agent.omniscient
                 ? {

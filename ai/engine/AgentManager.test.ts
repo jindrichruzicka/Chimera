@@ -7,9 +7,10 @@
  * Task: F22
  *
  * Invariants upheld:
- *   #17 — AgentManager.tickAll() calls projector.project() for each agent;
- *          Honest AI players receive a PlayerSnapshot; omniscient AI players
- *          receive fullState directly (bypassing projector).
+ *   #17 — AgentManager.tickAll() calls projector.project() for each honest
+ *          tick-observing agent; omniscient AI players receive fullState
+ *          directly (bypassing projector). An agent that does not observe
+ *          ticks (HumanPlayerAgent) is neither projected nor ticked.
  *
  * Tests written first (TDD — red confirmed before implementation).
  */
@@ -73,6 +74,7 @@ const makeAiAgent = (id = p1): PlayerAgent => ({
     playerId: id,
     kind: 'ai',
     omniscient: false,
+    observesTicks: true,
     onTick: vi.fn(),
     onGameStart: vi.fn(),
     onGameEnd: vi.fn(),
@@ -82,6 +84,7 @@ const makeOmniscientAgent = (id = p1): PlayerAgent => ({
     playerId: id,
     kind: 'ai',
     omniscient: true,
+    observesTicks: true,
     onTick: vi.fn(),
     onGameStart: vi.fn(),
     onGameEnd: vi.fn(),
@@ -174,7 +177,7 @@ describe('AgentManager', () => {
     // ── tickAll ───────────────────────────────────────────────────────────────
 
     describe('tickAll', () => {
-        it('calls projector.project() once per registered agent per tick', () => {
+        it('calls projector.project() once per tick for each of two registered AI agents', () => {
             const projector = makeProjector();
             const agent1 = makeAiAgent(p1);
             const agent2 = makeAiAgent(p2);
@@ -197,7 +200,7 @@ describe('AgentManager', () => {
             expect(projector.project).toHaveBeenCalledWith(fullState, p1);
         });
 
-        it('calls agent.onTick with projected snapshot and tick for every agent', () => {
+        it('calls agent.onTick with the projected snapshot and the tick', () => {
             const snapshot = makeSnapshot(5);
             const projector: StateProjector = { project: vi.fn(() => snapshot) };
             const agent = makeAiAgent(p1);
@@ -208,7 +211,7 @@ describe('AgentManager', () => {
             expect(agent.onTick).toHaveBeenCalledWith(snapshot, 5);
         });
 
-        it('fans out to all registered agents', () => {
+        it('fans out to both registered AI agents', () => {
             const projector = makeProjector();
             const agent1 = makeAiAgent(p1);
             const agent2 = makeAiAgent(p2);
@@ -227,14 +230,80 @@ describe('AgentManager', () => {
             expect(projector.project).not.toHaveBeenCalled();
         });
 
-        it('calls projector.project() for human agents too (uniform fan-out)', () => {
+        it('does not call projector.project() for a HumanPlayerAgent on a beat', () => {
             const projector = makeProjector();
-            const humanAgent = new HumanPlayerAgent(p1);
-            manager.registerAgent(humanAgent);
+            manager.registerAgent(new HumanPlayerAgent(p1));
 
             manager.tickAll(makeFullState(), 1, projector);
 
-            expect(projector.project).toHaveBeenCalledOnce();
+            expect(projector.project).not.toHaveBeenCalled();
+        });
+
+        it('does not call onTick on a HumanPlayerAgent on a beat', () => {
+            const humanAgent = new HumanPlayerAgent(p1);
+            const onTick = vi.spyOn(humanAgent, 'onTick');
+            manager.registerAgent(humanAgent);
+
+            manager.tickAll(makeFullState(), 1, makeProjector());
+
+            expect(onTick).not.toHaveBeenCalled();
+        });
+
+        it('skips both the projection and onTick for any agent declaring observesTicks: false, whatever its kind', () => {
+            const projector = makeProjector();
+            const inert: PlayerAgent = { ...makeAiAgent(p1), observesTicks: false };
+            manager.registerAgent(inert);
+
+            manager.tickAll(makeFullState(), 1, projector);
+
+            expect(projector.project).not.toHaveBeenCalled();
+            expect(inert.onTick).not.toHaveBeenCalled();
+        });
+
+        it('projects for the tick-observing AI agent seated beside a human on every beat, and for it alone', () => {
+            const projector = makeProjector();
+            const human = new HumanPlayerAgent(p1);
+            const humanOnTick = vi.spyOn(human, 'onTick');
+            const ai = makeAiAgent(p2);
+            manager.registerAgent(human);
+            manager.registerAgent(ai);
+            const fullState = makeFullState();
+
+            manager.tickAll(fullState, 1, projector);
+            manager.tickAll(fullState, 2, projector);
+
+            expect(projector.project).toHaveBeenCalledTimes(2);
+            expect(projector.project).toHaveBeenNthCalledWith(1, fullState, p2);
+            expect(projector.project).toHaveBeenNthCalledWith(2, fullState, p2);
+            expect(ai.onTick).toHaveBeenCalledTimes(2);
+            expect(humanOnTick).not.toHaveBeenCalled();
+        });
+
+        it('hands an honest tick-observing agent the projector return itself, by identity', () => {
+            const projected = makeSnapshot(4, p1);
+            const projector: StateProjector = { project: vi.fn(() => projected) };
+            const agent = makeAiAgent(p1);
+            manager.registerAgent(agent);
+
+            manager.tickAll(makeFullState(), 4, projector);
+
+            expect(vi.mocked(agent.onTick).mock.calls[0]?.[0]).toBe(projected);
+        });
+
+        it('still projects for a HumanPlayerAgent in onGameStart and onGameEnd — the flag scopes the per-beat path only', () => {
+            const projector = makeProjector();
+            const human = new HumanPlayerAgent(p1);
+            const onGameStart = vi.spyOn(human, 'onGameStart');
+            const onGameEnd = vi.spyOn(human, 'onGameEnd');
+            manager.registerAgent(human);
+            const fullState = makeFullState();
+
+            manager.onGameStart(fullState, projector);
+            manager.onGameEnd(fullState, makeResult(), projector);
+
+            expect(projector.project).toHaveBeenCalledTimes(2);
+            expect(onGameStart).toHaveBeenCalledOnce();
+            expect(onGameEnd).toHaveBeenCalledOnce();
         });
 
         it('omniscient agent receives full state snapshot — projector.project() NOT called for it', () => {

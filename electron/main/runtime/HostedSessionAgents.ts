@@ -226,7 +226,7 @@ export function buildDefaultAIPlayerAgent(options: BuildDefaultAIPlayerAgentOpti
 
 function createAutoEndTurnState(playerIdToAdvance: PlayerId, logger: Logger): AIState {
     // True while this policy's own `context.dispatch` is on the stack. The host
-    // re-ticks every agent from INSIDE that dispatch (`runHostAction` →
+    // re-ticks its agents from INSIDE that dispatch (`runHostAction` →
     // `afterTick` → `tickAll`), which is the mechanism that lets a policy spend
     // a whole turn in one go — and, for a policy that re-asks unconditionally,
     // the mechanism that recurses to the drive-depth cap. Suppressing the

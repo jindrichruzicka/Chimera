@@ -2571,7 +2571,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // The host-side per-action fan-out, shared by the host's own renderer
             // actions (`dispatchRendererAction`), remote clients
             // (`transport.onActionReceived`), and AI seats (`dispatchAiAction`).
-            // `afterTick` re-ticks every registered agent, so an AI seat made
+            // `afterTick` re-ticks the agents, so an AI seat made
             // active by `action` decides and dispatches its own next action here.
             //
             // A heartbeat-driven host applies the action at the beat it arrives

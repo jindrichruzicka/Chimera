@@ -33,7 +33,7 @@ import type { BaseGameSnapshot, GameResult } from '../engine/types.js';
 export interface AgentCoordinator<TAgent> {
     /** Register a player agent before the first tick. */
     registerAgent(agent: TAgent): void;
-    /** Fan-out the per-tick event to all registered agents. */
+    /** Fan-out the per-tick event to the registered agents; the coordinator decides which of them observe ticks. */
     tickAll(state: BaseGameSnapshot, tick: number, projector: StateProjector): void;
     /** Fan-out the game-start event to all registered agents. */
     onGameStart(state: BaseGameSnapshot, projector: StateProjector): void;
