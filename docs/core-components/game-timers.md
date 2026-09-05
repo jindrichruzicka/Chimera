@@ -153,6 +153,7 @@ return { ...state, timers: newTimers };
 - Turn-based games (manifest `realtime: false`): no ticker, and — measured — no production host path dispatches `engine:tick` for them either (`SessionRuntime.dispatchTick` is private and reachable only through the e2e hook). Timers in such a game therefore wait on a beat the host never sends.
 - Real-time games (manifest `realtime: true`): `engine:tick` dispatched automatically by the host-driven `RealtimeTicker` at `tickRateMs` (§4.2.1).
 - Timer IDs must be deterministic (derived from entity IDs + action type, not random UUIDs) so replays produce identical timer maps.
+- Retention: a fired one-shot leaves the registry in the beat that fired it; a repeating timer, a timer still counting down and an already-inactive entry survive the beat, and nothing sweeps inactive entries — `timers` is in `BASE_SNAPSHOT_KEYS`, so a `cancel()`ed entry stays until a `create()` under the same id replaces it. The rule, and what it costs, are in [Coding Standards §7.5](../coding-standards-sections/simulation-layer.md#75-snapshot-retention).
 
 ---
 

@@ -201,7 +201,7 @@ interface ActionPipeline<TState extends BaseGameSnapshot> {
 
 `GameSnapshot.events` is a per-**action** outbox, not a ledger. Stage 0 empties it before every outer action's reduce, so the array a reducer is handed holds the events of that action and of any action it dispatches, and nothing older.
 
-Rules a game author must respect:
+Rules a game author must respect (see also [Coding Standards §7.5](../coding-standards-sections/simulation-layer.md#75-snapshot-retention)):
 
 - **Append to what you were handed; never assume an earlier action's events are still there.** A reducer that wants a durable record of something must keep its own snapshot field and declare that field's retention.
 - **A consumer plays a batch whole.** There is no already-seen prefix to index past, and a played-count cursor drops any batch no longer than the one before it. `renderer/components/audio/EventAudioPlayer.tsx` is the reference consumer.

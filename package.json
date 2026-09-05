@@ -52,7 +52,7 @@
         "changeset": "changeset",
         "version-packages": "changeset version && pnpm install --lockfile-only",
         "release": "pnpm build:packages && changeset publish",
-        "test:perf": "pnpm build:packages && cross-env NODE_OPTIONS=--expose-gc CHIMERA_PERF_STRICT=1 vitest run apps/tactics/__tests__/ActionPipelinePerf.bench.test.ts",
+        "test:perf": "pnpm build:packages && cross-env NODE_OPTIONS=--expose-gc CHIMERA_PERF_STRICT=1 vitest run apps/tactics/__tests__/ActionPipelinePerf.bench.test.ts apps/action/__tests__/OutboundPerBeatPerf.bench.test.ts",
         "validate:assets": "pnpm build:packages && tsx electron/dev-tools/validate-assets/index.ts",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
