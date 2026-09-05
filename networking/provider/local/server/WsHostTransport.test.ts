@@ -7,7 +7,7 @@
  * Task: F10 / T03
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import WebSocket from 'ws';
 import type { PlayerId } from '@chimera-engine/simulation/contracts';
 import { playerId as toPlayerId } from '../../MultiplayerProvider.js';
@@ -47,6 +47,26 @@ function makeSnapshot(viewerId: PlayerId): PlayerSnapshot {
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
         isMyTurn: true,
+    };
+}
+
+/**
+ * A snapshot with nested records, arrays, a null, escaped characters and
+ * non-ASCII text, so a frame assembled around a pre-serialised body is checked
+ * on the JSON shapes where hand-built and `JSON.stringify` output could differ.
+ */
+function makeNestedSnapshot(viewerId: PlayerId): PlayerSnapshot {
+    return {
+        ...makeSnapshot(viewerId),
+        tick: 7,
+        sceneTransition: null,
+        events: [{ type: 'unit:moved Řehoř — ✓ 日本 "quoted" \\ back\\slash' }, { type: '' }],
+        gameResult: { winnerIds: [viewerId] },
+        undoMeta: { canUndo: true, canRedo: false },
+        setup: {
+            gameParams: { depth: '-3', label: 'ünï\ttab\nnewline' },
+            playerAttributes: { [viewerId]: { team: 'Řehoř', colour: '' } },
+        },
     };
 }
 
@@ -144,6 +164,126 @@ describe('WsHostTransport — sendSnapshot', () => {
         const msg = await p;
         expect(msg.type).toBe('SNAPSHOT');
         if (msg.type === 'SNAPSHOT') {
+            expect(msg.checksum).toBe(crc32Json(snapshot));
+        }
+        ws.close();
+    });
+
+    it('serialises nothing and computes no checksum for a target with no open socket', async () => {
+        const { server, transport } = makeTransport();
+        await server.ready();
+        // The local host seat is served in-process and never opens a socket to
+        // its own server, so it is exactly this case on every beat of a solo match.
+        const hostSeat = toPlayerId('host-seat-served-in-process');
+
+        const stringify = vi.spyOn(JSON, 'stringify');
+        try {
+            transport.sendSnapshot(hostSeat, makeSnapshot(hostSeat));
+            expect(stringify).not.toHaveBeenCalled();
+        } finally {
+            stringify.mockRestore();
+        }
+    });
+
+    it('serialises the snapshot exactly once for a delivered frame', async () => {
+        const { server, transport } = makeTransport();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+        const p = new Promise<ServerMessage>((resolve) => {
+            ws.once('message', (raw) => resolve(JSON.parse(rawToString(raw)) as ServerMessage));
+        });
+        const snapshot = makeSnapshot(playerId);
+
+        const stringify = vi.spyOn(JSON, 'stringify');
+        try {
+            transport.sendSnapshot(playerId, snapshot);
+            expect(stringify).toHaveBeenCalledTimes(1);
+            expect(stringify).toHaveBeenCalledWith(snapshot);
+        } finally {
+            stringify.mockRestore();
+        }
+
+        const msg = await p;
+        expect(msg.type).toBe('SNAPSHOT');
+        ws.close();
+    });
+
+    it('puts a frame on the wire byte-identical to JSON.stringify of the SNAPSHOT message carrying crc32Json(snapshot)', async () => {
+        const { server, transport } = makeTransport();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+        const p = new Promise<string>((resolve) => {
+            ws.once('message', (raw) => resolve(rawToString(raw)));
+        });
+        const snapshot = makeNestedSnapshot(playerId);
+
+        transport.sendSnapshot(playerId, snapshot);
+
+        const frame = await p;
+        const previousShape: ServerMessage = {
+            type: 'SNAPSHOT',
+            snapshot,
+            checksum: crc32Json(snapshot),
+        };
+        expect(frame).toBe(JSON.stringify(previousShape));
+        // The receiving client recomputes the CRC over the parsed body before
+        // Zod touches it; the frame must satisfy that check as sent.
+        const parsed = JSON.parse(frame) as {
+            readonly snapshot: unknown;
+            readonly checksum: number;
+        };
+        expect(crc32Json(parsed.snapshot)).toBe(parsed.checksum);
+        ws.close();
+    });
+
+    it('emits a negative checksum with the digits JSON.stringify would, so the client-side CRC check still passes', async () => {
+        const { server, transport } = makeTransport();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+        const p = new Promise<string>((resolve) => {
+            ws.once('message', (raw) => resolve(rawToString(raw)));
+        });
+        // crc32 returns a signed int32; the hand-assembled frame interpolates
+        // it, which only differs from JSON.stringify(number) if the sign is
+        // mishandled. Tick 0 of this fixture lands on the negative half for the
+        // id the server mints first; the precondition is asserted so a changed
+        // fixture or id cannot silently turn this into a positive-only pin.
+        const snapshot: PlayerSnapshot = { ...makeNestedSnapshot(playerId), tick: 0 };
+        expect(crc32Json(snapshot)).toBeLessThan(0);
+
+        transport.sendSnapshot(playerId, snapshot);
+
+        const frame = await p;
+        const previousShape: ServerMessage = {
+            type: 'SNAPSHOT',
+            snapshot,
+            checksum: crc32Json(snapshot),
+        };
+        expect(frame).toBe(JSON.stringify(previousShape));
+        const parsed = JSON.parse(frame) as {
+            readonly snapshot: unknown;
+            readonly checksum: number;
+        };
+        expect(crc32Json(parsed.snapshot)).toBe(parsed.checksum);
+        ws.close();
+    });
+
+    it('delivers a SNAPSHOT with a matching checksum to a spectator connection', async () => {
+        const { server, transport } = makeTransport();
+        server.setJoinClassifier(() => ({ role: 'spectator' }));
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+        const p = new Promise<ServerMessage>((resolve) => {
+            ws.once('message', (raw) => resolve(JSON.parse(rawToString(raw)) as ServerMessage));
+        });
+        const snapshot = makeNestedSnapshot(playerId);
+
+        transport.sendSnapshot(playerId, snapshot);
+
+        const msg = await p;
+        expect(msg.type).toBe('SNAPSHOT');
+        if (msg.type === 'SNAPSHOT') {
+            expect(msg.snapshot).toEqual(snapshot);
             expect(msg.checksum).toBe(crc32Json(snapshot));
         }
         ws.close();

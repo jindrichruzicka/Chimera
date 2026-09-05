@@ -7,11 +7,11 @@
  *   - Bind a ws.Server to localhost on a given (or OS-assigned) port
  *   - Handle the JOIN handshake: validate token, assign PlayerId, send WELCOME/REJECT
  *   - Maintain a Map<PlayerId, WebSocket> of authenticated connections
- *   - Expose typed send/broadcast helpers that serialize ServerMessage to JSON
+ *   - Expose typed send/broadcast helpers that serialize ServerMessage to JSON,
+ *     plus a raw-frame unicast for a body the caller has already serialized
  *   - Fire observable events: onPlayerConnected, onPlayerDisconnected, onMessage
  *
- * This module is intentionally ws-aware — it is the ONLY place inside
- * LocalWebSocketProvider that touches ws.Server and ws.WebSocket directly.
+ * This module is intentionally ws-aware.
  * All higher-level code (WsHostTransport, MessageRouter, LocalWebSocketProvider)
  * talks to LobbyServer through its typed API, never to ws primitives.
  *
@@ -122,8 +122,8 @@ export class LobbyServer implements MessageBus {
      * Read-only spectator connections, kept out of `connections` so they never
      * count against the player-capacity gate. Bounded by `maxSpectators`.
      * A spectator holds no seat and no agent (Invariant #114): it receives its
-     * perspective snapshots via `sendToPlayer` unicast, is never part of
-     * `broadcast()`, and its ACTION messages are dropped at this boundary.
+     * perspective snapshots by unicast, is never part of `broadcast()`, and
+     * its ACTION messages are dropped at this boundary.
      */
     private readonly spectatorConnections = new Map<PlayerId, WebSocket>();
     private readonly _token: string;
@@ -242,15 +242,39 @@ export class LobbyServer implements MessageBus {
 
     /**
      * Send a serialised ServerMessage to one specific authenticated client —
-     * a seated player or a spectator (spectators receive their perspective
-     * snapshots through this unicast path; they are never part of
+     * a seated player or a spectator (a spectator is never part of
      * `broadcast()`). No-op if the PlayerId is not connected.
      */
     sendToPlayer(playerId: PlayerId, msg: ServerMessage): void {
+        this.openSocketFor(playerId)?.send(JSON.stringify(msg));
+    }
+
+    /**
+     * Send an already-serialised ServerMessage frame to one specific
+     * authenticated client — the same recipients and the same no-op as
+     * {@link sendToPlayer}, minus the serialisation. For a caller that has
+     * already stringified the body (a SNAPSHOT whose checksum was computed
+     * over that exact string) this avoids stringifying it a second time on
+     * the way out.
+     */
+    sendRawToPlayer(playerId: PlayerId, frame: string): void {
+        this.openSocketFor(playerId)?.send(frame);
+    }
+
+    /**
+     * Whether a unicast to `playerId` — seated player or spectator — would be
+     * delivered right now, i.e. the exact predicate {@link sendToPlayer} and
+     * {@link sendRawToPlayer} apply before sending. Lets a caller skip building
+     * a frame that would only be dropped: the local host seat is served
+     * in-process and never appears in either connection map.
+     */
+    hasOpenSocket(playerId: PlayerId): boolean {
+        return this.openSocketFor(playerId) !== undefined;
+    }
+
+    private openSocketFor(playerId: PlayerId): WebSocket | undefined {
         const ws = this.connections.get(playerId) ?? this.spectatorConnections.get(playerId);
-        if (ws?.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify(msg));
-        }
+        return ws?.readyState === WebSocket.OPEN ? ws : undefined;
     }
 
     /**

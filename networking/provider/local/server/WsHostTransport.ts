@@ -21,7 +21,7 @@ import type {
     JoinClassification,
     JoinClassifierContext,
 } from '../../MultiplayerProvider.js';
-import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
+import { crc32 } from '@chimera-engine/simulation/foundation/crc32.js';
 import type {
     ServerMessage,
     WireCommitmentReveal,
@@ -33,7 +33,8 @@ import type { MessageRouter } from './MessageRouter.js';
 
 /**
  * Server-side transport implementation. Delegates:
- *   - outbound messages → LobbyServer.sendToPlayer / LobbyServer.broadcast
+ *   - outbound messages → LobbyServer.sendToPlayer / LobbyServer.broadcast,
+ *     snapshots → LobbyServer.sendRawToPlayer behind LobbyServer.hasOpenSocket
  *   - inbound message routing → MessageRouter
  *   - player connection events → LobbyServer.onPlayerConnected / onPlayerDisconnected
  *
@@ -50,8 +51,19 @@ export class WsHostTransport implements HostTransport {
     // ─── Outbound ─────────────────────────────────────────────────────────────
 
     sendSnapshot(playerId: PlayerId, snapshot: PlayerSnapshot): void {
-        const msg: ServerMessage = { type: 'SNAPSHOT', snapshot, checksum: crc32Json(snapshot) };
-        this.server.sendToPlayer(playerId, msg);
+        // The checksum costs a full serialisation plus a per-byte CRC walk, and
+        // the server drops a unicast for a seat with no open socket — the local
+        // host seat, served in-process, never has one — so the socket check
+        // comes before any of that work. The hand-assembled frame keeps the
+        // checksum and the wire bytes identical to `JSON.stringify` of the
+        // SNAPSHOT message object.
+        if (!this.server.hasOpenSocket(playerId)) return;
+        const body = JSON.stringify(snapshot);
+        const checksum = crc32(body);
+        this.server.sendRawToPlayer(
+            playerId,
+            `{"type":"SNAPSHOT","snapshot":${body},"checksum":${checksum}}`,
+        );
     }
 
     sendTick(playerId: PlayerId, tick: number): void {

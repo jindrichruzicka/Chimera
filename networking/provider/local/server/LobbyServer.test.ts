@@ -17,6 +17,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import WebSocket from 'ws';
+import type { WebSocketServer } from 'ws';
 import type { PlayerId } from '@chimera-engine/simulation/contracts';
 import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';
 import { playerId as toPlayerId } from '../../MultiplayerProvider.js';
@@ -841,6 +842,101 @@ describe('LobbyServer — sending messages', () => {
         await server.ready();
         expect(() =>
             server.sendToPlayer(toPlayerId('ghost'), { type: 'PONG', sentAt: 0 }),
+        ).not.toThrow();
+    });
+
+    it('hasOpenSocket is true for a joined player and false for an unknown id', async () => {
+        const server = makeServer();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+
+        expect(server.hasOpenSocket(playerId)).toBe(true);
+        expect(server.hasOpenSocket(toPlayerId('ghost'))).toBe(false);
+        ws.close();
+    });
+
+    it('hasOpenSocket is true for an admitted spectator', async () => {
+        const server = makeServer();
+        server.setJoinClassifier(() => ({ role: 'spectator' }));
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+
+        expect(server.hasOpenSocket(playerId)).toBe(true);
+        ws.close();
+    });
+
+    it('hasOpenSocket is false for a socket that is closing but not yet dropped from the roster', async () => {
+        const server = makeServer();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+        // Reach the server-side socket through the ws primitive LobbyServer
+        // wraps: `close()` flips it to CLOSING synchronously, while the roster
+        // entry is removed only when the close handshake completes and 'close'
+        // fires — so the predicate must read readyState, not mere membership.
+        // @chimera-review: the wrapped WebSocketServer is private by design; the cast reaches a live server-side socket without adding production surface for a test
+        const { wss } = server as unknown as { readonly wss: WebSocketServer };
+        const [serverSide] = wss.clients;
+        if (serverSide === undefined) throw new Error('expected one server-side socket');
+
+        serverSide.close();
+
+        expect(serverSide.readyState).toBe(WebSocket.CLOSING);
+        expect(server.hasOpenSocket(playerId)).toBe(false);
+        ws.close();
+    });
+
+    it('hasOpenSocket turns false once the player has disconnected', async () => {
+        const server = makeServer();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+        const gone = new Promise<void>((resolve) => {
+            server.onPlayerDisconnected((pid) => {
+                if (pid === playerId) resolve();
+            });
+        });
+
+        ws.close();
+        await gone;
+
+        expect(server.hasOpenSocket(playerId)).toBe(false);
+    });
+
+    it('sendRawToPlayer puts the given frame on the wire verbatim', async () => {
+        const server = makeServer();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+        const frame = '{"type":"PONG","sentAt":0}';
+
+        const received = await new Promise<string>((resolve) => {
+            ws.once('message', (raw) => resolve(rawToString(raw)));
+            server.sendRawToPlayer(playerId, frame);
+        });
+
+        expect(received).toBe(frame);
+        ws.close();
+    });
+
+    it('sendRawToPlayer delivers to a spectator connection', async () => {
+        const server = makeServer();
+        server.setJoinClassifier(() => ({ role: 'spectator' }));
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+        const frame = '{"type":"PONG","sentAt":1}';
+
+        const received = await new Promise<string>((resolve) => {
+            ws.once('message', (raw) => resolve(rawToString(raw)));
+            server.sendRawToPlayer(playerId, frame);
+        });
+
+        expect(received).toBe(frame);
+        ws.close();
+    });
+
+    it('sendRawToPlayer is a no-op for an unknown PlayerId', async () => {
+        const server = makeServer();
+        await server.ready();
+        expect(() =>
+            server.sendRawToPlayer(toPlayerId('ghost'), '{"type":"PONG","sentAt":0}'),
         ).not.toThrow();
     });
 });
