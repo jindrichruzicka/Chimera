@@ -353,22 +353,35 @@ function renderGame(fade: FadeControl = makeFade()): ReturnType<typeof render> {
 }
 
 /**
- * Mounts the route and waits for the shell — the gate never withholds it — AND
- * for the gate's own effect to have started its run.
+ * Drains a just-rendered route to quiescence, so every read after it is exact.
  *
- * The second wait is not redundant: the shell is in the DOM as soon as the
- * commit lands, while the gate's effect is a passive one React flushes after
- * it. A case that asserted on the run straight after `findByTestId` would be
- * reading a preload that had not necessarily started.
+ * `render` is a synchronous act, and the mocked `loadRendererGame` resolves in
+ * the microtask right after it returns. Had the next await been a `findBy` or a
+ * `waitFor`, that microtask would fire OUTSIDE act, and every render it starts
+ * — the shell mount, then each of the beat's phases, a scheduler task apiece —
+ * would race the single `setTimeout(0)` testing-library drains with before it
+ * hands control back. Under CPU load the timer fires first and a case reads the
+ * render before the one it needs. Entering the act scope first means the work
+ * that microtask schedules, and everything it cascades into, lands on act's own
+ * queue, which act flushes until that queue is empty.
+ */
+async function drainMount(): Promise<void> {
+    await act(async () => {
+        await Promise.resolve();
+    });
+}
+
+/**
+ * Mounts the route, drains it, and pins that the shell is up — the gate never
+ * withholds it — and that the preload has started.
  */
 async function renderMountedGame(
     fade: FadeControl = makeFade(),
 ): Promise<ReturnType<typeof render>> {
     const view = renderGame(fade);
-    await screen.findByTestId('mock-game-shell');
-    await waitFor(() => {
-        expect(harness.preloadCritical).toHaveBeenCalled();
-    });
+    await drainMount();
+    expect(screen.getByTestId('mock-game-shell')).toBeInTheDocument();
+    expect(harness.preloadCritical).toHaveBeenCalled();
     return view;
 }
 
@@ -501,10 +514,8 @@ describe('GamePage reveal gate', () => {
         // that already faded out — and only a curtain that really moves can
         // show that, since the darkening leg ends on the curtain being opaque.
         render(<StatefulFadeGame initialOpacity={0} />);
-        await screen.findByTestId('mock-game-shell');
-        await waitFor(() => {
-            expect(harness.preloadCritical).toHaveBeenCalled();
-        });
+        await drainMount();
+        expect(harness.preloadCritical).toHaveBeenCalled();
 
         expect(fadeOut).toHaveBeenCalled();
         expect(fadeIn).not.toHaveBeenCalled();
