@@ -95,27 +95,73 @@ describe('EventAudioPlayer', () => {
         await waitFor(() => expect(audioManager.play).not.toHaveBeenCalled());
     });
 
-    it('plays only events appended since the previous snapshot', async () => {
+    it('plays the WHOLE batch, not only what is new since the previous snapshot', async () => {
+        // `snapshot.events` is a per-action outbox (§4.2): every snapshot
+        // carries one action's events and nothing older, so there is no
+        // "already played" prefix to skip. A player that indexed from the
+        // previous batch's length would play `match:won` alone here.
         const audioManager = createAudioManagerSpy();
         const binding: EventAudioBinding = {
             'combat:hit': { ref: HIT_REF },
             'match:won': { ref: WIN_REF },
         };
-        const firstEvent = { type: 'combat:hit' };
 
         renderPlayer(binding, audioManager);
-        useGameStore.getState().applySnapshot(makeSnapshot({ tick: 2, events: [firstEvent] }));
+        useGameStore
+            .getState()
+            .applySnapshot(makeSnapshot({ tick: 2, events: [{ type: 'combat:hit' }] }));
         await waitFor(() => expect(audioManager.play).toHaveBeenCalledTimes(1));
 
         useGameStore.getState().applySnapshot(
             makeSnapshot({
                 tick: 3,
-                events: [firstEvent, { type: 'match:won' }],
+                events: [{ type: 'combat:hit' }, { type: 'match:won' }],
             }),
         );
 
+        await waitFor(() => expect(audioManager.play).toHaveBeenCalledTimes(3));
+        expect(audioManager.play).toHaveBeenNthCalledWith(2, HIT_REF, {});
+        expect(audioManager.play).toHaveBeenNthCalledWith(3, WIN_REF, {});
+    });
+
+    it('plays a new batch that is the SAME LENGTH as the one before it', async () => {
+        // The drop a played-count ref produces once the outbox is drained per
+        // action: two consecutive one-event batches leave the count at 1 both
+        // times, so the second batch is silently skipped.
+        const audioManager = createAudioManagerSpy();
+        const binding: EventAudioBinding = {
+            'combat:hit': { ref: HIT_REF },
+            'match:won': { ref: WIN_REF },
+        };
+
+        renderPlayer(binding, audioManager);
+        useGameStore
+            .getState()
+            .applySnapshot(makeSnapshot({ tick: 2, events: [{ type: 'combat:hit' }] }));
+        await waitFor(() => expect(audioManager.play).toHaveBeenCalledTimes(1));
+
+        useGameStore
+            .getState()
+            .applySnapshot(makeSnapshot({ tick: 3, events: [{ type: 'match:won' }] }));
+
         await waitFor(() => expect(audioManager.play).toHaveBeenCalledTimes(2));
-        expect(audioManager.play).toHaveBeenLastCalledWith(WIN_REF, {});
+        expect(audioManager.play).toHaveBeenNthCalledWith(2, WIN_REF, {});
+    });
+
+    it('does not replay the current batch when only the binding identity changes', async () => {
+        // A game that passes an inline binding literal re-renders this player
+        // with a fresh `binding` on every parent render. The effect re-runs;
+        // the batch must not be heard twice.
+        const audioManager = createAudioManagerSpy();
+        const events = [{ type: 'combat:hit' }];
+
+        const { rerender } = renderPlayer({ 'combat:hit': { ref: HIT_REF } }, audioManager);
+        useGameStore.getState().applySnapshot(makeSnapshot({ tick: 2, events }));
+        await waitFor(() => expect(audioManager.play).toHaveBeenCalledTimes(1));
+
+        rerender(wrapPlayer({ 'combat:hit': { ref: HIT_REF } }, audioManager));
+
+        expect(audioManager.play).toHaveBeenCalledTimes(1);
     });
 
     it('merges resolver output over the static fields, leaving omitted keys static', async () => {
@@ -273,7 +319,7 @@ describe('EventAudioPlayer', () => {
         ]);
     });
 
-    it('restarts playback indexing when the snapshot event list shrinks', async () => {
+    it('plays a SHORTER batch whole', async () => {
         const audioManager = createAudioManagerSpy();
         const binding: EventAudioBinding = {
             'combat:hit': { ref: HIT_REF },

@@ -24,6 +24,7 @@ import type { ClosedAnimationWindow } from './AnimationWindow.js';
 import type {
     ActionEnvelope,
     BaseGameSnapshot,
+    GameEvent,
     GameReduceContext,
     PipelineContext,
     PlayerId,
@@ -37,6 +38,15 @@ import { TURN_MEMENTO_RETENTION } from './UndoManager.js';
 import { MAX_NESTED_DISPATCH, RecursiveDispatchError } from './RecursiveDispatchError.js';
 export { ActionSchemaError, StateReducer } from './StateReducer.js';
 export { MAX_NESTED_DISPATCH, RecursiveDispatchError } from './RecursiveDispatchError.js';
+
+/**
+ * Shared empty outbox for the Stage 0 drain in `process()`. FROZEN because it
+ * is shared: one reducer appending in place would
+ * otherwise leave its event on every later drained snapshot in the process
+ * rather than on its own — Invariant #43 forbids that append, and the freeze
+ * turns it from silent contamination into a throw at the offending line.
+ */
+const EMPTY_EVENTS: readonly GameEvent[] = Object.freeze([]);
 
 // ─── Error classes ────────────────────────────────────────────────────────────
 
@@ -354,7 +364,34 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
      *   - `TickContractError`        — Stage 5: the tick did not advance by one
      *                                  (development builds only).
      */
-    process(snapshot: Readonly<TState>, action: ActionEnvelope): TState {
+    process(incoming: Readonly<TState>, action: ActionEnvelope): TState {
+        // ── Stage 0 — event outbox drain (§4.2) ────────────────────────────
+        // `snapshot.events` is a per-ACTION OUTBOX, not a ledger: it holds the
+        // events of the action being applied and nothing older.
+        //
+        // The drain lives here rather than in the `engine:tick` reduce because
+        // only here does it hold for every game. `resolveTickerHz` returns
+        // `null` for a `realtime: false` manifest, so outside the `CHIMERA_E2E`
+        // forced-interval seam the host builds no ticker for such a game, and a
+        // beat-scoped rule would leave a shipped session of it accumulating for
+        // the life of the session rather than of one action.
+        //
+        // Gated on `#depth === 0`: a nested dispatch (a fired timer's action)
+        // belongs to the OUTER action's outbox and must add to it, never
+        // replace it.
+        //
+        // The drained value is what every later comparison in this frame reads,
+        // and that is load-bearing: `#isClockOnlyTick` compares field
+        // references, so measuring against the un-drained `incoming` instead
+        // would push the first idle beat after every event off the tick-only
+        // broadcast onto a full one. The `length > 0` guard is a cost choice —
+        // an outbox that is already empty is handed back untouched, with no
+        // snapshot copy to pay for.
+        const snapshot: Readonly<TState> =
+            this.#depth === 0 && incoming.events.length > 0
+                ? { ...incoming, events: EMPTY_EVENTS }
+                : incoming;
+
         // ── Stage 1 — tick validation + resolve ────────────────────────────
         if (action.tick !== snapshot.tick) {
             throw new StaleActionError(action.tick, snapshot.tick);

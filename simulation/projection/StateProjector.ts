@@ -9,7 +9,7 @@
  *   1. Exclude fog-hidden entities entirely (Invariant #1 / fog-of-war).
  *   2. Mask surviving entities via `VisibilityRules.maskEntity`.
  *   3. Mask each player's state via `VisibilityRules.maskPlayerState`.
- *   4. Filter the tick's events via `VisibilityRules.filterEvents`.
+ *   4. Filter the applied action's events via `VisibilityRules.filterEvents`.
  *
  * Architecture references: §4.6, §8
  * Invariants upheld:

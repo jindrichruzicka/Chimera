@@ -33,6 +33,7 @@ import { ActionRegistry, UnknownActionTypeError } from './ActionRegistry.js';
 import type {
     BaseGameSnapshot,
     ActionEnvelope,
+    GameEvent,
     PlayerId,
     ActionDefinition,
     ReduceContext,
@@ -49,6 +50,7 @@ import {
     engineEndTurnDefinition,
     engineSyncRequestDefinition,
     engineReturnToLobbyDefinition,
+    engineStartGameDefinition,
     engineTickDefinition,
     registerEngineActions,
 } from './EngineActions.js';
@@ -2412,5 +2414,244 @@ describe('ActionPipeline — the one-tick-per-action rule', () => {
         expect(() =>
             pipeline.process(makeSnapshot(4), makeEnvelope(4, 'game:advance')),
         ).not.toThrow();
+    });
+});
+
+// ─── The event outbox drain (§4.2) ───────────────────────────────────────────
+
+/**
+ * `snapshot.events` is a PER-ACTION outbox, not a ledger: the pipeline empties
+ * it before every OUTER action's reduce, so the array a reducer sees holds
+ * exactly the events that action and its nested dispatches produced.
+ *
+ * The drain sits at the top of `process()` rather than inside the `engine:tick`
+ * reduce because `resolveTickerHz` returns `null` for a `realtime: false`
+ * manifest — outside the `CHIMERA_E2E` forced-interval seam, the host builds no
+ * ticker for such a game. `apps/tactics/simulation/actions.ts` appends events
+ * under exactly such a manifest, so a beat-scoped rule would leave a shipped
+ * session accumulating for its whole life.
+ */
+describe('ActionPipeline — snapshot.events retention (§4.2)', () => {
+    const OUTBOX_GAME_ID = 'outbox-game';
+
+    const makeOutboxSnapshot = (
+        events: readonly { readonly type: string }[],
+    ): BaseGameSnapshot => ({
+        tick: 0,
+        seed: 1,
+        players: { [PID]: { id: PID } },
+        entities: {},
+        phase: 'test' as BaseGameSnapshot['phase'],
+        events,
+        turnNumber: 0,
+        timers: {},
+        gameResult: null,
+    });
+
+    /** Appends one `{ type }` to the outbox and advances the tick. */
+    const makeEmitDef = (type: string): ActionDefinition<Record<string, never>> => ({
+        type,
+        parsePayload: () => ({}),
+        validate: () => ({ ok: true }),
+        reduce: (state) => ({
+            ...state,
+            tick: state.tick + 1,
+            events: [...state.events, { type }],
+        }),
+    });
+
+    it('hands the reduce an EMPTY outbox even when the incoming snapshot carries events', () => {
+        const registry = new ActionRegistry();
+        let seen: readonly { readonly type: string }[] | undefined;
+        registry.register({
+            type: 'game:observe',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state) => {
+                seen = state.events;
+                return { ...state, tick: state.tick + 1 };
+            },
+        } satisfies ActionDefinition<Record<string, never>>);
+        const pipeline = new ActionPipeline(registry);
+
+        const next = pipeline.process(
+            makeOutboxSnapshot([{ type: 'game:stale' }]),
+            makeEnvelope(0, 'game:observe'),
+        );
+
+        expect(seen).toEqual([]);
+        expect(next.events).toEqual([]);
+    });
+
+    it('carries only the events THIS action emitted, never the previous action’s', () => {
+        // The rule in one sequence: `game:alpha` emits, `game:beta` emits, and
+        // beta's snapshot holds beta's event alone.
+        const registry = new ActionRegistry();
+        registry.register(makeEmitDef('game:alpha'));
+        registry.register(makeEmitDef('game:beta'));
+        const pipeline = new ActionPipeline(registry);
+
+        const afterAlpha = pipeline.process(makeOutboxSnapshot([]), makeEnvelope(0, 'game:alpha'));
+        const afterBeta = pipeline.process(afterAlpha, makeEnvelope(1, 'game:beta'));
+
+        expect(afterAlpha.events).toEqual([{ type: 'game:alpha' }]);
+        expect(afterBeta.events).toEqual([{ type: 'game:beta' }]);
+    });
+
+    it('never mutates the incoming snapshot or its events array', () => {
+        const registry = new ActionRegistry();
+        registry.register(makeEmitDef('game:alpha'));
+        const pipeline = new ActionPipeline(registry);
+        const incomingEvents = [{ type: 'game:stale' }];
+        const incoming = makeOutboxSnapshot(incomingEvents);
+        const before = structuredClone(incoming);
+
+        pipeline.process(incoming, makeEnvelope(0, 'game:alpha'));
+
+        expect(incoming.events).toBe(incomingEvents);
+        expect(incoming).toStrictEqual(before);
+    });
+
+    it('hands out a FROZEN outbox, so an in-place append throws rather than poisoning later drains', () => {
+        // The drained array is one module-level constant shared by every
+        // snapshot drained in this process. Invariant #43 forbids a reducer
+        // mutating its input, but nothing enforced it here: without the freeze
+        // one in-place append would leave that event on every later drained
+        // snapshot in the process, not only on the offender's own.
+        const registry = new ActionRegistry();
+        registry.register({
+            type: 'game:mutates',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state) => {
+                (state.events as GameEvent[]).push({ type: 'game:pushed' });
+                return { ...state, tick: state.tick + 1 };
+            },
+        } satisfies ActionDefinition<Record<string, never>>);
+        const pipeline = new ActionPipeline(registry);
+
+        expect(() =>
+            pipeline.process(
+                makeOutboxSnapshot([{ type: 'game:stale' }]),
+                makeEnvelope(0, 'game:mutates'),
+            ),
+        ).toThrow(TypeError);
+    });
+
+    it('leaves an already-empty outbox as the SAME reference, allocating nothing', () => {
+        // The `length > 0` guard: an action whose incoming outbox is already
+        // empty is handed its own snapshot back, with no snapshot copy and no
+        // array allocation to pay for.
+        const registry = new ActionRegistry();
+        registry.registerEngineAction(engineTickDefinition);
+        const broadcast = vi.fn();
+        const broadcastTick = vi.fn();
+        const pipeline = new ActionPipeline(registry, {
+            gameId: OUTBOX_GAME_ID,
+            context: { broadcast, broadcastTick },
+        });
+        const idle = makeOutboxSnapshot([]);
+
+        const next = pipeline.process(idle, makeEnvelope(0, 'engine:tick', { seed: 1 }));
+
+        expect(next.events).toBe(idle.events);
+        expect(broadcast).not.toHaveBeenCalled();
+        expect(broadcastTick).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the beat AFTER an eventful one on the clock-only branch', () => {
+        // `#isClockOnlyTick` compares against the DRAINED input, so emptying a
+        // carried-over outbox is not itself a change that costs a full
+        // broadcast. Without this the first idle beat after every event would
+        // pay one.
+        const registry = new ActionRegistry();
+        registry.registerEngineAction(engineTickDefinition);
+        const broadcast = vi.fn();
+        const broadcastTick = vi.fn();
+        const pipeline = new ActionPipeline(registry, {
+            gameId: OUTBOX_GAME_ID,
+            context: { broadcast, broadcastTick },
+        });
+
+        const next = pipeline.process(
+            makeOutboxSnapshot([{ type: 'game:stale' }]),
+            makeEnvelope(0, 'engine:tick', { seed: 1 }),
+        );
+
+        expect(next.events).toEqual([]);
+        expect(broadcast).not.toHaveBeenCalled();
+        expect(broadcastTick).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT drain a NESTED dispatch, so two fired timers both reach the same outbox', () => {
+        // The depth gate's killer: a drain that ran at every depth would let
+        // the second fired timer erase the first one's event and the beat would
+        // broadcast `['game:beta']` alone.
+        const registry = new ActionRegistry();
+        registry.registerEngineAction(engineTickDefinition);
+        registry.register(makeEmitDef('game:alpha'));
+        registry.register(makeEmitDef('game:beta'));
+        const pipeline = new ActionPipeline(registry);
+        const timers: Record<TimerId, GameTimer> = {
+            ['t-alpha' as TimerId]: {
+                id: 't-alpha' as TimerId,
+                remainingTicks: 1,
+                intervalTicks: 0,
+                actionType: 'game:alpha',
+                payload: {},
+                active: true,
+            },
+            ['t-beta' as TimerId]: {
+                id: 't-beta' as TimerId,
+                remainingTicks: 1,
+                intervalTicks: 0,
+                actionType: 'game:beta',
+                payload: {},
+                active: true,
+            },
+        };
+
+        const next = pipeline.process(
+            { ...makeOutboxSnapshot([]), timers },
+            makeEnvelope(0, 'engine:tick', { seed: 1 }),
+        );
+
+        expect(next.events).toEqual([{ type: 'game:alpha' }, { type: 'game:beta' }]);
+    });
+
+    it('starts a match with an EMPTY outbox — engine:start_game does not carry the lobby’s events', () => {
+        // `events` stays in BASE_SNAPSHOT_KEYS, so `baseSnapshotOnly()` copies
+        // whatever array it is given; what makes the new match clean is that
+        // the boundary action is itself an outer action and is handed a drained
+        // snapshot.
+        const registry = new ActionRegistry();
+        registry.registerEngineAction(engineStartGameDefinition);
+        const pipeline = new ActionPipeline(registry);
+        const lobby: BaseGameSnapshot = {
+            ...makeOutboxSnapshot([{ type: 'lobby:chat' }]),
+            hostPlayerId: PID,
+        };
+
+        const next = pipeline.process(
+            lobby,
+            makeEnvelope(0, 'engine:start_game', { playerIds: [PID] }),
+        );
+
+        expect(next.events).toEqual([]);
+    });
+
+    it('returns to the lobby with an EMPTY outbox', () => {
+        const registry = new ActionRegistry();
+        registry.registerEngineAction(engineReturnToLobbyDefinition);
+        const pipeline = new ActionPipeline(registry);
+        const match: BaseGameSnapshot = {
+            ...makeOutboxSnapshot([{ type: 'game:alpha' }]),
+            phase: 'playing' as BaseGameSnapshot['phase'],
+            hostPlayerId: PID,
+        };
+
+        const next = pipeline.process(match, makeEnvelope(0, 'engine:return_to_lobby'));
+
+        expect(next.events).toEqual([]);
     });
 });

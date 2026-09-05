@@ -27,7 +27,7 @@ interface GameSnapshot {
     players: Record<PlayerId, BasePlayerState>;
     entities: Record<EntityId, BaseEntityState>;
     phase: GamePhase;
-    events: GameEvent[]; // All events this tick (unfiltered)
+    events: GameEvent[]; // Per-action OUTBOX (unfiltered) — see "Event outbox retention"
     turnClock?: { activePlayerId: PlayerId; deadlineMs: number };
 }
 
@@ -175,6 +175,7 @@ The engine **rejects** any attempt to register an action with the `engine:` pref
 Games cannot reorder or skip steps. They supply `ActionDefinition` strategies for stages 2, 4, and 5 only.
 
 ```
+Stage 0  drain()      — empty snapshot.events for an OUTER action (depth 0)  → see "Event outbox retention"
 Stage 1  resolve()    — registry.resolve(action.type)                       → ActionDefinition | UnknownActionTypeError
 Stage 2  parse()      — definition.parsePayload(action.payload)             → TPayload | ActionSchemaError
 Terminal gate         — if snapshot.gameResult !== null, reject with match_already_resolved,
@@ -195,6 +196,20 @@ interface ActionPipeline<TState extends BaseGameSnapshot> {
     process(state: Readonly<TState>, action: EngineAction, context: PipelineContext): TState;
 }
 ```
+
+### Event outbox retention
+
+`GameSnapshot.events` is a per-**action** outbox, not a ledger. Stage 0 empties it before every outer action's reduce, so the array a reducer is handed holds the events of that action and of any action it dispatches, and nothing older.
+
+Rules a game author must respect:
+
+- **Append to what you were handed; never assume an earlier action's events are still there.** A reducer that wants a durable record of something must keep its own snapshot field and declare that field's retention.
+- **A consumer plays a batch whole.** There is no already-seen prefix to index past, and a played-count cursor drops any batch no longer than the one before it. `renderer/components/audio/EventAudioPlayer.tsx` is the reference consumer.
+- The drain never runs on a **nested** dispatch (`#depth > 0`): a fired timer's action adds to the outer action's outbox rather than replacing it.
+- The drained array is **frozen**, because one module-level constant is shared by every drained snapshot in the process: an in-place append (already forbidden by Invariant #43) would otherwise contaminate every later drain rather than only the offender's own snapshot.
+- Every later comparison inside the same `process()` frame reads the **drained** value. `#isClockOnlyTick` compares field references, so measuring against the un-drained input instead would push the first idle beat after every event off the `broadcastTick` (clock-only) branch onto a full per-viewer broadcast.
+
+The rule is enforced per action rather than per beat because a game the host runs no ticker for does not beat: `resolveTickerHz` returns `null` for a `realtime: false` manifest, so outside the `CHIMERA_E2E` forced-interval seam no `RealtimeTicker` is built for it. A beat-scoped rule would leave a shipped session of such a game accumulating events for the life of the **session** — `events` is in `BASE_SNAPSHOT_KEYS`, so `baseSnapshotOnly()` carries it across both match boundaries.
 
 ### Role-Based Pipeline Contexts (ISP)
 

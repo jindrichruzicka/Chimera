@@ -59,23 +59,25 @@ const EMPTY_EVENTS: readonly GameEvent[] = [];
 export function EventAudioPlayer({ binding }: EventAudioPlayerProps): null {
     const audioManager = useAudioManager();
     const events = useGameStore((state) => state.snapshot?.events ?? EMPTY_EVENTS);
-    const playedEventCountRef = useRef(events.length);
+    // `snapshot.events` is a per-ACTION outbox (§4.2): every snapshot carries
+    // the events of one applied action and nothing older, so a batch is played
+    // WHOLE — there is no already-heard prefix to index past, and a played
+    // COUNT would silently drop a batch that happens to be no longer than the
+    // one before it.
+    //
+    // What the ref still does is identity: the effect also re-runs when the
+    // `binding` prop or the audio manager changes identity, and neither hands
+    // it a new batch. Seeded with the mount-time array so events already on the
+    // snapshot when this player mounts are not replayed.
+    const playedEventsRef = useRef<readonly GameEvent[]>(events);
 
     useEffect(() => {
-        const previousEventCount = playedEventCountRef.current;
-        const firstUnplayedEventIndex = events.length < previousEventCount ? 0 : previousEventCount;
-        playedEventCountRef.current = events.length;
+        if (playedEventsRef.current === events) {
+            return;
+        }
+        playedEventsRef.current = events;
 
-        for (
-            let eventIndex = firstUnplayedEventIndex;
-            eventIndex < events.length;
-            eventIndex += 1
-        ) {
-            const event = events[eventIndex];
-            if (event === undefined) {
-                continue;
-            }
-
+        for (const event of events) {
             const entry = binding[event.type];
             if (entry === undefined) {
                 continue;

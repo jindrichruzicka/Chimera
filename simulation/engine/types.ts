@@ -113,9 +113,16 @@ export interface BaseEntityState {
 }
 
 /**
- * A game event recorded during a tick. All events are stored unfiltered on
- * `GameSnapshot.events`; `StateProjector` filters them per viewer when
- * producing `PlayerSnapshot.events`.
+ * A game event emitted by the action currently being applied.
+ *
+ * RETENTION (§4.2): `GameSnapshot.events` is a per-ACTION OUTBOX, not a ledger.
+ * `ActionPipeline.process()` empties it before every OUTER action's reduce, so
+ * it holds the events of that action and of any action it dispatches, and
+ * nothing older. A reducer appends to what it was handed; it must never rely on
+ * an earlier action's events still being there.
+ *
+ * All events are stored unfiltered; `StateProjector` filters them per viewer
+ * when producing `PlayerSnapshot.events`.
  */
 export interface GameEvent {
     readonly type: string;
