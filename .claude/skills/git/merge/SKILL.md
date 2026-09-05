@@ -23,7 +23,7 @@ bash .claude/skills/git/merge/scripts/check-and-merge.sh --dry-run  # checks + r
 4. No downmerged main commits.
 5. First commit (oldest vs `main`) has a non-empty body.
 6. All later commits start with `fixup!`.
-7. `pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm verify:packaged-bundle` all exit 0.
+7. `pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm verify:packaged-bundle` all exit 0. Each step's output is captured to its own file under a `chimera-merge-gate-*` temp directory; a red step is reported with its label, that file's path and the file's last 60 lines, and the directory is removed when the gate is green.
 
 Any failure → print all problems, exit non-zero, do not touch `main`.
 
@@ -61,6 +61,16 @@ Auto on success: `git branch -d <branch>` + `git push origin --delete <branch>` 
   2. First commit (a1b2c3d4) has no body.
   3. Non-fixup commits after the first:
        e5f6a7b8: add more stuff
+```
+
+A red gate step is reported the same way, with its own output rather than a label alone:
+
+```
+[error] Pre-merge gate failed:
+  ✗ pnpm test   (full output: /var/folders/…/chimera-merge-gate-XXXXXX.149XO84xpV/pnpm_test.log)
+  ── last 60 lines ──
+    FAIL  |chimera| electron/main/index.test.ts > … > …
+    …
 ```
 
 Never merge partially; resolve all problems before re-running.

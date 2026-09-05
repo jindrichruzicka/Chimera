@@ -37,6 +37,7 @@
         "verify:version-alignment:selftest": "tsx tools/version-alignment.ts --self-test",
         "verify:packaged-bundle": "tsx tools/verify-packaged-bundle.ts",
         "verify:invariants": "bash .claude/skills/invariants/scripts/check-invariants.sh && bash .claude/skills/invariants/tests/check-invariants.test.sh",
+        "verify:merge-skill": "bash .claude/skills/git/merge/tests/check-and-merge.test.sh",
         "verify:toolchain-snapshot": "tsx tools/gen-toolchain.ts --check",
         "verify:showcase-glb": "tsx tools/gen-showcase-animated-glb.ts --check",
         "gen:toolchain": "tsx tools/gen-toolchain.ts",

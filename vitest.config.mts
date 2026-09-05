@@ -9,13 +9,18 @@ const workspaceRoot = import.meta.dirname;
 // the renderer suite. The bottleneck is one main thread (Vite transforms run
 // there), so the cap is a small constant rather than core-scaled.
 //
-// What the cap does NOT buy is immunity from birpc's `onTaskUpdate` timeout.
-// That reply is read by the WORKER, and only when its event loop is free: a
-// test file that holds the loop synchronously for a minute — a chain of
-// `spawnSync` eslint runs, measured on the CI runner at this very cap — ends
-// with every test green and one unhandled `[vitest-worker]: Timeout calling
-// "onTaskUpdate"`, which fails the run. The cure lives in the test file, which
-// must spawn asynchronously.
+// What the cap does NOT buy is immunity from birpc's reply timeout — a
+// hard-coded 60 s in the installed vitest, with no config knob. Two readings
+// of `[vitest-worker]: Timeout calling "..."` have been measured here. One: the
+// reply is read by the WORKER, and only when its event loop is free, so a test
+// file that holds the loop synchronously for a minute — a chain of `spawnSync`
+// eslint runs, measured on the CI runner at this very cap — ends with every
+// test green and one unhandled timeout; that cure lives in the test file,
+// which must spawn asynchronously. Two: a host that stops scheduling the
+// worker for longer than the timer — a macOS Maintenance Sleep during an
+// unattended run — lands the timeout in whichever call is in flight, `prepare`
+// included, before any test code has run; that one is not the test file's to
+// cure. Neither reading is the only one.
 const MAX_TEST_FORKS = 1;
 
 const VIRTUAL_PREFIX = '\0chimera-raw-css:';

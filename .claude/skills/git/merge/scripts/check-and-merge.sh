@@ -112,11 +112,19 @@ echo
 # full gate against the current branch state. If any check fails the merge is
 # aborted with the same severity as a structural problem above.
 info "Running pre-merge gate (format:check, lint, typecheck, test, verify:packaged-bundle)..."
+# Each step's stdout and stderr go to their own file: a red `pnpm test` has
+# to name its test, and the vitest summary that does so sits in the last few
+# dozen lines of that output. The directory is kept on failure, so the printed
+# paths stay valid, and removed when the gate is green.
+GATE_LOG_DIR=$(mktemp -d -t chimera-merge-gate-XXXXXX)
 GATE_FAILED=()
+GATE_FAILED_LOGS=()
 run_gate_step() {
   local label="$1"; shift
-  if ! "$@" >/dev/null 2>&1; then
+  local log="${GATE_LOG_DIR}/${label// /_}.log"
+  if ! "$@" >"$log" 2>&1; then
     GATE_FAILED+=("$label")
+    GATE_FAILED_LOGS+=("$log")
   fi
 }
 run_gate_step "pnpm format:check" pnpm format:check
@@ -131,15 +139,17 @@ run_gate_step "pnpm verify:packaged-bundle" pnpm verify:packaged-bundle
 if [[ ${#GATE_FAILED[@]} -gt 0 ]]; then
   echo
   error "Pre-merge gate failed:"
-  for step in "${GATE_FAILED[@]}"; do
-    echo -e "  ${RED}✗${RESET} ${step}"
+  for i in "${!GATE_FAILED[@]}"; do
+    echo -e "  ${RED}✗${RESET} ${GATE_FAILED[$i]}   (full output: ${GATE_FAILED_LOGS[$i]})"
+    echo "  ── last 60 lines ──"
+    tail -n 60 "${GATE_FAILED_LOGS[$i]}" | sed 's/^/    /'
   done
   echo
-  warn "Run the failing command manually to see the full output, fix the issues,"
-  warn "commit a fixup, and re-run this script."
+  warn "Fix the issues above, commit a fixup, and re-run this script."
   exit 1
 fi
 
+rm -rf "$GATE_LOG_DIR"
 info "Pre-merge gate passed."
 echo
 
