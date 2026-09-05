@@ -262,10 +262,10 @@ export const AnimationWindowManager = Object.freeze({
         registry: AnimationWindowRegistry,
         liveEntityIds: ReadonlySet<EntityId>,
     ): AnimationWindowSweep {
-        const entries = Object.entries(registry);
-        if (entries.length === 0) {
+        if (isEmptyRegistry(registry)) {
             return { next: registry, closed: EMPTY_CLOSED };
         }
+        const entries = Object.entries(registry);
 
         const kept: [AnimationWindowId, AnimationWindowRecord][] = [];
         const closed: ClosedAnimationWindow[] = [];
@@ -289,4 +289,23 @@ export const AnimationWindowManager = Object.freeze({
 
         return { next: Object.fromEntries(kept), closed };
     },
+
+    /**
+     * Whether the registry holds no window. Allocation-free, so the beat pass
+     * can ask before it builds the O(entities) live-id set the sweep needs; the
+     * registry is a plain object, so the walk is guarded against keys a
+     * polluted `Object.prototype` would otherwise contribute.
+     */
+    isEmpty(registry: AnimationWindowRegistry): boolean {
+        return isEmptyRegistry(registry);
+    },
 } as const);
+
+function isEmptyRegistry(registry: AnimationWindowRegistry): boolean {
+    for (const key in registry) {
+        if (Object.hasOwn(registry, key)) {
+            return false;
+        }
+    }
+    return true;
+}

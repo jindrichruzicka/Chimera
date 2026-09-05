@@ -2519,15 +2519,44 @@ describe('engine:tick — the per-beat pass (F82)', () => {
 
     it('leaves an empty window registry as the same reference', () => {
         // A game that has closed every window keeps an empty registry on the
-        // snapshot forever. The pass writes back whatever the sweep returned,
-        // so this is the sweep's own empty fast path reaching the snapshot: a
-        // pass that rebuilt the field instead would hand every later beat a
-        // fresh object.
+        // snapshot forever; a pass that rebuilt the field would hand every later
+        // beat a fresh object. How the pass avoids that is pinned by `builds no
+        // entity key set on a beat whose window registry is present but empty`.
         const registry: AnimationWindowRegistry = {};
         const snapshot = makeBeatSnapshot({ animationWindows: registry });
 
         const next = engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, stubCtx);
 
         expect(next.animationWindows).toBe(registry);
+    });
+
+    it('builds no entity key set on a beat whose window registry is present but empty', () => {
+        // The registry is sticky: every close path leaves `{}` behind, so once a
+        // game has opened any window this is the shape of every later beat. The
+        // live-entity set is O(entities) and only matters when a window can be
+        // tested against it, so an empty registry must never trigger the walk.
+        const snapshot = makeBeatSnapshot({ animationWindows: {} });
+        const keys = vi.spyOn(Object, 'keys');
+        try {
+            engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, stubCtx);
+
+            // Identity, not equality: other walks may legitimately key other
+            // records this beat; none may key the entities record.
+            expect(keys.mock.calls.some(([record]) => record === snapshot.entities)).toBe(false);
+        } finally {
+            keys.mockRestore();
+        }
+    });
+
+    it('builds the entity key set on a beat whose registry holds a window (control)', () => {
+        const snapshot = makeBeatSnapshot({ animationWindows: openWindow(3) });
+        const keys = vi.spyOn(Object, 'keys');
+        try {
+            engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, stubCtx);
+
+            expect(keys.mock.calls.some(([record]) => record === snapshot.entities)).toBe(true);
+        } finally {
+            keys.mockRestore();
+        }
     });
 });

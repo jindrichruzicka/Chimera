@@ -338,12 +338,15 @@ export const engineTickDefinition: ActionDefinition<EngineTickPayload> = {
         nextState = advanceTimeScale(nextState);
 
         // A game that declares no window never carries the field, so it pays
-        // nothing here. Once the field exists the sweep runs every beat and
-        // `AnimationWindowManager.advance` handles the empty registry itself,
-        // handing back the same reference.
+        // nothing here. Once the field exists it stays: the close paths leave
+        // `{}` behind rather than deleting the key. The live-entity set the
+        // sweep needs is O(entities), so it is built only when there is a
+        // window to test against it; an empty registry is neither swept nor
+        // written back, which leaves the field as the same reference and keeps
+        // the pipeline's clock-only broadcast engaged on an idle beat.
         const windows = nextState.animationWindows;
         let closedWindows: readonly ClosedAnimationWindow[] = EMPTY_CLOSED;
-        if (windows !== undefined) {
+        if (windows !== undefined && !AnimationWindowManager.isEmpty(windows)) {
             const liveEntityIds = new Set(Object.keys(nextState.entities) as EntityId[]);
             const sweep = AnimationWindowManager.advance(windows, liveEntityIds);
             closedWindows = sweep.closed;

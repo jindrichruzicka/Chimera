@@ -22,7 +22,9 @@
  *   A window opened for N beats is present on exactly N consecutive `advance`
  *     results and reported `expired` on the next one.
  *   `advance` on an empty registry returns the INPUT reference and a frozen,
- *     shared empty closed-list.
+ *     shared empty closed-list, and builds no key or entry array on the way.
+ *   `isEmpty` is true for an empty registry, false once a window is open, and
+ *     stays true for an empty registry under a polluted `Object.prototype`.
  *   `open` refuses a non-integer or non-positive duration and a float payload.
  *   Every verb is pure: a deep-frozen input throws nothing and still equals a
  *     pre-call clone.
@@ -42,7 +44,7 @@
  * `simulation/index.ts` and `simulation/contracts/index.ts`.
  */
 
-import { describe, it, expect, expectTypeOf } from 'vitest';
+import { describe, it, expect, expectTypeOf, vi } from 'vitest';
 
 import type {
     AnimationWindowId,
@@ -562,6 +564,59 @@ describe('AnimationWindowManager.advance — empty registry', () => {
 
         expect(closed).toHaveLength(1);
         expect(closed).not.toBe(AnimationWindowManager.advance({}, ALL_LIVE).closed);
+    });
+
+    it('enumerates nothing on the empty path — no key or entry array is built', () => {
+        const registry: AnimationWindowRegistry = {};
+        const entries = vi.spyOn(Object, 'entries');
+        const keys = vi.spyOn(Object, 'keys');
+        try {
+            AnimationWindowManager.advance(registry, ALL_LIVE);
+
+            expect(entries.mock.calls.some(([record]) => record === registry)).toBe(false);
+            expect(keys.mock.calls.some(([record]) => record === registry)).toBe(false);
+        } finally {
+            entries.mockRestore();
+            keys.mockRestore();
+        }
+    });
+});
+
+// ─── isEmpty — the allocation-free emptiness probe ───────────────────────────
+
+describe('AnimationWindowManager.isEmpty', () => {
+    it('is true for a registry with no windows', () => {
+        expect(AnimationWindowManager.isEmpty({})).toBe(true);
+    });
+
+    it('is false for a registry holding one window', () => {
+        const opened = AnimationWindowManager.open(makeState(), {
+            id: WINDOW_ID,
+            ownerId: OWNER,
+            durationBeats: 1,
+        }).next;
+
+        expect(AnimationWindowManager.isEmpty(opened.animationWindows ?? {})).toBe(false);
+    });
+
+    it('stays true for an empty registry while Object.prototype carries an enumerable key', () => {
+        // The registry is a plain object. A probe that read inherited keys
+        // would call a polluted-but-empty registry occupied and re-arm the
+        // O(entities) sweep on every beat.
+        Object.defineProperty(Object.prototype, 'polluted', {
+            value: { id: 'polluted', ownerId: OWNER, remainingBeats: 1, payload: {} },
+            enumerable: true,
+            configurable: true,
+            writable: true,
+        });
+        let result: boolean;
+        try {
+            result = AnimationWindowManager.isEmpty({});
+        } finally {
+            Reflect.deleteProperty(Object.prototype, 'polluted');
+        }
+
+        expect(result).toBe(true);
     });
 });
 

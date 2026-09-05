@@ -2065,6 +2065,27 @@ describe('ActionPipeline — GameDefinition.onBeat wiring', () => {
         expect(broadcastTick).toHaveBeenCalledTimes(1);
     });
 
+    it('keeps an idle engine:tick on the broadcastTick branch when the window registry is present but empty', () => {
+        // The registry is sticky after the first window ever opened. The beat
+        // pass must leave the empty field as the same reference, or every later
+        // idle beat would fall off the clock-only path and pay a full broadcast.
+        const r = makeTickRegistry();
+        const broadcast = vi.fn();
+        const broadcastTick = vi.fn();
+        const p = new ActionPipeline(r, { gameId: GAME_ID, context: { broadcast, broadcastTick } });
+        const registry = {};
+        const snapshot: BaseGameSnapshot = {
+            ...makeTickSnapshot([PID]),
+            animationWindows: registry,
+        };
+
+        const next = p.process(snapshot, makeEnvelope(0, 'engine:tick', { seed: 1 }));
+
+        expect(broadcast).not.toHaveBeenCalled();
+        expect(broadcastTick).toHaveBeenCalledTimes(1);
+        expect(next.animationWindows).toBe(registry);
+    });
+
     it('keeps the broadcastTick branch when onBeat returns a fresh SHALLOW COPY', () => {
         // Measured, and worth stating because the opposite is the natural
         // guess: `#isClockOnlyTick` compares the snapshots FIELD BY FIELD, so a
