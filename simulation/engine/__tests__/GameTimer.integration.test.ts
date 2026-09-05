@@ -8,12 +8,6 @@
  *   - Save round-trip serialization (Invariant #54)
  *
  * Architecture reference: §4.20 — Game Timers
- * Issue: #408 — Write unit tests for TimerManager and bounded dispatch
- *
- * Related tasks:
- *   - T02 (#405): Recursion limit integration
- *   - T03 (#406): Non-fatal validation integration
- *   - T04 (#407): Save round-trip integration
  *
  * Invariants upheld:
  *   #54 — GameTimer lives in GameSnapshot.timers; serialises, loads, replays.
@@ -29,6 +23,8 @@ import { registerEngineActions } from '../EngineActions.js';
 import type { TimerId, TimerRegistry } from '../GameTimer.js';
 import type { ActionDefinition, ActionEnvelope, BaseGameSnapshot, PlayerId } from '../types.js';
 import { isReduceContext, playerId as toPlayerId } from '../types.js';
+import type { SaveFile } from '../../persistence/SaveFile.js';
+import { CURRENT_SCHEMA_VERSION, createDefaultMigrator } from '../../persistence/SaveMigrator.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -70,7 +66,7 @@ function makeEnvelope(
     };
 }
 
-// ─── Recursion depth guard (Invariant #89, T02 #405) ──────────────────────────
+// ─── Recursion depth guard (Invariant #89) ────────────────────────────────────
 
 describe('GameTimer integration — re-entrant dispatch depth guard', () => {
     let pipeline: ActionPipeline;
@@ -159,7 +155,7 @@ describe('GameTimer integration — re-entrant dispatch depth guard', () => {
     });
 });
 
-// ─── Non-fatal validation failure (T03 #406) ───────────────────────────────────
+// ─── Non-fatal validation failure ──────────────────────────────────────────────
 
 describe('GameTimer integration — non-fatal validation failure', () => {
     let pipeline: ActionPipeline;
@@ -294,7 +290,7 @@ describe('GameTimer integration — non-fatal validation failure', () => {
     });
 });
 
-// ─── Save round-trip serialization (T04 #407) ───────────────────────────────────
+// ─── Save round-trip serialization ──────────────────────────────────────────────
 
 describe('GameTimer integration — save round-trip serialization', () => {
     let pipeline: ActionPipeline;
@@ -464,5 +460,138 @@ describe('GameTimer integration — save round-trip serialization', () => {
             damage: 5,
             target: 'enemy-1',
         });
+    });
+});
+
+// ─── Fired one-shot removal (§4.20) ──────────────────────────────────────────
+
+/**
+ * A fired one-shot leaves `snapshot.timers` in the same `engine:tick` that
+ * fired it. The registry is snapshot-resident, so a `{ active: false }`
+ * tombstone would sit in every later save checkpoint for the rest of the
+ * session — one dead entry per fire.
+ *
+ * Pre-existing inactive entries are NOT swept: a cancelled timer, or a
+ * tombstone written by an engine that still left them behind, loads and is
+ * skipped exactly as before, so no save migration is needed.
+ */
+describe('GameTimer integration — fired one-shot removal', () => {
+    let pipeline: ActionPipeline;
+
+    beforeEach(() => {
+        const registry = new ActionRegistry();
+        registerEngineActions(registry);
+        registry.register({
+            type: 'game:fired',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state) => ({ ...state, tick: state.tick + 1 }),
+        } satisfies ActionDefinition<Record<string, never>>);
+        pipeline = new ActionPipeline(registry);
+    });
+
+    it('drops the fired one-shot from snapshot.timers in the tick that fired it', () => {
+        const snapshot = makeSnapshot({
+            timers: {
+                ['one-shot' as TimerId]: {
+                    id: 'one-shot' as TimerId,
+                    remainingTicks: 1,
+                    intervalTicks: 0,
+                    actionType: 'game:fired',
+                    payload: {},
+                    active: true,
+                },
+            },
+        });
+
+        const next = pipeline.process(snapshot, makeEnvelope('engine:tick', hostId, { seed: 7 }));
+
+        // The child dispatch ran (tick advanced twice) AND the entry is gone —
+        // absent, not present-and-inactive.
+        expect(next.tick).toBe(2);
+        expect('one-shot' in next.timers).toBe(false);
+        expect(next.timers).toEqual({});
+    });
+
+    it('keeps snapshot.timers by reference on the beat after the fire', () => {
+        // With the entry removed the registry is `{}`, so the next beat takes
+        // `TimerManager.advance`'s fast path and `engine:tick` writes no new
+        // registry. A tombstone would have been skipped too, so this is not the
+        // removal's killer (the unit test's `toEqual({})` is); it pins that
+        // removal keeps the pipeline's clock-only broadcast reachable.
+        const snapshot = makeSnapshot({
+            timers: {
+                ['one-shot' as TimerId]: {
+                    id: 'one-shot' as TimerId,
+                    remainingTicks: 1,
+                    intervalTicks: 0,
+                    actionType: 'game:fired',
+                    payload: {},
+                    active: true,
+                },
+            },
+        });
+        const afterFire = pipeline.process(
+            snapshot,
+            makeEnvelope('engine:tick', hostId, { seed: 7 }),
+        );
+
+        const afterIdle = pipeline.process(
+            afterFire,
+            makeEnvelope('engine:tick', hostId, { seed: 7 }, afterFire.tick),
+        );
+
+        expect(afterIdle.timers).toBe(afterFire.timers);
+    });
+
+    it('loads a checkpoint carrying a tombstone through the migrator and ignores it', () => {
+        // A save written while fired one-shots were still tombstoned carries
+        // `{ active: false }` entries. No migration strips them: the chain
+        // leaves a current-version file untouched, the tombstone is skipped by
+        // `advance()` as any inactive entry is, and the registry is kept by
+        // reference because nothing in it is live.
+        const tombstone = {
+            id: 'spent' as TimerId,
+            remainingTicks: 0,
+            intervalTicks: 0,
+            actionType: 'game:fired',
+            payload: {},
+            active: false,
+        };
+        const checkpoint = makeSnapshot({ timers: { [tombstone.id]: tombstone } });
+        const file: SaveFile = {
+            header: {
+                schemaVersion: CURRENT_SCHEMA_VERSION,
+                engineVersion: '0.1.0',
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                slotId: 'autosave',
+                savedAt: 1_700_000_000_000,
+                turnNumber: 0,
+                playerNames: ['p1', 'p2'],
+            },
+            checkpoint,
+            deltaActions: [],
+            pendingCommitments: {},
+            stagedReveals: {},
+            session: {
+                matchId: 'match-fixture',
+                maxPlayers: 2,
+                seats: [
+                    { playerId: hostId, control: 'host', slotIndex: 0 },
+                    { playerId: guestId, control: 'remote', slotIndex: 1 },
+                ],
+            },
+        };
+
+        const loaded = createDefaultMigrator().migrate(file);
+        const next = pipeline.process(
+            loaded.checkpoint,
+            makeEnvelope('engine:tick', hostId, { seed: 7 }, loaded.checkpoint.tick),
+        );
+
+        expect(loaded.checkpoint.timers).toStrictEqual({ [tombstone.id]: tombstone });
+        expect(next.timers).toBe(loaded.checkpoint.timers);
+        expect(next.tick).toBe(loaded.checkpoint.tick + 1);
     });
 });

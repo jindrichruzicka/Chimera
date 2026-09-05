@@ -29,7 +29,8 @@ export interface GameTimer {
     /** Ticks remaining until next fire. Decremented by TimerManager.advance(). */
     readonly remainingTicks: number;
     /**
-     * 0 = one-shot: fires once when remainingTicks reaches 0, then marks inactive.
+     * 0 = one-shot: fires once when remainingTicks reaches 0 and is then removed
+     *     from the registry by `TimerManager.advance()`.
      * N = interval: resets remainingTicks to N after each fire.
      */
     readonly intervalTicks: number;
@@ -83,9 +84,16 @@ dispatch loop and runs the per-beat pass after it (Invariant #128). Read
 `simulation/engine/EngineActions.ts` for the body itself.
 
 ```typescript
-// The engine:tick reducer calls advance() before game-defined logic
-const { next, fired } = TimerManager.advance(state.timers);
-let nextState: BaseGameSnapshot = { ...state, timers: next };
+// The engine:tick reducer calls advance() before game-defined logic. When
+// nothing in the registry is active, advance() hands back the INPUT reference and
+// the reducer keeps snapshot.timers by reference, so the pipeline still sees an
+// idle beat as clock-only.
+const orig = state.timers;
+const { next, fired } = TimerManager.advance(orig);
+let nextState: BaseGameSnapshot =
+    next === orig
+        ? { ...state, tick: state.tick + 1 }
+        : { ...state, tick: state.tick + 1, timers: next };
 for (const { timerId, actionType, payload } of fired) {
     const envelope = { type: actionType, playerId, tick: nextState.tick, payload };
     try {

@@ -3,7 +3,6 @@
  *
  * Unit tests for GameTimer, TimerRegistry, and TimerManager.
  * Architecture reference: §4.20 — Game Timers
- * Issue: #404
  *
  * TDD: tests written first — red confirmed before implementation.
  *
@@ -180,13 +179,53 @@ describe('TimerManager.advance', () => {
         });
     });
 
-    it('marks a one-shot timer inactive after firing', () => {
+    it('REMOVES a fired one-shot timer from the registry rather than tombstoning it', () => {
+        // The registry is snapshot-resident: an inactive entry left behind
+        // would sit in every later save checkpoint for the rest of the
+        // session. Asserted by KEY ABSENCE, not by `?.active` being falsy,
+        // which a tombstone also satisfies.
         const registry = makeRegistry([
             makeTimer({ id: 'timer-1' as TimerId, remainingTicks: 1, intervalTicks: 0 }),
         ]);
         const { next } = TimerManager.advance(registry);
 
-        expect(next['timer-1' as TimerId]?.active).toBe(false);
+        expect('timer-1' in next).toBe(false);
+        expect(Object.keys(next)).toEqual([]);
+    });
+
+    it("keeps the fired one-shot's siblings, active and inactive alike", () => {
+        // Removal is by identity of the FIRED entry: a sibling still counting
+        // down keeps its slot, and a pre-existing inactive entry (a cancelled
+        // timer, or a tombstone loaded from an older save) is passed through
+        // untouched rather than swept.
+        const registry = makeRegistry([
+            makeTimer({ id: 'fires' as TimerId, remainingTicks: 1, intervalTicks: 0 }),
+            makeTimer({ id: 'counting' as TimerId, remainingTicks: 4, intervalTicks: 0 }),
+            makeTimer({ id: 'cancelled' as TimerId, remainingTicks: 2, active: false }),
+        ]);
+        const { next, fired } = TimerManager.advance(registry);
+
+        expect(fired.map((f) => f.timerId)).toEqual(['fires']);
+        expect(Object.keys(next)).toEqual(['counting', 'cancelled']);
+        expect(next['counting' as TimerId]?.remainingTicks).toBe(3);
+        expect(next['cancelled' as TimerId]).toBe(registry['cancelled' as TimerId]);
+    });
+
+    it('returns the input reference on the beat AFTER a one-shot fired, the registry being empty', () => {
+        // What removal buys the clock-only broadcast path: with the fired
+        // entry gone the registry is `{}`, so the next beat is the fast path
+        // and `engine:tick` keeps `snapshot.timers` by reference. A tombstone
+        // would also be skipped, but only because it is inactive; removal is
+        // what keeps the registry from growing by one dead entry per fire.
+        const registry = makeRegistry([
+            makeTimer({ id: 'timer-1' as TimerId, remainingTicks: 1, intervalTicks: 0 }),
+        ]);
+        const { next: afterFire } = TimerManager.advance(registry);
+        const { next: afterIdle, fired } = TimerManager.advance(afterFire);
+
+        expect(afterFire).toEqual({});
+        expect(afterIdle).toBe(afterFire);
+        expect(fired).toHaveLength(0);
     });
 
     it('resets remainingTicks to intervalTicks for an interval timer after firing', () => {

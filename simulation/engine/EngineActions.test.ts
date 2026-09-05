@@ -484,11 +484,11 @@ describe('engine:tick — timer wiring (§4.20)', () => {
         expect(capturedTick).toBe(8);
     });
 
-    // ── WARN-1 regression: no spurious timer-registry allocation for inactive timers ──
+    // ── No spurious timer-registry allocation for inactive timers ──
 
     it('preserves the timer registry reference when registry has only inactive timers', () => {
-        // Inactive timers (e.g. spent one-shots) must not cause a new timer registry
-        // to be allocated; engine:tick itself still advances the logical clock.
+        // Inactive timers must not cause a new timer registry to be allocated;
+        // engine:tick itself still advances the logical clock.
         const inactiveTimer = makeTickTimer({ id: 'tmr-spent' as TimerId, active: false });
         const snapshot = makeTimerSnapshot({ ['tmr-spent' as TimerId]: inactiveTimer });
         const next = definition().reduce(snapshot, { seed: 1 }, hostId, stubCtx);
@@ -522,7 +522,7 @@ describe('engine:tick — timer wiring (§4.20)', () => {
         expect(next).not.toBe(snapshot);
     });
 
-    it('uses O(1) timer-registry fast path when advance() returns next === orig (WARN-1)', () => {
+    it('uses O(1) timer-registry fast path when advance() returns next === orig', () => {
         // Performance guard: when all timers are inactive, TimerManager.advance()
         // returns the same registry reference (next === orig) without allocating.
         // EngineActions must preserve that registry while still advancing tick.

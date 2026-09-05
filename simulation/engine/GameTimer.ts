@@ -30,7 +30,8 @@ export interface GameTimer {
      */
     readonly remainingTicks: number;
     /**
-     * 0 = one-shot: fires once when remainingTicks reaches 0, then marks inactive.
+     * 0 = one-shot: fires once when remainingTicks reaches 0 and is then removed
+     *     from the registry by `TimerManager.advance()`.
      * N = interval: resets remainingTicks to N after each fire.
      */
     readonly intervalTicks: number;
@@ -103,7 +104,7 @@ export const TimerManager = {
      *   - Decrements remainingTicks by 1.
      *   - When remainingTicks reaches 0:
      *     - Adds the timer's action to the fired list.
-     *     - One-shot (intervalTicks === 0): marks the timer inactive.
+     *     - One-shot (intervalTicks === 0): removes the timer from the registry.
      *     - Interval (intervalTicks > 0): resets remainingTicks to intervalTicks, stays active.
      *
      * Inactive timers are skipped — neither decremented nor fired.
@@ -145,9 +146,12 @@ export const TimerManager = {
             if (decremented <= 0) {
                 fired.push({ timerId, actionType: timer.actionType, payload: timer.payload });
 
-                if (timer.intervalTicks === 0) {
-                    nextEntries.push([timerId, { ...timer, remainingTicks: 0, active: false }]);
-                } else {
+                // A fired one-shot is REMOVED, not rewritten inactive: the registry
+                // is snapshot-resident, so a tombstone would sit in every later save
+                // checkpoint and under every later beat's walk above for the rest
+                // of the session. Entries that were already inactive are passed
+                // through above, untouched.
+                if (timer.intervalTicks !== 0) {
                     nextEntries.push([
                         timerId,
                         { ...timer, remainingTicks: timer.intervalTicks, active: true },
