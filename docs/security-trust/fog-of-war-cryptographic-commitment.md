@@ -34,14 +34,7 @@ The host owns the single authoritative `GameSnapshot` (full truth). Before any t
 
 Invisible entities are **entirely absent** from `PlayerSnapshot.entities` — not masked with nulls. This prevents entity count inference from object key enumeration.
 
-```typescript
-// StateProjector internal
-const visibleEntities = Object.fromEntries(
-    Object.entries(fullState.entities)
-        .filter(([, e]) => rules.isEntityVisible(e, viewerId, fullState))
-        .map(([id, e]) => [id, rules.maskEntity(e, viewerId, fullState)]),
-);
-```
+The walk that does this lives in `DefaultStateProjector` (`simulation/projection/StateProjector.ts`).
 
 ---
 

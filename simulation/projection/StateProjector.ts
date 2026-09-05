@@ -259,9 +259,17 @@ export class DefaultStateProjector<
         viewerId: PlayerId,
     ): Readonly<Record<EntityId, ObservedEntityState>> {
         const result = Object.create(null) as Record<string, TObservedEntity>;
-        for (const [id, raw] of Object.entries(fullState.entities)) {
+        // This runs once per recipient per beat. `Object.keys` enumerates own
+        // enumerable keys in property order — integer-like keys ascending, then
+        // insertion order, which the serialised record and its checksum expose —
+        // without allocating a pair array per entry. Not `for...in`: the source
+        // record is a plain object, and `for...in` would also walk any
+        // enumerable key a polluted `Object.prototype` supplies. Own-key
+        // enumeration needs no `hasOwn` guard.
+        const entities = fullState.entities;
+        for (const id of Object.keys(entities)) {
             // Authorised widening: TState.entities values are TEntity instances.
-            const entity = raw as TEntity;
+            const entity = entities[id as EntityId] as TEntity;
             if (this.#rules.isEntityVisible(entity, viewerId, fullState)) {
                 result[id] = this.#rules.maskEntity(entity, viewerId, fullState);
             }
@@ -275,9 +283,11 @@ export class DefaultStateProjector<
         viewerId: PlayerId,
     ): Readonly<Record<PlayerId, ObservedPlayerState>> {
         const result = Object.create(null) as Record<string, TObservedPlayer>;
-        for (const [id, raw] of Object.entries(fullState.players)) {
+        // Same walk as `#projectEntities`, for the same reasons.
+        const players = fullState.players;
+        for (const id of Object.keys(players)) {
             // Authorised widening: TState.players values are TPlayer instances.
-            const player = raw as TPlayer;
+            const player = players[id as PlayerId] as TPlayer;
             result[id] = this.#rules.maskPlayerState(player, viewerId, fullState);
         }
         return result;

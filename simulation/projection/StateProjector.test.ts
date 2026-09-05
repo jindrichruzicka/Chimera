@@ -275,6 +275,129 @@ describe('DefaultStateProjector.project()', () => {
         });
     });
 
+    describe('record walk — output and key order match an Object.entries reference', () => {
+        // Key order is observable: the projected records are serialised and
+        // checksummed, so the walk must enumerate exactly what `Object.entries`
+        // enumerated, in its order — integer-like keys ascending first, then
+        // string keys in insertion order.
+        const ZETA = entityId('zeta');
+        const ALPHA = entityId('alpha');
+        const TEN = entityId('10');
+        const TWO = entityId('2');
+        const E_LAST = entityId('e-last');
+
+        /**
+         * Adds a NON-enumerable own key to a record. `Object.entries` skipped
+         * such a key; a walk over all own property names would not, so the
+         * fixture carries one on each record to pin the enumerability axis.
+         */
+        const withNonEnumerable = <T extends object>(record: T, key: string, value: unknown): T =>
+            Object.defineProperty(record, key, { value, enumerable: false, configurable: true });
+
+        const mixedSnapshot = (): TestSnapshot =>
+            makeSnapshot({
+                entities: withNonEnumerable(
+                    {
+                        [ZETA]: { id: ZETA, ownerId: P1, x: 1, y: 1, secretHp: 1 },
+                        [ALPHA]: { id: ALPHA, ownerId: P2, x: 2, y: 2, secretHp: 2 },
+                        [TEN]: { id: TEN, ownerId: P1, x: 10, y: 10, secretHp: 10 },
+                        [TWO]: { id: TWO, ownerId: P1, x: 2, y: 0, secretHp: 20 },
+                        [HOSTILE_ENTITY_ID]: {
+                            id: HOSTILE_ENTITY_ID,
+                            ownerId: P1,
+                            x: 0,
+                            y: 0,
+                            secretHp: 0,
+                        },
+                        [E_LAST]: { id: E_LAST, ownerId: P2, x: 3, y: 3, secretHp: 3 },
+                    },
+                    'non-enumerable-entity',
+                    { id: 'non-enumerable-entity', ownerId: P1, x: 4, y: 4, secretHp: 4 },
+                ),
+                players: withNonEnumerable(
+                    {
+                        [P2]: { id: P2, score: 5, hand: ['cardC'] },
+                        [P1]: { id: P1, score: 10, hand: ['cardA'] },
+                        [HOSTILE_PLAYER_ID]: { id: HOSTILE_PLAYER_ID, score: 0, hand: [] },
+                    },
+                    'non-enumerable-player',
+                    { id: 'non-enumerable-player', score: 1, hand: [] },
+                ),
+            });
+
+        /** The pre-change loops, kept verbatim as the equivalence oracle. */
+        const referenceProject = (
+            snapshot: TestSnapshot,
+            viewer: PlayerId,
+        ): {
+            entities: Record<string, TestEntityView>;
+            players: Record<string, TestPlayerView>;
+        } => {
+            const entities = Object.create(null) as Record<string, TestEntityView>;
+            for (const [id, raw] of Object.entries(snapshot.entities)) {
+                if (fogRules.isEntityVisible(raw, viewer, snapshot)) {
+                    entities[id] = fogRules.maskEntity(raw, viewer, snapshot);
+                }
+            }
+            const players = Object.create(null) as Record<string, TestPlayerView>;
+            for (const [id, raw] of Object.entries(snapshot.players)) {
+                players[id] = fogRules.maskPlayerState(raw, viewer, snapshot);
+            }
+            return { entities, players };
+        };
+
+        it('projects entity and player records deep-equal to the reference for a mixed-visibility fixture', () => {
+            const projector = new DefaultStateProjector(fogRules);
+            const snapshot = mixedSnapshot();
+
+            for (const viewer of [P1, P2, HOSTILE_PLAYER_ID]) {
+                const view = projector.project(snapshot, viewer);
+                const reference = referenceProject(snapshot, viewer);
+                expect(view.entities).toStrictEqual(reference.entities);
+                expect(view.players).toStrictEqual(reference.players);
+            }
+        });
+
+        it('pins the projected key ORDER: integer-like keys ascending, then insertion order', () => {
+            const projector = new DefaultStateProjector(fogRules);
+
+            const view = projector.project(mixedSnapshot(), P1);
+
+            expect(Object.keys(view.entities)).toEqual([TWO, TEN, ZETA, HOSTILE_ENTITY_ID]);
+            expect(Object.keys(view.players)).toEqual([P2, P1, HOSTILE_PLAYER_ID]);
+            expect(JSON.stringify(view.entities)).toBe(
+                JSON.stringify(referenceProject(mixedSnapshot(), P1).entities),
+            );
+        });
+
+        it('never projects a key that only a polluted Object.prototype supplies', () => {
+            // The source records are plain objects, so a walk that enumerated
+            // inherited keys would project whatever a polluted prototype adds.
+            // `Object.entries` never did; the replacement walk must not either.
+            const projector = new DefaultStateProjector(allVisibleRules);
+            const snapshot = makeSnapshot();
+            const polluted = { id: 'polluted', ownerId: P1, x: 0, y: 0, secretHp: 0 };
+            // Polluted only for the duration of the projection call.
+            Object.defineProperty(Object.prototype, 'polluted', {
+                value: polluted,
+                enumerable: true,
+                configurable: true,
+                writable: true,
+            });
+            let view: PlayerSnapshot;
+            try {
+                view = projector.project(snapshot, P1);
+            } finally {
+                Reflect.deleteProperty(Object.prototype, 'polluted');
+            }
+
+            expect(Object.keys(view.entities)).toEqual([E1, E2]);
+            expect(Object.keys(view.players)).toEqual([P1, P2]);
+            expect(Object.hasOwn(view.entities, 'polluted')).toBe(false);
+            expect(Object.hasOwn(view.players, 'polluted')).toBe(false);
+        });
+    });
+
     describe('entity masking', () => {
         it('owner sees their own entity with secretHp unmasked', () => {
             const projector = new DefaultStateProjector(allVisibleRules);
