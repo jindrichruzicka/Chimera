@@ -532,6 +532,69 @@ describe('advanceActionPrimitives', () => {
         expect(advanceActionPrimitives(snapshot, beatCtx, [])).toBe(snapshot);
     });
 
+    /**
+     * Wraps the entities record so every enumeration of its own keys is counted.
+     * The walk enumerates once (`Object.values`); a spread copy enumerates once
+     * more, so the count is the observable form of "was a copy built". Read the
+     * count straight after the call: an `expect` on an object holding the proxy
+     * walks it too while deciding how to phrase a mismatch.
+     */
+    function countingEnumerations(snapshot: BaseGameSnapshot): {
+        readonly snapshot: BaseGameSnapshot;
+        readonly enumerations: () => number;
+    } {
+        let count = 0;
+        const entities = new Proxy(snapshot.entities, {
+            ownKeys(target) {
+                count += 1;
+                return Reflect.ownKeys(target);
+            },
+        });
+        return { snapshot: { ...snapshot, entities }, enumerations: () => count };
+    }
+
+    it('enumerates the input record once and builds no copy on an idle beat', () => {
+        const { snapshot, enumerations } = countingEnumerations(makeSnapshot());
+
+        const next = advanceActionPrimitives(snapshot, beatCtx, []);
+        const enumerated = enumerations();
+
+        expect(next).toBe(snapshot);
+        expect(enumerated).toBe(1);
+    });
+
+    it('builds no copy either when the only mover is fully clamped against the wall', () => {
+        const { snapshot, enumerations } = countingEnumerations(
+            makeSnapshot({
+                'primitive-cube': { x: ACTION_ARENA_MAX_X, y: ACTION_ARENA_MAX_Y, dx: 1, dy: 1 },
+            }),
+        );
+
+        const next = advanceActionPrimitives(snapshot, beatCtx, []);
+        const enumerated = enumerations();
+
+        expect(next).toBe(snapshot);
+        expect(enumerated).toBe(1);
+    });
+
+    it('copies the input record exactly once when a primitive moves, replacing only that entity (control)', () => {
+        const { snapshot, enumerations } = countingEnumerations(
+            makeSnapshot({ 'primitive-cube': { x: 0, y: 0, dx: 1, dy: 0 } }),
+        );
+
+        const next = advanceActionPrimitives(snapshot, beatCtx, []);
+        const enumerated = enumerations();
+
+        expect(next).not.toBe(snapshot);
+        expect(enumerated).toBe(2);
+        expect(Object.keys(next.entities)).toEqual(Object.keys(snapshot.entities));
+        expect(next.entities[CUBE]).not.toBe(snapshot.entities[CUBE]);
+        expect(primitive(next, CUBE).x).toBe(1);
+        expect(next.entities[SPHERE]).toBe(snapshot.entities[SPHERE]);
+        expect(next.entities[CONE]).toBe(snapshot.entities[CONE]);
+        expect(next.entities[GROUND]).toBe(snapshot.entities[GROUND]);
+    });
+
     it('returns the same snapshot AND entity when a held velocity is fully clamped', () => {
         // The case the "nothing moved" fast path exists for, and the one that
         // actually recurs: a seat holding a key into the wall is MOVING — the

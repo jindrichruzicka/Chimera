@@ -201,15 +201,17 @@ export const actionSelectPrimitiveDefinition: ActionDefinition<
  * carries them off it, without re-pressing.
  *
  * Pure: no clock, no RNG, no dispatch (Invariants #43/#89). Returns the input
- * reference unchanged when nothing moved.
+ * reference unchanged when nothing moved, and builds the copy it would return
+ * otherwise only once a primitive actually changes cell. An idle beat stays on
+ * the pipeline's clock-only broadcast because every field it hands back is the
+ * same reference (Invariant #128).
  */
 export function advanceActionPrimitives(
     state: BaseGameSnapshot,
     _ctx: GameReduceContext,
     _closed: readonly ClosedAnimationWindow[],
 ): BaseGameSnapshot {
-    let moved = false;
-    const entities: Record<EntityId, BaseEntityState> = { ...state.entities };
+    let entities: Record<EntityId, BaseEntityState> | null = null;
 
     for (const entity of Object.values(state.entities)) {
         if (!isActionPrimitiveEntity(entity)) continue;
@@ -220,11 +222,11 @@ export function advanceActionPrimitives(
         if (x === entity.x && y === entity.y) continue;
 
         const advanced: ActionPrimitiveEntity = { ...entity, x, y };
+        entities ??= { ...state.entities };
         entities[entity.id] = advanced;
-        moved = true;
     }
 
-    return moved ? { ...state, entities } : state;
+    return entities === null ? state : { ...state, entities };
 }
 
 // ── Registration ─────────────────────────────────────────────────────────────

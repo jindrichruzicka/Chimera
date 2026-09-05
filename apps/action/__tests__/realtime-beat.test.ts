@@ -27,7 +27,7 @@
  * fact about a real ticker in a real host and about nothing else.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ActionPipeline } from '@chimera-engine/simulation/engine/ActionPipeline.js';
 import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
@@ -182,6 +182,28 @@ describe('the action app’s realtime lifecycle', () => {
 
         expect(cubeAt(snapshot)).toEqual(start);
         expect(snapshot.tick).toBe(5);
+    });
+
+    it('keeps an idle beat on the clock-only broadcast path, with the entities record untouched', () => {
+        // An idle beat must hand back every snapshot field as the same reference
+        // (Invariant #128): that is what routes it through broadcastTick instead
+        // of a full per-viewer projection and broadcast.
+        const registry = new ActionRegistry<BaseGameSnapshot>();
+        registerEngineActions(registry);
+        registerActionActions(registry);
+        const broadcast = vi.fn();
+        const broadcastTick = vi.fn();
+        const pipeline = new ActionPipeline(registry, {
+            gameId: ACTION_GAME_ID,
+            context: { broadcast, broadcastTick },
+        });
+        const snapshot = makeSnapshot();
+
+        const next = pipeline.process(snapshot, tickEnvelope(snapshot));
+
+        expect(broadcast).not.toHaveBeenCalled();
+        expect(broadcastTick).toHaveBeenCalledTimes(1);
+        expect(next.entities).toBe(snapshot.entities);
     });
 
     it('replays a recorded beat sequence to the same state', () => {
