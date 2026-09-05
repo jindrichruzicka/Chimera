@@ -228,11 +228,93 @@ PKG
     git branch -D feature/gate-boom-4 >/dev/null 2>&1
 }
 
+# ─── Test 5: every gate step runs under the sleep assertion ───────────────────
+test_gate_steps_run_under_the_sleep_assertion() {
+    git checkout -b feature/awake-5 >/dev/null 2>&1
+    echo "e" > e.txt
+    git add e.txt
+    git commit -m "feat(x): add e" -m "Body describes why e was added." >/dev/null
+
+    # A fake `caffeinate` first on PATH: it appends its argv and runs the
+    # command, so a step that bypassed the wrapper leaves no line behind.
+    FAKEBIN="$WORK/fakebin"
+    mkdir -p "$FAKEBIN"
+    cat > "$FAKEBIN/caffeinate" <<'FAKE'
+#!/bin/sh
+printf '%s\n' "$*" >> "$CHIMERA_FAKE_CAFFEINATE_LOG"
+shift 2
+exec "$@"
+FAKE
+    chmod +x "$FAKEBIN/caffeinate"
+    : > "$WORK/caffeinate.log"
+
+    if CHIMERA_FAKE_CAFFEINATE_LOG="$WORK/caffeinate.log" PATH="$FAKEBIN:$PATH" \
+        bash "$SCRIPT_UNDER_TEST" --dry-run >/tmp/chimera-merge-out-5.log 2>&1; then
+        pass "gate is green under the sleep assertion (exit 0)"
+    else
+        fail "gate under the sleep assertion wrongly failed:"
+        sed 's/^/       /' /tmp/chimera-merge-out-5.log >&2
+    fi
+    if [[ "$(grep -c '^-dims -- pnpm ' "$WORK/caffeinate.log")" == "5" ]]; then
+        pass "all five gate steps ran under caffeinate -dims"
+    else
+        fail "expected 5 caffeinate invocations, one per gate step; got:"
+        sed 's/^/       /' "$WORK/caffeinate.log" >&2
+    fi
+
+    git checkout main >/dev/null 2>&1
+    git branch -D feature/awake-5 >/dev/null 2>&1
+}
+
+# ─── Test 6: a copy of the skill with no wrapper beside it runs the steps directly ─
+test_gate_without_a_wrapper_runs_the_steps_directly() {
+    git checkout -b feature/no-wrapper-6 >/dev/null 2>&1
+    echo "f" > f.txt
+    git add f.txt
+    git commit -m "feat(x): add f" -m "Body describes why f was added." >/dev/null
+
+    # The script finds the wrapper five directories above its own; a copy nested
+    # five deep inside $WORK looks for $WORK/nest/tools/with-awake.sh, which is
+    # not there — the shape of a skill copied out of the repo.
+    COPY_DIR="$WORK/nest/1/2/3/4/5"
+    mkdir -p "$COPY_DIR"
+    cp "$SCRIPT_UNDER_TEST" "$COPY_DIR/check-and-merge.sh"
+    FAKEBIN="$WORK/fakebin"
+    mkdir -p "$FAKEBIN"
+    cat > "$FAKEBIN/caffeinate" <<'FAKE'
+#!/bin/sh
+printf '%s\n' "$*" >> "$CHIMERA_FAKE_CAFFEINATE_LOG"
+shift 2
+exec "$@"
+FAKE
+    chmod +x "$FAKEBIN/caffeinate"
+    : > "$WORK/caffeinate-6.log"
+
+    if CHIMERA_FAKE_CAFFEINATE_LOG="$WORK/caffeinate-6.log" PATH="$FAKEBIN:$PATH" \
+        bash "$COPY_DIR/check-and-merge.sh" --dry-run >/tmp/chimera-merge-out-6.log 2>&1; then
+        pass "gate is green from a copy with no wrapper beside it (exit 0)"
+    else
+        fail "gate from a copy with no wrapper wrongly failed:"
+        sed 's/^/       /' /tmp/chimera-merge-out-6.log >&2
+    fi
+    if [[ ! -s "$WORK/caffeinate-6.log" ]]; then
+        pass "no gate step went through caffeinate without the wrapper"
+    else
+        fail "a step reached caffeinate although no wrapper was there:"
+        sed 's/^/       /' "$WORK/caffeinate-6.log" >&2
+    fi
+
+    git checkout main >/dev/null 2>&1
+    git branch -D feature/no-wrapper-6 >/dev/null 2>&1
+}
+
 echo "Running check-and-merge.sh tests..."
 test_body_plus_fixup_passes
 test_two_body_commits_rejected
 test_body_plus_two_fixups_passes
 test_failing_gate_step_reports_its_output
+test_gate_steps_run_under_the_sleep_assertion
+test_gate_without_a_wrapper_runs_the_steps_directly
 
 echo
 if [[ $FAILURES -eq 0 ]]; then

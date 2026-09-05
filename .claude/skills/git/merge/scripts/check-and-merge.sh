@@ -119,9 +119,17 @@ info "Running pre-merge gate (format:check, lint, typecheck, test, verify:packag
 GATE_LOG_DIR=$(mktemp -d -t chimera-merge-gate-XXXXXX)
 GATE_FAILED=()
 GATE_FAILED_LOGS=()
+# A host that sleeps mid-run reports a stalled test rather than the sleep, so
+# each step runs under the repo's sleep-assertion wrapper, found from this
+# script's own location so the fixture the self-test runs in does not need a
+# copy. A skill copied somewhere without `tools/` runs the step directly.
+AWAKE_WRAPPER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../../../tools/with-awake.sh"
 run_gate_step() {
   local label="$1"; shift
   local log="${GATE_LOG_DIR}/${label// /_}.log"
+  if [[ -f "$AWAKE_WRAPPER" ]]; then
+    set -- sh "$AWAKE_WRAPPER" "$@"
+  fi
   if ! "$@" >"$log" 2>&1; then
     GATE_FAILED+=("$label")
     GATE_FAILED_LOGS+=("$log")

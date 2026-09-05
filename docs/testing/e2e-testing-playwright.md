@@ -921,6 +921,15 @@ copy of a workflow is a second workflow nobody runs. What the shape means:
 
 On macOS runners, `DISPLAY` is not required. On Linux, an `Xvfb` step is needed because Electron requires a display server.
 
+On a developer Mac the long runs are held under a sleep assertion: `pnpm test`, `pnpm test:e2e` and
+`pnpm test:e2e:action` go through `tools/with-awake.sh`, which wraps the whole command in
+`caffeinate -dims` where that tool exists and runs it directly elsewhere, and the merge skill's gate
+uses the same wrapper. A Mac configured to idle-sleep otherwise sleeps during an unattended run,
+and what comes back names a test, not the sleep — on 2026-09-05 `ambience-cue-aligned.spec.ts`
+failed twelve times in a row inside a Maintenance-Sleep cycle and passed awake and on CI. Which clock
+that spec lost — `requestAnimationFrame` or `AudioContext.currentTime` — was never recorded, so the
+wrapper prevents the condition and does not diagnose it.
+
 ---
 
 ## §13.12 Security Notes
