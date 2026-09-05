@@ -7,7 +7,7 @@ Restored the mandated structured-logger wiring across the main-process compositi
 and removed a dead `UndoPolicy` field.
 
 - `buildHostSessionPipeline` now forwards its injected `Logger` into both
-  `InMemoryActionHistory` and `ActionPipeline`, so the `action-history:overflow` warn
+  `InMemoryActionHistory` and `ActionPipeline`, so the `action-history:overflow` report
   (Invariant #45) and the `engine:tick` timer-rejection warn (Invariant #90, §4.20) are
   reachable in production instead of being swallowed by a noop logger.
 - `SettingsManager.getSettings()` now emits the mandated warn when called for an

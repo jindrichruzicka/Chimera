@@ -82,21 +82,25 @@ const undoEnvelope = (tick: number, player: PlayerId = P1): ActionEnvelope => ({
 });
 
 /** Captures every warn so the action-history overflow report is readable. */
-function makeWarnRecorder(): {
+function makeLevelRecorder(): {
     readonly logger: Logger;
     readonly warns: { message: string; context?: Record<string, unknown> }[];
+    readonly infos: { message: string; context?: Record<string, unknown> }[];
 } {
     const warns: { message: string; context?: Record<string, unknown> }[] = [];
+    const infos: { message: string; context?: Record<string, unknown> }[] = [];
     const logger = {
         debug: vi.fn(),
-        info: vi.fn(),
+        info: vi.fn((message: string, context?: Record<string, unknown>) => {
+            infos.push(context === undefined ? { message } : { message, context });
+        }),
         warn: vi.fn((message: string, context?: Record<string, unknown>) => {
             warns.push(context === undefined ? { message } : { message, context });
         }),
         error: vi.fn(),
         child: vi.fn(() => logger),
     } as unknown as Logger;
-    return { logger, warns };
+    return { logger, warns, infos };
 }
 
 const noopSavePort = { autoSave: async (): Promise<void> => {} };
@@ -222,7 +226,7 @@ describe('buildHostSessionPipeline — injected undo policy', () => {
 
 describe('buildHostSessionPipeline — injected action-history bound', () => {
     it('constructs the history with the supplied retainActions bound', () => {
-        const { logger, warns } = makeWarnRecorder();
+        const { logger, warns } = makeLevelRecorder();
         const { pipeline } = buildHostSessionPipeline(makeRegistry(), () => {}, {
             gameId: 'test',
             savePort: noopSavePort,
@@ -244,7 +248,7 @@ describe('buildHostSessionPipeline — injected action-history bound', () => {
     });
 
     it('does not overflow below the supplied bound', () => {
-        const { logger, warns } = makeWarnRecorder();
+        const { logger, warns } = makeLevelRecorder();
         const { pipeline } = buildHostSessionPipeline(makeRegistry(), () => {}, {
             gameId: 'test',
             savePort: noopSavePort,
@@ -260,8 +264,9 @@ describe('buildHostSessionPipeline — injected action-history bound', () => {
         expect(warns.filter((w) => w.message === 'action-history:overflow')).toStrictEqual([]);
     });
 
-    it('reports the realtime default bound when that is what the caller resolved', () => {
-        const { logger, warns } = makeWarnRecorder();
+    // The bound alone, with no policy beside it — the demoted arm is below.
+    it('reports the realtime default bound when a caller supplies it alone', () => {
+        const { logger, warns } = makeLevelRecorder();
         const { pipeline } = buildHostSessionPipeline(makeRegistry(), () => {}, {
             gameId: 'test',
             savePort: noopSavePort,
@@ -282,8 +287,59 @@ describe('buildHostSessionPipeline — injected action-history bound', () => {
         ]);
     });
 
+    /**
+     * What the report claims follows the resolved policy, not the bound
+     * (Invariant #45). `ActionPipeline` appends every depth-0 dispatch,
+     * `engine:tick` included, and a game dispatching no `engine:end_turn` never
+     * reaches `pruneTo` — so such a history saturates once and never recovers,
+     * and a `warn` there names steady-state behaviour as a fault.
+     */
+    it('demotes the overflow report to info when the resolved policy refuses undo', () => {
+        const { logger, warns, infos } = makeLevelRecorder();
+        const { pipeline } = buildHostSessionPipeline(makeRegistry(), () => {}, {
+            gameId: 'test',
+            savePort: noopSavePort,
+            logger,
+            retainActions: 3,
+            undoPolicy: undoPolicyForMatchHistory({ undo: false, replay: true, retainActions: 3 }),
+        });
+
+        let s = makeSnapshot(0);
+        for (let i = 0; i < 4; i++) {
+            s = pipeline.process(s, advanceEnvelope(s.tick));
+        }
+
+        expect(warns.filter((w) => w.message === 'action-history:overflow')).toStrictEqual([]);
+        // Kept, not dropped: same message and same context, at the level
+        // `resolveFileLogLevel` defaults the durable file sink to (§4.27).
+        expect(infos.filter((d) => d.message === 'action-history:overflow')).toStrictEqual([
+            { message: 'action-history:overflow', context: { capacity: 3 } },
+        ]);
+    });
+
+    it('keeps the warn when the resolved policy allows undo, which is what the bound protects', () => {
+        const { logger, warns, infos } = makeLevelRecorder();
+        const { pipeline } = buildHostSessionPipeline(makeRegistry(), () => {}, {
+            gameId: 'test',
+            savePort: noopSavePort,
+            logger,
+            retainActions: 3,
+            undoPolicy: undoPolicyForMatchHistory({ undo: true, replay: true, retainActions: 3 }),
+        });
+
+        let s = makeSnapshot(0);
+        for (let i = 0; i < 4; i++) {
+            s = pipeline.process(s, advanceEnvelope(s.tick));
+        }
+
+        expect(infos.filter((d) => d.message === 'action-history:overflow')).toStrictEqual([]);
+        expect(warns.filter((w) => w.message === 'action-history:overflow')).toStrictEqual([
+            { message: 'action-history:overflow', context: { capacity: 3 } },
+        ]);
+    });
+
     it('falls back to the engine ceiling when no bound is supplied', () => {
-        const { logger, warns } = makeWarnRecorder();
+        const { logger, warns } = makeLevelRecorder();
         const { pipeline } = buildHostSessionPipeline(makeRegistry(), () => {}, {
             gameId: 'test',
             savePort: noopSavePort,

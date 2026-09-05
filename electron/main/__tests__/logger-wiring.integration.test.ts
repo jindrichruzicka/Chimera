@@ -15,7 +15,7 @@
  * `electron/main/runtime/HostSessionPipeline.ts`.
  *
  * Invariants verified:
- *   #45 — `action-history:overflow` warn on safety-net eviction is reachable
+ *   #45 — the `action-history:overflow` report on safety-net eviction is reachable
  *          from a built host pipeline.
  *   #90 — `ReduceContext.logger` is populated from the pipeline's injected
  *          `Logger`, so `engine:tick` surfaces the warn for a timer-fired
@@ -26,7 +26,10 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { buildHostSessionPipeline } from '../runtime/HostSessionPipeline.js';
+import {
+    buildHostSessionPipeline,
+    undoPolicyForMatchHistory,
+} from '../runtime/HostSessionPipeline.js';
 import { createLogger, createMemorySink } from '../logging/logger.js';
 
 import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
@@ -116,9 +119,9 @@ function makeRegistry(...defs: ActionDefinition<Record<string, never>>[]): Actio
 // after engine:end_turn, which neither test dispatches, so a no-op port is inert here.
 const noopSavePort = { autoSave: async (): Promise<void> => {} };
 
-// ── #45 — action-history overflow warn is reachable ────────────────────────────
+// ── #45 — action-history overflow report is reachable ────────────────────────────
 
-describe('buildHostSessionPipeline — #45: action-history:overflow warn is wired', () => {
+describe('buildHostSessionPipeline — #45: the action-history:overflow report is wired', () => {
     it('emits action-history:overflow on the injected logger when the safety-net cap is exceeded', () => {
         const { logger, sink } = makeMemoryLogger();
         const { pipeline } = buildHostSessionPipeline(makeRegistry(advanceDef), () => {}, {
@@ -148,9 +151,11 @@ describe('buildHostSessionPipeline — #45: action-history:overflow warn is wire
             logger,
         });
 
-        // The realtime shape this exists for: nothing here prunes, so every
-        // action past saturation evicts. Unlatched, that is one warn per beat for
-        // the rest of the match, on a file sink — measured at 200 here.
+        // The never-pruning shape this exists for: nothing here dispatches
+        // `engine:end_turn`, so every action past saturation evicts. Unlatched,
+        // that is one report per beat for the rest of the match, on a file
+        // sink — measured at 200 here. This pipeline declares no policy, so undo
+        // is armed and the report is a warn; the case below is the other fork.
         let s = makeBaseSnapshot(0);
         for (let i = 0; i < MAX_ACTION_HISTORY_ENTRIES + 200; i++) {
             s = pipeline.process(s, advanceEnvelope(s.tick));
@@ -163,6 +168,32 @@ describe('buildHostSessionPipeline — #45: action-history:overflow warn is wire
         expect(overflowWarns[0]?.context).toStrictEqual({
             capacity: MAX_ACTION_HISTORY_ENTRIES,
         });
+    });
+
+    it('reports at info instead, on the same sink, when the resolved policy refuses undo', () => {
+        const { logger, sink } = makeMemoryLogger();
+        const { pipeline } = buildHostSessionPipeline(makeRegistry(advanceDef), () => {}, {
+            gameId: 'test',
+            savePort: noopSavePort,
+            logger,
+            undoPolicy: undoPolicyForMatchHistory({
+                undo: false,
+                replay: true,
+                retainActions: MAX_ACTION_HISTORY_ENTRIES,
+            }),
+        });
+
+        // Same pipeline, same appends, same sink — the only difference is the
+        // resolved capability, so what this measures is the level and nothing
+        // about reachability.
+        let s = makeBaseSnapshot(0);
+        for (let i = 0; i < MAX_ACTION_HISTORY_ENTRIES + 1; i++) {
+            s = pipeline.process(s, advanceEnvelope(s.tick));
+        }
+
+        const overflow = sink.entries.filter((e) => e.message === 'action-history:overflow');
+        expect(overflow.map((e) => e.level)).toStrictEqual(['info']);
+        expect(overflow[0]?.context).toStrictEqual({ capacity: MAX_ACTION_HISTORY_ENTRIES });
     });
 });
 

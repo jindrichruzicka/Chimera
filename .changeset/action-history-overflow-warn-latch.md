@@ -2,7 +2,7 @@
 '@chimera-engine/simulation': patch
 ---
 
-Latch the `action-history:overflow` warn so a saturated history reports once per episode, not once
+Latch the `action-history:overflow` report so a saturated history reports once per episode, not once
 per append.
 
 `InMemoryActionHistory.append()` warned inside its eviction branch, and that branch is taken on
@@ -23,8 +23,7 @@ not re-report the same episode.
 
 Eviction itself is untouched — every overflowing append still drops its oldest entry, and the
 `sinceLastMemento()`, head-cursor and compaction bookkeeping are unchanged. Only the reporting
-cadence moves. The log key `action-history:overflow` and its `capacity` field are unchanged too, so
-existing log-based triage keeps working.
+cadence moves. The log key `action-history:overflow` and its `capacity` field are unchanged too.
 
 Invariant #45 is amended to state the cadence rather than implying one warn per eviction, and
 `electron/main/__tests__/logger-wiring.integration.test.ts` now drives the real host pipeline 200

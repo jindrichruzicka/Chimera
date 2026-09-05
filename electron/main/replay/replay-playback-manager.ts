@@ -145,8 +145,7 @@ export class ReplayPlaybackManager {
         // whatever wiring it meets: Stage 3 hands back a reconstruction of an
         // earlier tick, never `tick + 1`, so `ReplayPlayer.step()` refuses it
         // (§4.28, Invariant #42) — and where the seat has no memento the
-        // pipeline refuses one layer earlier instead. All the declared policy
-        // decides is which of those errors ends it.
+        // pipeline refuses one layer earlier instead.
         //
         // `retainActions` would additionally reach `InMemoryActionHistory` as
         // `maxEntries` beside the real logger passed below, so a recording

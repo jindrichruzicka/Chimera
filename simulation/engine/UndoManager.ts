@@ -213,14 +213,15 @@ export class InMemoryActionHistory implements ActionHistory {
     private head = 0;
     private mementoBoundary = 0;
     /**
-     * Latch for the `action-history:overflow` warn. Set on the FIRST eviction,
-     * cleared by a `pruneTo` that drops the live size back below capacity, so
-     * each saturation episode reports exactly once.
+     * Latch for the `action-history:overflow` report. Set on the FIRST
+     * eviction, cleared by a `pruneTo` that drops the live size back below
+     * capacity, so each saturation episode reports exactly once.
      *
      * Saturation is a state transition — retention has just become lossy — not a
-     * per-append event. Without the latch a history that stays saturated warns
-     * on every append for the rest of the run, which is what a realtime host
-     * does: `pruneTo` is reached from `ActionPipeline`'s `engine:end_turn` branch.
+     * per-append event. Without the latch a history that stays saturated reports
+     * on every append for the rest of the run, which is what a game dispatching
+     * no `engine:end_turn` does: `pruneTo` is reached from `ActionPipeline`'s
+     * `engine:end_turn` branch alone.
      */
     #overflowReported = false;
     /**
@@ -234,6 +235,7 @@ export class InMemoryActionHistory implements ActionHistory {
     #evictedSinceMemento = false;
     private readonly logger: Logger | undefined;
     private readonly maxEntries: number;
+    private readonly undoable: boolean;
 
     constructor(options?: {
         readonly logger?: Logger;
@@ -243,9 +245,23 @@ export class InMemoryActionHistory implements ActionHistory {
          * `matchHistory.retainActions` here (§4.5).
          */
         readonly maxEntries?: number;
+        /**
+         * Whether an undo manager replays this history. Defaults to `true`,
+         * which is what every caller before the declared-capability wiring
+         * meant. The host supplies the resolved `UndoPolicy.allowUndo` here
+         * (§4.5).
+         *
+         * It decides the LEVEL of the overflow report, never the eviction. The
+         * entries the cap drops are read back only through the undo manager —
+         * `HistoryContext.history` narrows this type to `append` and `pruneTo`
+         * for everyone else — so a history no undo replays loses nothing an
+         * operator can act on (Invariant #45).
+         */
+        readonly undoable?: boolean;
     }) {
         this.logger = options?.logger;
         this.maxEntries = options?.maxEntries ?? MAX_ACTION_HISTORY_ENTRIES;
+        this.undoable = options?.undoable ?? true;
     }
 
     append(entry: ActionHistoryEntry): void {
@@ -253,11 +269,18 @@ export class InMemoryActionHistory implements ActionHistory {
             this.head++;
             this.#clampMementoBoundary();
             // Eviction itself is unconditional; only the REPORT is latched.
+            // Its LEVEL follows whether an undo replays this history at all:
+            // `warn` when one does, `info` when none does. Message and context
+            // are the same either way. Why `info` and not `debug` is a host
+            // sink-threshold question — see `resolveFileLogLevel` (§4.27).
             if (!this.#overflowReported) {
                 this.#overflowReported = true;
-                this.logger?.warn('action-history:overflow', {
-                    capacity: this.maxEntries,
-                });
+                const context = { capacity: this.maxEntries };
+                if (this.undoable) {
+                    this.logger?.warn('action-history:overflow', context);
+                } else {
+                    this.logger?.info('action-history:overflow', context);
+                }
             }
         }
         this.entries.push(entry);

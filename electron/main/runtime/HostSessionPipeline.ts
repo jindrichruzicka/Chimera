@@ -303,6 +303,12 @@ export function buildHostSessionPipeline(
         ...(resolvedOptions?.retainActions === undefined
             ? {}
             : { maxEntries: resolvedOptions.retainActions }),
+        // What an overflow CLAIMS follows the resolved policy. The entries the
+        // cap drops are read back through the undo manager alone —
+        // `HistoryContext.history` narrows the type to `append` and `pruneTo`
+        // for every other consumer — so a game that refuses undo loses nothing
+        // an operator can act on (Invariant #45).
+        undoable: (resolvedOptions?.undoPolicy ?? DEFAULT_UNDO_POLICY).allowUndo,
     });
     const reducer = new StateReducer(registry);
 

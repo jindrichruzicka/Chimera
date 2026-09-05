@@ -108,6 +108,11 @@ one value:
   engine action and append it to history.
 - **The history bound.** `retainActions` becomes `InMemoryActionHistory`'s
   `maxEntries` (Invariant #45).
+- **What an overflow claims.** The resolved `allowUndo` also reaches the history
+  as `undoable`, which picks the level of the `action-history:overflow` report:
+  `warn` where an undo replays the history, `info` where none does. A game that
+  dispatches no `engine:end_turn` never reaches `pruneTo`, so its history
+  saturates once and stays there — steady state, not a fault (Invariant #45).
 - **The start-of-match memento.** A game declaring no undo mints none. The turn
   handover is untouched: `ActionPipeline`'s `engine:end_turn` branch still seeds
   the next player's memento, and the policy is what refuses undo against it.

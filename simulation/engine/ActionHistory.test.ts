@@ -15,7 +15,7 @@
  *   #43 — No Math.random() or Date.now() — pure data operations only
  *   #45 — ActionHistory bounded by MAX_ACTION_HISTORY_ENTRIES=10_000;
  *          overflow evicts oldest on every append AND emits an
- *          'action-history:overflow' warn log once per saturation episode
+ *          'action-history:overflow' log once per saturation episode
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -495,5 +495,69 @@ describe('InMemoryActionHistory — hasEvictedSinceMemento', () => {
         history.pruneTo(3);
 
         expect(history.hasEvictedSinceMemento()).toBe(true);
+    });
+});
+
+/**
+ * What the overflow report MEANS depends on whether anything replays this
+ * history (Invariant #45).
+ *
+ * The warn was written for a retention failure — a capability the player has,
+ * quietly reduced. A game that declares no undo has no such capability: the
+ * entries the cap drops are read back only through the undo manager, since
+ * `HistoryContext.history` narrows this type to `append` and `pruneTo` for
+ * every other consumer.
+ *
+ * The report is kept rather than dropped, at `info` and under the same message
+ * and context. What changes is that it no longer claims something is wrong.
+ * Why `info` and not `debug` is a host sink-threshold question — see
+ * `resolveFileLogLevel` (§4.27).
+ */
+describe('InMemoryActionHistory — what the overflow report claims (Invariant #45)', () => {
+    const cap = 2;
+
+    /** Saturate and then overflow a history built with `options`. */
+    function overflow(options: { readonly logger: Logger; readonly undoable?: boolean }): void {
+        const history = new InMemoryActionHistory({ maxEntries: cap, ...options });
+        for (let i = 1; i <= cap + 1; i++) {
+            history.append(makeEntry(i, i));
+        }
+    }
+
+    it('reports at info when no undo replays this history', () => {
+        const logger = makeNoopLogger();
+        overflow({ logger, undoable: false });
+
+        expect(logger.warn).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledOnce();
+        expect(logger.info).toHaveBeenCalledWith('action-history:overflow', { capacity: cap });
+    });
+
+    it('still warns when undo does replay it', () => {
+        const logger = makeNoopLogger();
+        overflow({ logger, undoable: true });
+
+        expect(logger.info).not.toHaveBeenCalled();
+        expect(logger.warn).toHaveBeenCalledOnce();
+        expect(logger.warn).toHaveBeenCalledWith('action-history:overflow', { capacity: cap });
+    });
+
+    it('warns when nothing is declared, so an existing caller is unchanged', () => {
+        const logger = makeNoopLogger();
+        overflow({ logger });
+
+        expect(logger.info).not.toHaveBeenCalled();
+        expect(logger.warn).toHaveBeenCalledOnce();
+    });
+
+    it('latches the demoted report too, so a saturated run reports once', () => {
+        const logger = makeNoopLogger();
+        const history = new InMemoryActionHistory({ maxEntries: cap, logger, undoable: false });
+        for (let i = 1; i <= cap + 50; i++) {
+            history.append(makeEntry(i, i));
+        }
+
+        expect(logger.info).toHaveBeenCalledOnce();
+        expect(logger.warn).not.toHaveBeenCalled();
     });
 });
