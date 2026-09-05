@@ -7,9 +7,10 @@
  * same way `perfStore.readHeapMb()` (and therefore the PerfHud) does — so the
  * gate and the HUD never disagree.
  *
- * Gating policy (decided for F49): strict locally / under `CHIMERA_PERF_STRICT=1`,
- * informational on CI. The measured heap is always logged so the baseline is
- * visible on every run. Replay-playback heap is covered by an additional
+ * Gating policy (decided for F49): strict locally / under `CHIMERA_PERF_STRICT=1`;
+ * on CI the assertion is soft, so a breach fails the test only after the measured
+ * heap is logged. The heap is always logged so the baseline is visible on every
+ * run. Replay-playback heap is covered by an additional
  * assertion in replay.spec.ts (which already owns the record→play flow).
  *
  * Invariant #42: the tick driver advances the clock through the real
@@ -90,7 +91,7 @@ test.describe('Renderer heap baseline (§13.4)', () => {
             expect(medianMb ?? Infinity, label).toBeLessThanOrEqual(RENDERER_HEAP_BUDGET_MB);
         } else {
             if ((medianMb ?? Infinity) > RENDERER_HEAP_BUDGET_MB) {
-                console.warn(`[perf][CI-informational] ${label} exceeded`);
+                console.warn(`[perf][CI] ${label} exceeded`);
             }
             expect.soft(medianMb ?? Infinity, label).toBeLessThanOrEqual(RENDERER_HEAP_BUDGET_MB);
         }

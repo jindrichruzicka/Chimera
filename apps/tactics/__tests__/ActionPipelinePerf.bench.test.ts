@@ -18,9 +18,9 @@
 // replay advances by exactly one `process()` per recorded action), so the
 // per-tick budget proven here covers live ticking AND replay playback.
 //
-// Gating policy (decided for F49): strict locally / under `CHIMERA_PERF_STRICT=1`,
-// informational on CI (CI runners are ~an order of magnitude slower). The numbers
-// are always logged so the baseline is visible on every run.
+// Gating policy (decided for F49): strict locally / under `CHIMERA_PERF_STRICT=1`;
+// on CI the assertion is soft, so a breach fails the case only after its numbers
+// are logged. The numbers are always logged so the baseline is visible on every run.
 
 import { describe, expect, it } from 'vitest';
 
@@ -47,7 +47,7 @@ import {
 
 // ─── Gating policy ──────────────────────────────────────────────────────────
 
-/** Hard-assert locally or when explicitly opted in; informational on CI. */
+/** Hard-assert locally or when explicitly opted in; on CI the failure is deferred to the end of the case. */
 const STRICT = process.env['CHIMERA_PERF_STRICT'] === '1' || process.env['CI'] === undefined;
 
 function gate(actual: number, budget: number, label: string): void {
@@ -55,7 +55,7 @@ function gate(actual: number, budget: number, label: string): void {
         expect(actual, label).toBeLessThan(budget);
     } else {
         if (actual >= budget) {
-            console.warn(`[perf][CI-informational] ${label}: ${actual} ≥ budget ${budget}`);
+            console.warn(`[perf][CI] ${label}: ${actual} ≥ budget ${budget}`);
         }
         expect.soft(actual, label).toBeLessThan(budget);
     }

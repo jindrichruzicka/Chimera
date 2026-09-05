@@ -37,8 +37,8 @@ import { endHostSession } from '../helpers/lobby-match';
 // source of truth, imported rather than re-declared so the gate can never drift;
 // simulation/foundation/perf-budget.test.ts locks the canonical value. Replay reuses the live
 // ActionPipeline (Inv #42/#70), so its renderer-side heap must stay within the
-// same budget as a live match. Strict locally / under CHIMERA_PERF_STRICT=1,
-// informational on CI.
+// same budget as a live match. Strict locally / under CHIMERA_PERF_STRICT=1; on CI
+// the assertion is soft, so a breach fails the test only after the heap is logged.
 import { RENDERER_HEAP_BUDGET_MB } from '@chimera-engine/simulation/foundation/perf-budget.js';
 
 const TACTICS_GAME_ID = 'tactics';
@@ -492,7 +492,7 @@ test.describe('Tactics replay lifecycle', () => {
             expect(heapMb ?? Infinity, label).toBeLessThanOrEqual(RENDERER_HEAP_BUDGET_MB);
         } else {
             if ((heapMb ?? Infinity) > RENDERER_HEAP_BUDGET_MB) {
-                console.warn(`[perf][CI-informational] ${label} exceeded`);
+                console.warn(`[perf][CI] ${label} exceeded`);
             }
             expect.soft(heapMb ?? Infinity, label).toBeLessThanOrEqual(RENDERER_HEAP_BUDGET_MB);
         }
