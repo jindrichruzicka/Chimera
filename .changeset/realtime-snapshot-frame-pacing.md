@@ -9,9 +9,7 @@ surfaced.
 `ipcClient` now holds the newest arriving `PlayerSnapshot` and applies it on the next animation
 frame. Newest-wins, never a queue: a snapshot superseded inside one frame is dropped where it
 stands, because draining it later would put the renderer a frame behind the host for nothing, and a
-backlog the host can outpace has no bound. `confirmPrediction` moves with the snapshot it belongs to
-and still runs first — confirming only the survivor loses nothing, since it evicts every prediction
-at or below its tick. `onTick` is deliberately NOT paced and still writes the store on every beat.
+backlog the host can outpace has no bound. `onTick` is deliberately NOT paced and still writes the store on every beat.
 
 The pacing is the game's choice, not a global default. Measured: with it on for everyone, a
 turn-based canvas-interaction spec failed its first attempt on 3 of 3 runs, while the same tree with

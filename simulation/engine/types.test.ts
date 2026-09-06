@@ -253,24 +253,6 @@ describe('ActionDefinition', () => {
         expect(def.type).toBe('mygame:noop');
     });
 
-    it('supports optional predictable field', () => {
-        const def: ActionDefinition<Record<string, unknown>> = {
-            type: 'mygame:safe_move',
-            predictable: true,
-            parsePayload(_raw) {
-                return {};
-            },
-            validate(_payload, _state, _playerId, _ctx) {
-                return { ok: true };
-            },
-            reduce(state, _payload, _playerId, _ctx) {
-                return state;
-            },
-        };
-
-        expect(def.predictable).toBe(true);
-    });
-
     it('accepts a plain interface payload without Record<string, unknown> intersection', () => {
         // PlainPayload is a plain interface — not intersected with Record<string, unknown>.
         // Before relaxing TPayload to `object` this would fail typecheck with

@@ -13,7 +13,6 @@ import {
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
     GAME_REVEAL_CHANNEL,
-    GAME_PREDICTABLE_TYPES_CHANNEL,
     GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
     LOBBY_HOST_CHANNEL,
     LOBBY_GET_CURRENT_STATE_CHANNEL,
@@ -408,68 +407,12 @@ describe('registerGameHandlers', () => {
         // `chimera:game:snapshot` and `chimera:game:reveal` are one-way pushes
         // from main → renderer via `webContents.send`. They must NOT appear as
         // main-side listeners or invoke handlers.
-        expect([...stub.handled.keys()]).toEqual([
-            GAME_PREDICTABLE_TYPES_CHANNEL,
-            GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
-        ]);
+        expect([...stub.handled.keys()]).toEqual([GAME_GET_CURRENT_SNAPSHOT_CHANNEL]);
         expect([...stub.listeners.keys()]).toEqual([GAME_SEND_ACTION_CHANNEL]);
         expect(stub.handled.has(GAME_SNAPSHOT_CHANNEL)).toBe(false);
         expect(stub.listeners.has(GAME_SNAPSHOT_CHANNEL)).toBe(false);
         expect(stub.handled.has(GAME_REVEAL_CHANNEL)).toBe(false);
         expect(stub.listeners.has(GAME_REVEAL_CHANNEL)).toBe(false);
-    });
-
-    describe('chimera:game:predictable-action-types handler', () => {
-        it('returns an empty array when no actionRegistry is provided', async () => {
-            const stub = makeGameIpcMainStub();
-            registerGameHandlers({ ipcMain: stub.ipcMain });
-
-            const handler = stub.handled.get(GAME_PREDICTABLE_TYPES_CHANNEL);
-            expect(handler).toBeDefined();
-            await expect(Promise.resolve(handler?.({}))).resolves.toEqual([]);
-        });
-
-        it('returns only types with predictable: true from the injected registry', async () => {
-            const stub = makeGameIpcMainStub();
-            const registry = {
-                registeredTypes: () => ['tactics:move', 'tactics:pass', 'tactics:chat'],
-                resolve: (type: string): { readonly predictable?: boolean } => {
-                    if (type === 'tactics:move') return { predictable: true };
-                    if (type === 'tactics:pass') return { predictable: false };
-                    return {}; // tactics:chat — predictable absent
-                },
-            };
-            registerGameHandlers({ ipcMain: stub.ipcMain, actionRegistry: registry });
-
-            const handler = stub.handled.get(GAME_PREDICTABLE_TYPES_CHANNEL);
-            await expect(Promise.resolve(handler?.({}))).resolves.toEqual(['tactics:move']);
-        });
-
-        it('returns all types when all are marked predictable: true', async () => {
-            const stub = makeGameIpcMainStub();
-            const registry = {
-                registeredTypes: () => ['a:x', 'a:y'],
-                resolve: (_type: string): { readonly predictable?: boolean } => ({
-                    predictable: true,
-                }),
-            };
-            registerGameHandlers({ ipcMain: stub.ipcMain, actionRegistry: registry });
-
-            const handler = stub.handled.get(GAME_PREDICTABLE_TYPES_CHANNEL);
-            await expect(Promise.resolve(handler?.({}))).resolves.toEqual(['a:x', 'a:y']);
-        });
-
-        it('returns an empty array when the registry has no registered types', async () => {
-            const stub = makeGameIpcMainStub();
-            const registry = {
-                registeredTypes: () => [] as string[],
-                resolve: (_type: string): { readonly predictable?: boolean } => ({}),
-            };
-            registerGameHandlers({ ipcMain: stub.ipcMain, actionRegistry: registry });
-
-            const handler = stub.handled.get(GAME_PREDICTABLE_TYPES_CHANNEL);
-            await expect(Promise.resolve(handler?.({}))).resolves.toEqual([]);
-        });
     });
 
     describe('chimera:game:get-current-snapshot handler', () => {

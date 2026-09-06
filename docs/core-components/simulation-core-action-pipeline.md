@@ -115,8 +115,6 @@ interface ActionDefinition<
         playerId: PlayerId,
         ctx: ReduceContext,
     ): TState;
-    // Set true only for own-player-only, non-randomised, non-contested actions
-    readonly predictable?: boolean;
 }
 
 // Handed to validate() and reduce(). Deliberately narrow — do not widen ad-hoc.
@@ -420,8 +418,6 @@ const MoveEntityAction: ActionDefinition<MoveEntityPayload, MyGameSnapshot> = {
             },
         };
     },
-
-    predictable: true,
 };
 
 export default MoveEntityAction;

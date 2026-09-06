@@ -4,13 +4,13 @@
  * renderer/state/gameStore.test.ts
  *
  * Unit tests for the gameStore Zustand store.
- * Covers SnapshotStore and PredictionStore behaviours as required by §4.4.
+ * Covers SnapshotStore and MatchStatusStore behaviours as required by §4.4.
  *
  * Architecture: §4.4 — Renderer State Stores
  *
  * Rules:
  *  - No real Electron IPC — all tests use the `createGameStore()` factory.
- *  - `applySnapshot`, `addPrediction`, `confirmPrediction` are marked
+ *  - `applySnapshot` and `applyTick` are marked
  *    `// ipcClient only` and must not be called from components.
  */
 
@@ -19,7 +19,6 @@ import { createGameStore, useGameStore } from './gameStore.js';
 import type {
     CommitmentId,
     CommitmentReveal,
-    EngineAction,
     PlayerSnapshot,
 } from '@chimera-engine/simulation/bridge/api-types.js';
 import { playerId, gamePhase } from '@chimera-engine/simulation/bridge/api-types.js';
@@ -41,26 +40,12 @@ function makeSnapshot(tick: number, canUndo = false, canRedo = false): PlayerSna
     };
 }
 
-function makeAction(tick: number, type = 'test:move'): EngineAction {
-    return {
-        type,
-        playerId: playerId('p1'),
-        tick,
-        payload: {},
-    };
-}
-
 // ── gameStore — initial state ─────────────────────────────────────────────────
 
 describe('gameStore — initial state', () => {
     it('initialises with null snapshot', () => {
         const store = createGameStore();
         expect(store.getState().snapshot).toBeNull();
-    });
-
-    it('initialises with empty predictedActions', () => {
-        const store = createGameStore();
-        expect(store.getState().predictedActions).toEqual([]);
     });
 
     it('initialises with latencyMs = 0', () => {
@@ -161,101 +146,6 @@ describe('gameStore.applyTick()', () => {
     });
 });
 
-// ── gameStore.addPrediction() ─────────────────────────────────────────────────
-
-describe('gameStore.addPrediction()', () => {
-    it('appends the action to predictedActions', () => {
-        const store = createGameStore();
-        const action = makeAction(5);
-
-        store.getState().addPrediction(action);
-
-        expect(store.getState().predictedActions).toHaveLength(1);
-        expect(store.getState().predictedActions[0]).toBe(action);
-    });
-
-    it('accumulates multiple predictions in order', () => {
-        const store = createGameStore();
-        const a1 = makeAction(3);
-        const a2 = makeAction(4);
-        const a3 = makeAction(5);
-
-        store.getState().addPrediction(a1);
-        store.getState().addPrediction(a2);
-        store.getState().addPrediction(a3);
-
-        expect(store.getState().predictedActions).toHaveLength(3);
-        expect(store.getState().predictedActions[0]).toBe(a1);
-        expect(store.getState().predictedActions[2]).toBe(a3);
-    });
-
-    it('does not mutate the previous predictedActions array', () => {
-        const store = createGameStore();
-        const a1 = makeAction(1);
-        store.getState().addPrediction(a1);
-        const before = store.getState().predictedActions;
-
-        const a2 = makeAction(2);
-        store.getState().addPrediction(a2);
-
-        // The array reference should change (immutable update)
-        expect(store.getState().predictedActions).not.toBe(before);
-    });
-});
-
-// ── gameStore.confirmPrediction() ─────────────────────────────────────────────
-
-describe('gameStore.confirmPrediction()', () => {
-    it('evicts all predictions with tick exactly equal to N', () => {
-        const store = createGameStore();
-        store.getState().addPrediction(makeAction(5));
-
-        store.getState().confirmPrediction(5);
-
-        expect(store.getState().predictedActions).toHaveLength(0);
-    });
-
-    it('evicts all predictions with tick strictly less than N', () => {
-        const store = createGameStore();
-        store.getState().addPrediction(makeAction(3));
-        store.getState().addPrediction(makeAction(4));
-
-        store.getState().confirmPrediction(5);
-
-        expect(store.getState().predictedActions).toHaveLength(0);
-    });
-
-    it('retains predictions with tick strictly greater than N', () => {
-        const store = createGameStore();
-        store.getState().addPrediction(makeAction(6));
-        store.getState().addPrediction(makeAction(7));
-
-        store.getState().confirmPrediction(5);
-
-        expect(store.getState().predictedActions).toHaveLength(2);
-    });
-
-    it('evicts only tick <= N and retains tick > N', () => {
-        const store = createGameStore();
-        store.getState().addPrediction(makeAction(3));
-        store.getState().addPrediction(makeAction(5));
-        store.getState().addPrediction(makeAction(6));
-        store.getState().addPrediction(makeAction(10));
-
-        store.getState().confirmPrediction(5);
-
-        const remaining = store.getState().predictedActions.map((a) => a.tick);
-        expect(remaining).toEqual([6, 10]);
-    });
-
-    it('handles empty predictedActions without error', () => {
-        const store = createGameStore();
-
-        expect(() => store.getState().confirmPrediction(5)).not.toThrow();
-        expect(store.getState().predictedActions).toHaveLength(0);
-    });
-});
-
 // ── RevealStore.applyReveal() (F54 / T9) ──────────────────────────────────────
 
 describe('gameStore.applyReveal()', () => {
@@ -277,12 +167,11 @@ describe('gameStore.applyReveal()', () => {
         expect(store.getState().lastReveal?.id).toBe('env-2');
     });
 
-    it('does not disturb snapshot or prediction state', () => {
+    it('does not disturb snapshot state', () => {
         const store = createGameStore();
         store.getState().applySnapshot(makeSnapshot(7));
         store.getState().applyReveal(reveal('env-1'));
         expect(store.getState().snapshot?.tick).toBe(7);
-        expect(store.getState().predictedActions).toHaveLength(0);
     });
 });
 
@@ -313,15 +202,13 @@ describe('gameStore.reset()', () => {
         expect(store.getState().currentTick).toBe(0);
     });
 
-    it('clears predictions and undo/redo and reveal back to initial', () => {
+    it('clears undo/redo and reveal back to initial', () => {
         const store = createGameStore();
         store.getState().applySnapshot(makeSnapshot(3, true, true));
-        store.getState().addPrediction(makeAction(4));
         store.getState().applyReveal(reveal('env-1'));
 
         store.getState().reset();
 
-        expect(store.getState().predictedActions).toEqual([]);
         expect(store.getState().canUndo).toBe(false);
         expect(store.getState().canRedo).toBe(false);
         expect(store.getState().lastReveal).toBeNull();

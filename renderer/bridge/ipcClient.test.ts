@@ -4,14 +4,13 @@
  * renderer/bridge/ipcClient.test.ts
  *
  * Unit tests for the ipcClient bridge module.
- * Covers sendAction() prediction wiring and onSnapshot bootstrapping.
+ * Covers sendAction() dispatch and onSnapshot bootstrapping.
  *
  * Architecture: §4.4 — Renderer State Stores, renderer/bridge/ipcClient.ts
  *
  * Rules:
  *  - No real Electron IPC — all port interactions use test doubles.
- *  - `ClientPredictor` and `ReconcileBuffer` are NOT imported here;
- *    the bridge only calls PredictionStore methods.
+ *  - The bridge only calls the store's `apply*` methods.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -22,7 +21,7 @@ import {
     immediateFrameScheduler,
     type FrameScheduler,
     type IpcGamePort,
-    type IpcPredictionStore,
+    type IpcSnapshotStore,
 } from './ipcClient.js';
 import type { EngineAction, PlayerSnapshot } from '@chimera-engine/simulation/bridge/api-types.js';
 import { playerId, gamePhase } from '@chimera-engine/simulation/bridge/api-types.js';
@@ -82,25 +81,17 @@ function makePort(): {
 }
 
 function makeStore(): {
-    store: IpcPredictionStore;
-    addPredictionSpy: ReturnType<typeof vi.fn>;
-    confirmPredictionSpy: ReturnType<typeof vi.fn>;
+    store: IpcSnapshotStore;
     applySnapshotSpy: ReturnType<typeof vi.fn>;
     applyTickSpy: ReturnType<typeof vi.fn>;
 } {
-    const addPredictionSpy = vi.fn<(action: EngineAction) => void>();
-    const confirmPredictionSpy = vi.fn<(tick: number) => void>();
     const applySnapshotSpy = vi.fn<(snapshot: PlayerSnapshot) => void>();
     const applyTickSpy = vi.fn<(tick: number) => void>();
     return {
         store: {
-            addPrediction: addPredictionSpy,
-            confirmPrediction: confirmPredictionSpy,
             applySnapshot: applySnapshotSpy,
             applyTick: applyTickSpy,
         },
-        addPredictionSpy,
-        confirmPredictionSpy,
         applySnapshotSpy,
         applyTickSpy,
     };
@@ -109,74 +100,15 @@ function makeStore(): {
 // ── createIpcClient — sendAction() ────────────────────────────────────────────
 
 describe('createIpcClient.sendAction()', () => {
-    it('dispatches the action via the port regardless of predictability', () => {
+    it('dispatches the action via the port', () => {
         const { port, sendActionSpy } = makePort();
         const { store } = makeStore();
-        const client = createIpcClient(port, store, () => false);
+        const client = createIpcClient(port, store);
         const action = makeAction(3);
 
         client.sendAction(action);
 
         expect(sendActionSpy).toHaveBeenCalledOnce();
-        expect(sendActionSpy).toHaveBeenCalledWith(action);
-    });
-
-    it('calls addPrediction when isPredictable returns true', () => {
-        const { port } = makePort();
-        const { store, addPredictionSpy } = makeStore();
-        const client = createIpcClient(port, store, () => true);
-        const action = makeAction(4);
-
-        client.sendAction(action);
-
-        expect(addPredictionSpy).toHaveBeenCalledOnce();
-        expect(addPredictionSpy).toHaveBeenCalledWith(action);
-    });
-
-    it('does NOT call addPrediction when isPredictable returns false', () => {
-        const { port } = makePort();
-        const { store, addPredictionSpy } = makeStore();
-        const client = createIpcClient(port, store, () => false);
-
-        client.sendAction(makeAction(4));
-
-        expect(addPredictionSpy).not.toHaveBeenCalled();
-    });
-
-    it('does NOT call addPrediction for actions where isPredictable is type-specific and returns false', () => {
-        const { port } = makePort();
-        const { store, addPredictionSpy } = makeStore();
-        const predictableTypes = new Set(['game:move_unit']);
-        const client = createIpcClient(port, store, (t) => predictableTypes.has(t));
-
-        client.sendAction(makeAction(5, 'game:end_turn'));
-
-        expect(addPredictionSpy).not.toHaveBeenCalled();
-    });
-
-    it('calls addPrediction only for the predictable action type', () => {
-        const { port } = makePort();
-        const { store, addPredictionSpy } = makeStore();
-        const predictableTypes = new Set(['game:move_unit']);
-        const client = createIpcClient(port, store, (t) => predictableTypes.has(t));
-
-        client.sendAction(makeAction(5, 'game:move_unit'));
-        client.sendAction(makeAction(6, 'game:end_turn'));
-
-        expect(addPredictionSpy).toHaveBeenCalledOnce();
-        expect(addPredictionSpy).toHaveBeenCalledWith(
-            expect.objectContaining({ type: 'game:move_unit' }),
-        );
-    });
-
-    it('still dispatches via port even when addPrediction is called', () => {
-        const { port, sendActionSpy } = makePort();
-        const { store } = makeStore();
-        const client = createIpcClient(port, store, () => true);
-        const action = makeAction(7);
-
-        client.sendAction(action);
-
         expect(sendActionSpy).toHaveBeenCalledWith(action);
     });
 });
@@ -187,7 +119,7 @@ describe('createIpcClient.bootstrap()', () => {
     it('registers an onSnapshot listener on the port', () => {
         const { port, onSnapshotSpy } = makePort();
         const { store } = makeStore();
-        const client = createIpcClient(port, store, () => false);
+        const client = createIpcClient(port, store);
 
         client.bootstrap();
 
@@ -197,7 +129,7 @@ describe('createIpcClient.bootstrap()', () => {
     it('registers an onTick listener on the port', () => {
         const { port, onTickSpy } = makePort();
         const { store } = makeStore();
-        const client = createIpcClient(port, store, () => false);
+        const client = createIpcClient(port, store);
 
         client.bootstrap();
 
@@ -209,12 +141,7 @@ describe('createIpcClient.bootstrap()', () => {
         const { store, applySnapshotSpy } = makeStore();
         // Under the immediate scheduler — the off switch — the bridge behaves
         // exactly as it did before it was paced.
-        const client = createIpcClient(
-            portFixture.port,
-            store,
-            () => false,
-            immediateFrameScheduler,
-        );
+        const client = createIpcClient(portFixture.port, store, immediateFrameScheduler);
         client.bootstrap();
         const snap = makeSnapshot(10);
 
@@ -224,60 +151,16 @@ describe('createIpcClient.bootstrap()', () => {
         expect(applySnapshotSpy).toHaveBeenCalledWith(snap);
     });
 
-    it('calls confirmPrediction with snapshot.tick when a snapshot arrives', () => {
-        const portFixture = makePort();
-        const { store, confirmPredictionSpy } = makeStore();
-        const client = createIpcClient(
-            portFixture.port,
-            store,
-            () => false,
-            immediateFrameScheduler,
-        );
-        client.bootstrap();
-        const snap = makeSnapshot(7);
-
-        portFixture.capturedListener?.(snap);
-
-        expect(confirmPredictionSpy).toHaveBeenCalledOnce();
-        expect(confirmPredictionSpy).toHaveBeenCalledWith(7);
-    });
-
     it('calls applyTick when a tick-only update arrives', () => {
         const portFixture = makePort();
         const { store, applyTickSpy } = makeStore();
-        const client = createIpcClient(portFixture.port, store, () => false);
+        const client = createIpcClient(portFixture.port, store);
         client.bootstrap();
 
         portFixture.capturedTickListener?.(88);
 
         expect(applyTickSpy).toHaveBeenCalledOnce();
         expect(applyTickSpy).toHaveBeenCalledWith(88);
-    });
-
-    it('calls confirmPrediction before applySnapshot (evict first, then apply)', () => {
-        const portFixture = makePort();
-        const callOrder: string[] = [];
-        const store: IpcPredictionStore = {
-            addPrediction: vi.fn(),
-            confirmPrediction: vi.fn(() => {
-                callOrder.push('confirm');
-            }),
-            applySnapshot: vi.fn(() => {
-                callOrder.push('apply');
-            }),
-            applyTick: vi.fn(),
-        };
-        const client = createIpcClient(
-            portFixture.port,
-            store,
-            () => false,
-            immediateFrameScheduler,
-        );
-        client.bootstrap();
-
-        portFixture.capturedListener?.(makeSnapshot(3));
-
-        expect(callOrder).toEqual(['confirm', 'apply']);
     });
 
     it('returns an unsubscribe function from the port', () => {
@@ -288,7 +171,7 @@ describe('createIpcClient.bootstrap()', () => {
             onTick: vi.fn(() => vi.fn()),
         };
         const { store } = makeStore();
-        const client = createIpcClient(port, store, () => false);
+        const client = createIpcClient(port, store);
 
         const unsub = client.bootstrap();
         unsub();
@@ -304,7 +187,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         const portFixture = makePort();
         const { store, applySnapshotSpy } = makeStore();
         const frames = makeManualScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
         client.bootstrap();
 
         portFixture.capturedListener?.(makeSnapshot(10));
@@ -319,7 +202,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         const portFixture = makePort();
         const { store, applySnapshotSpy } = makeStore();
         const frames = makeManualScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
         client.bootstrap();
 
         portFixture.capturedListener?.(makeSnapshot(10));
@@ -336,7 +219,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         const portFixture = makePort();
         const { store } = makeStore();
         const frames = makeManualScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
         client.bootstrap();
 
         portFixture.capturedListener?.(makeSnapshot(10));
@@ -350,7 +233,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         const portFixture = makePort();
         const { store, applySnapshotSpy } = makeStore();
         const frames = makeManualScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
         client.bootstrap();
 
         portFixture.capturedListener?.(makeSnapshot(10));
@@ -361,52 +244,11 @@ describe('createIpcClient — snapshot coalescing', () => {
         expect(applySnapshotSpy).toHaveBeenCalledTimes(2);
     });
 
-    it('keeps confirmPrediction before applySnapshot across the frame boundary', () => {
-        const portFixture = makePort();
-        const callOrder: string[] = [];
-        const store: IpcPredictionStore = {
-            addPrediction: vi.fn(),
-            confirmPrediction: vi.fn(() => {
-                callOrder.push('confirm');
-            }),
-            applySnapshot: vi.fn(() => {
-                callOrder.push('apply');
-            }),
-            applyTick: vi.fn(),
-        };
-        const frames = makeManualScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
-        client.bootstrap();
-
-        portFixture.capturedListener?.(makeSnapshot(3));
-        frames.runFrame();
-
-        expect(callOrder).toEqual(['confirm', 'apply']);
-    });
-
-    it('confirms only the SURVIVING snapshot tick when two arrive in one frame', () => {
-        // `confirmPrediction` evicts everything at or below the tick it is
-        // given, so the newer tick's eviction is a superset of the older's —
-        // dropping the superseded confirm loses nothing.
-        const portFixture = makePort();
-        const { store, confirmPredictionSpy } = makeStore();
-        const frames = makeManualScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
-        client.bootstrap();
-
-        portFixture.capturedListener?.(makeSnapshot(10));
-        portFixture.capturedListener?.(makeSnapshot(11));
-        frames.runFrame();
-
-        expect(confirmPredictionSpy).toHaveBeenCalledOnce();
-        expect(confirmPredictionSpy).toHaveBeenCalledWith(11);
-    });
-
     it('does not write the store from a frame that fires after unsubscribe', () => {
         const portFixture = makePort();
-        const { store, applySnapshotSpy, confirmPredictionSpy } = makeStore();
+        const { store, applySnapshotSpy } = makeStore();
         const frames = makeManualScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
         const unsubscribe = client.bootstrap();
 
         portFixture.capturedListener?.(makeSnapshot(10));
@@ -418,7 +260,6 @@ describe('createIpcClient — snapshot coalescing', () => {
 
         expect(frames.cancelled).toBe(1);
         expect(applySnapshotSpy).not.toHaveBeenCalled();
-        expect(confirmPredictionSpy).not.toHaveBeenCalled();
     });
 
     it('writes nothing from a frame a scheduler fires DESPITE the cancel', () => {
@@ -429,7 +270,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         const portFixture = makePort();
         const { store, applySnapshotSpy } = makeStore();
         const frames = makeUncancellableScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
         const unsubscribe = client.bootstrap();
 
         portFixture.capturedListener?.(makeSnapshot(10));
@@ -446,7 +287,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         const portFixture = makePort();
         const { store } = makeStore();
         const frames = makeSynchronousScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
         const unsubscribe = client.bootstrap();
 
         portFixture.capturedListener?.(makeSnapshot(10));
@@ -466,9 +307,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         // envelope from its own past.
         const portFixture = makePort();
         const applied: string[] = [];
-        const store: IpcPredictionStore = {
-            addPrediction: vi.fn(),
-            confirmPrediction: vi.fn(),
+        const store: IpcSnapshotStore = {
             applySnapshot: vi.fn((snapshot: PlayerSnapshot) => {
                 applied.push(`snapshot:${String(snapshot.tick)}`);
             }),
@@ -477,7 +316,7 @@ describe('createIpcClient — snapshot coalescing', () => {
             }),
         };
         const frames = makeManualScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
         client.bootstrap();
 
         portFixture.capturedListener?.(makeSnapshot(10));
@@ -495,7 +334,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         const portFixture = makePort();
         const { store, applyTickSpy } = makeStore();
         const frames = makeManualScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
         client.bootstrap();
 
         portFixture.capturedListener?.(makeSnapshot(10));
@@ -516,7 +355,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         const portFixture = makePort();
         const { store, applyTickSpy } = makeStore();
         const frames = makeManualScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
         client.bootstrap();
 
         portFixture.capturedListener?.(makeSnapshot(10));
@@ -536,7 +375,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         const portFixture = makePort();
         const { store, applyTickSpy } = makeStore();
         const frames = makeManualScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
         client.bootstrap();
 
         portFixture.capturedTickListener?.(90);
@@ -556,7 +395,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         const portFixture = makePort();
         const { store, applyTickSpy } = makeStore();
         const frames = makeManualScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
         client.bootstrap();
 
         portFixture.capturedListener?.(makeSnapshot(5));
@@ -577,7 +416,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         const portFixture = makePort();
         const { store, applyTickSpy } = makeStore();
         const frames = makeManualScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
         client.bootstrap();
 
         portFixture.capturedListener?.(makeSnapshot(5));
@@ -593,7 +432,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         const portFixture = makePort();
         const { store, applyTickSpy } = makeStore();
         const frames = makeManualScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
         client.bootstrap();
 
         portFixture.capturedTickListener?.(88);
@@ -608,12 +447,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         // still outstanding, or the SECOND arrival would never be scheduled.
         const portFixture = makePort();
         const { store, applySnapshotSpy } = makeStore();
-        const client = createIpcClient(
-            portFixture.port,
-            store,
-            () => false,
-            immediateFrameScheduler,
-        );
+        const client = createIpcClient(portFixture.port, store, immediateFrameScheduler);
         client.bootstrap();
 
         portFixture.capturedListener?.(makeSnapshot(10));
@@ -626,7 +460,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         const portFixture = makePort();
         const { store, applySnapshotSpy } = makeStore();
         const frames = makeManualScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
         client.bootstrap();
 
         portFixture.capturedListener?.(makeSnapshot(10));
@@ -644,7 +478,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         // the behaviour every game had before the pacing existed.
         const portFixture = makePort();
         const { store, applySnapshotSpy } = makeStore();
-        const client = createIpcClient(portFixture.port, store, () => false);
+        const client = createIpcClient(portFixture.port, store);
         client.bootstrap();
 
         portFixture.capturedListener?.(makeSnapshot(10));
@@ -656,12 +490,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         // What the paced arm resolves to in a real renderer.
         const portFixture = makePort();
         const { store, applySnapshotSpy } = makeStore();
-        const client = createIpcClient(
-            portFixture.port,
-            store,
-            () => false,
-            defaultFrameScheduler(),
-        );
+        const client = createIpcClient(portFixture.port, store, defaultFrameScheduler());
         client.bootstrap();
 
         portFixture.capturedListener?.(makeSnapshot(10));
@@ -685,12 +514,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         try {
             const portFixture = makePort();
             const { store, applySnapshotSpy } = makeStore();
-            const client = createIpcClient(
-                portFixture.port,
-                store,
-                () => false,
-                defaultFrameScheduler(),
-            );
+            const client = createIpcClient(portFixture.port, store, defaultFrameScheduler());
             client.bootstrap();
 
             portFixture.capturedListener?.(makeSnapshot(10));
@@ -709,12 +533,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         try {
             const portFixture = makePort();
             const { store, applySnapshotSpy } = makeStore();
-            const client = createIpcClient(
-                portFixture.port,
-                store,
-                () => false,
-                defaultFrameScheduler(),
-            );
+            const client = createIpcClient(portFixture.port, store, defaultFrameScheduler());
             client.bootstrap();
 
             portFixture.capturedListener?.(makeSnapshot(10));
@@ -729,7 +548,7 @@ describe('createIpcClient — snapshot coalescing', () => {
         const portFixture = makePort();
         const { store, applySnapshotSpy } = makeStore();
         const frames = makeManualScheduler();
-        const client = createIpcClient(portFixture.port, store, () => false, frames.scheduler);
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
         client.bootstrap();
 
         client.flush();

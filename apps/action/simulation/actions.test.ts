@@ -262,10 +262,6 @@ describe('action:set-velocity', () => {
 
         expect(snapshot).toEqual(before);
     });
-
-    it('is not predictable — the host owns the realtime clock', () => {
-        expect(actionSetVelocityDefinition.predictable).not.toBe(true);
-    });
 });
 
 // ── action:select-primitive ──────────────────────────────────────────────────

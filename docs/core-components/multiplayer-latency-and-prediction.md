@@ -1,6 +1,6 @@
 ---
 title: 'Chimera Architecture — §6 Multiplayer Latency, Prediction and Connection Diagnostics'
-description: 'How Chimera absorbs network latency behind a host-authoritative simulation: the two halves of client prediction — a wired per-action predictable opt-in feeding the PredictionStore queue, and the unwired ClientPredictor / ReconcileBuffer replay classes, round-trip latency measurement whose PING/PONG half is wired and whose store half is not, and the NAT / port-forwarding connection diagnostics that buildNetworkDiagnostics feeds to the Debug Inspector.'
+description: 'How Chimera absorbs network latency behind a host-authoritative simulation: what the engine offers instead of client prediction and what adding it would take, round-trip latency measurement whose PING/PONG half is wired and whose store half is not, and the NAT / port-forwarding connection diagnostics that buildNetworkDiagnostics feeds to the Debug Inspector.'
 tags:
     [
         multiplayer,
@@ -26,16 +26,13 @@ tags:
 
 Host authority is the engine's founding rule, and it costs a round trip: a
 client that dispatches an action cannot see its own result until the host has
-validated it and broadcast the next authoritative snapshot. This section owns
-the three mechanisms that make that cost visible, measurable or — at the game's
-option — hidden:
+validated it and broadcast the next authoritative snapshot. This section owns what
+makes that cost visible and measurable:
 
-| Mechanism                     | Owns                                                     | Where it runs                   |
-| ----------------------------- | -------------------------------------------------------- | ------------------------------- |
-| Prediction opt-in (wired)     | `ActionDefinition.predictable` → `PredictionStore` queue | registry → renderer             |
-| Prediction replay (not wired) | `ClientPredictor`, `ReconcileBuffer`                     | `simulation/engine/prediction/` |
-| Round-trip measurement        | `PING` / `PONG` → `onLatencyUpdate` (no consumer)        | protocol → renderer             |
-| Connection diagnostics        | `buildNetworkDiagnostics`, `NetworkDiagnostics`          | `electron/main/`                |
+| Mechanism              | Owns                                              | Where it runs       |
+| ---------------------- | ------------------------------------------------- | ------------------- |
+| Round-trip measurement | `PING` / `PONG` → `onLatencyUpdate` (no consumer) | protocol → renderer |
+| Connection diagnostics | `buildNetworkDiagnostics`, `NetworkDiagnostics`   | `electron/main/`    |
 
 It does **not** own the host-authority rule itself (Invariants #3, #4, #6, #8),
 the message union (§4.3), the provider and lobby (§4.14), or the projection that
@@ -56,118 +53,40 @@ and what a client receives is a `PlayerSnapshot` produced by
 Two consequences follow, and they are the reason this section exists:
 
 - **A client's own action has a visible round-trip delay.** At human-turn
-  cadence this is imperceptible, which is why prediction is opt-in rather than
-  default.
+  cadence this is imperceptible.
 - **A client cannot resolve a contested or randomised outcome locally.** It does
   not hold the authoritative RNG stream, and under fog-of-war it does not hold
-  the opposing state either (§8). Such actions are therefore never predicted;
-  the client waits.
+  the opposing state either (§8).
 
 ---
 
-## 6.2 Client prediction (optional)
+## 6.2 Client prediction: none, deliberately
 
-Prediction is **opt-in per action**, and the opt-in has two independent halves.
-The flag and the renderer-side queue it drives are wired end to end. The
-simulation-side replay classes are not. A reader has to keep them apart, so this
-section names which is which at every step.
+The engine offers no client prediction: an action dispatched through it waits for
+the host to validate it and broadcast the next authoritative snapshot, and that
+wait is the cost §6.1 describes. What a GAME does with its own state before
+dispatching is the game's — `apps/tactics` lays its commitment-mode buffer over
+the viewer's own snapshot and renders that, which its own section documents
+([commitment battle mode](../security-trust/tactics-commitment-battle-mode.md)).
 
-### The `predictable` flag — wired
+What used to sit here was a surface that implied otherwise: an
+`ActionDefinition.predictable` flag a game could set, a
+`getPredictableActionTypes()` bridge method the renderer called at bootstrap,
+and a `predictedActions` queue the IPC client appended to — none of which any
+component, hook or reducer ever read — beside two exported and unit-tested
+classes, `ClientPredictor` and `ReconcileBuffer`, that nothing outside their own
+directory constructed. They were also typed on `BaseGameSnapshot`, the state
+Invariant #3 keeps inside the main process, so a client could not have used them
+as written. All of it is removed.
 
-`ActionDefinition.predictable?: boolean` is the whole opt-in surface. It is
-absent by default, and absence means "not predictable" — the safe direction.
-
-Its production chain is live:
-
-1. `ipc-handlers.ts` answers `chimera:game:predictable-action-types` with every
-   registered type whose definition has `predictable === true`.
-2. `gameStoreBootstrap` fetches that set once and closes an `isPredictable`
-   predicate over it — injected rather than imported, so the renderer bridge
-   never takes an `ActionRegistry` dependency on `simulation/`.
-3. `ipcClient.sendAction` calls `PredictionStore.addPrediction(action)` for a
-   predictable type before forwarding to the port, and `bootstrap`'s snapshot
-   listener calls `confirmPrediction(snapshot.tick)` on every authoritative
-   snapshot, evicting everything the host has confirmed.
-
-So `PredictionStore.predictedActions` is a live queue of in-flight actions that
-a component can render as pending. Note that this is **bookkeeping, not
-simulation**: nothing re-runs a reducer, so the queue tells the UI what has not
-landed yet without producing a speculative snapshot.
-
-It is not a real-time-only feature. Tactics — the turn-based reference game —
-marks its move action `predictable: true`, and its test suite pins that.
-
-### `ClientPredictor` — not wired
-
-`ClientPredictor.applyOptimistic(snapshot, action)` applies an action locally,
-immediately, by running the action's own `reduce` — the same reducer the host
-will run, so the optimistic result and the authoritative one are produced by
-identical code.
-
-It refuses rather than degrades: for an action whose `predictable` is absent or
-`false` it throws `NonPredictableActionError`, which carries the offending
-action `type` on the error so a caller can report it without re-parsing a
-message. There is no silent fall-through that would optimistically apply an
-unpredictable action.
-
-`predictable` is the **only** thing it checks. It does not compare
-`action.playerId` against a viewer, so "own-player only" is a rule the caller
-must keep, not one the predictor enforces.
-
-The predictor is pure. It installs no timer, reads no clock and consumes
-randomness only through the `GameReduceContext` it was constructed with
-(Invariants #1, #2, #43).
-
-### `ReconcileBuffer` — not wired
-
-`ReconcileBuffer` holds the bounded queue of actions submitted optimistically
-but not yet confirmed.
-
-- `reconcile(authoritativeSnapshot, predictor)` drains the **leading run** of
-  confirmed actions — it shifts from the head while `queue[0].tick <=
-snapshot.tick` and stops at the first unconfirmed one — then replays whatever
-  remains on top of the authoritative snapshot through the predictor. A
-  confirmed action sitting behind an unconfirmed one is therefore replayed, not
-  evicted. With an in-order queue the two are the same thing; out of order they
-  are not.
-- The queue is capped at `MAX_BUFFER_DEPTH` (32), overridable per instance via
-  `ReconcileBufferOptions.maxBufferDepth`. At the cap `enqueue` evicts the head
-  rather than refusing the new action, so a client that has fallen far behind
-  keeps predicting its most recent inputs. The eviction emits a `warn` naming
-  the dropped action's type **only if** a logger was injected —
-  `ReconcileBufferOptions.logger` is optional and evictions are silent without
-  one.
-- Its type parameter is `TState extends BaseGameSnapshot`, which is the full
-  authoritative state type — the one Invariant #3 keeps inside the host's main
-  process. Constraining it to `PlayerSnapshot`, so that it operated on the
-  projected per-player view a client actually holds, is a **deliberately
-  deferred design decision**, recorded as such in `ClientPredictor`'s own
-  header. Wiring prediction to a real client is what would force it.
-
-### The renderer may not touch either class
-
-Prediction lives in `simulation/`, and the renderer is forbidden from importing
-`ClientPredictor` or `ReconcileBuffer` directly. The renderer's contact with
-prediction is `PredictionStore` alone (§4.4), reached through
-`ipcClient.sendAction()`.
-
-The prohibition is stated in the headers of `renderer/bridge/ipcClient.ts` and
-`ipcClient.test.ts` and is **not mechanically enforced** — no lint zone bans the
-specifier and no assertion reads the import graph. Both files name the classes
-in prose; neither imports them, and nothing measures that they do not.
-
-### Status: two exported classes with no production consumer
-
-`ClientPredictor` and `ReconcileBuffer` are exported from the engine barrel
-(`simulation/engine/index.ts`) and unit-tested, and nothing outside their own
-directory constructs either. That is a claim about THESE TWO CLASSES only — the
-`predictable` flag above is wired, and a reader who conflates the two will
-conclude that prediction does not exist at all.
-
-It is stated here rather than left to be discovered: someone who finds the
-classes and expects to trace them to a caller will not find one, and the absence
-is the current design state, not an omission. It is also why the
-`BaseGameSnapshot` constraint above has not had to be revisited.
+**What adding prediction would take**, if a game ever needs it: the renderer
+holds a `PlayerSnapshot`, not the authoritative state, so the reducers it would
+replay have to be renderer-safe and registered as such — a game-supplied table
+alongside `rendererGameRegistry`, not a reach into `simulation/engine`. The
+optimistic state is a VIEW concern: it may never become an authoritative write
+(Invariant #4), and the authoritative snapshot always wins on reconcile. What is
+deleted here is a shape that did not satisfy those constraints; it is not a
+design that was tried and rejected.
 
 ---
 
@@ -180,7 +99,7 @@ msg.sentAt)` on receipt and hands it to every callback registered through
 
 **The chain stops there.** Nothing in production subscribes to
 `onLatencyUpdate`. So
-`PredictionStore.latencyMs` is written only by its own initialiser and its reset,
+`MatchStatusStore.latencyMs` is written only by its own initialiser and its reset,
 both to `0`, and `perfStoreBootstrap`'s `latencyMs > 0 ? latencyMs : null`
 therefore resolves to `null` — the `PerfHud` (§4.16–§4.17) ping metric has no
 producer.
@@ -247,10 +166,7 @@ simulation or state contracts. The seam ships dormant — no consumer wires it.
 
 ## Invariants
 
-- **#1 / #2 / #43** — `ClientPredictor` and `ReconcileBuffer` live in
-  `simulation/` and are pure: no DOM, no Node, no wall clock, randomness only
-  through `ReduceContext.rng`.
-- **#3** — the type the prediction classes are constrained to, `BaseGameSnapshot`, is the state Invariant #3 keeps inside the main process; narrowing them to the projected `PlayerSnapshot` a client actually holds is deferred, not done.
-- **#6** — network messages are validated before they touch the simulation, so a prediction is never what makes a state change authoritative.
+- **#3** — a client holds a projected `PlayerSnapshot`, never the authoritative `GameSnapshot`. That is the constraint any future prediction surface has to be built against, and the one the deleted classes did not meet.
+- **#6** — network messages are validated before they touch the simulation, so nothing a client does locally can make a state change authoritative.
 - **#27** — the connection-diagnostics builder is reachable only through the
   debug branch, so a packaged non-debug build does not contain it.

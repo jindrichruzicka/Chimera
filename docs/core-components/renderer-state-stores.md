@@ -1,6 +1,6 @@
 ---
 title: 'Renderer State Stores'
-description: 'All Zustand stores in the renderer: SnapshotStore, PredictionStore, GameStore composition, and the full store catalogue with ownership rules, writers, and clear-on semantics.'
+description: 'All Zustand stores in the renderer: SnapshotStore, MatchStatusStore, GameStore composition, and the full store catalogue with ownership rules, writers, and clear-on semantics.'
 tags: [renderer, zustand, state, stores, ipc-mirror]
 ---
 
@@ -17,7 +17,7 @@ The renderer **reads** state; it never writes simulation state directly. All gam
 
 ---
 
-## GameStore — Split into Two Focused Interfaces (ISP)
+## GameStore — Split into Focused Interfaces (ISP)
 
 ```typescript
 // SnapshotStore — authoritative view projected from the host
@@ -28,20 +28,15 @@ interface SnapshotStore {
     applySnapshot(snapshot: PlayerSnapshot): void;
 }
 
-// PredictionStore — client-side optimistic prediction queue
-interface PredictionStore {
-    readonly predictedActions: readonly EngineAction[];
+// MatchStatusStore — what the match is, beside the snapshot itself
+interface MatchStatusStore {
     readonly latencyMs: number;
     readonly canUndo: boolean; // Mirrored from snapshot.undoMeta
     readonly canRedo: boolean;
-    /** ipcClient only — do NOT call from components. */
-    addPrediction(action: EngineAction): void;
-    /** ipcClient only — do NOT call from components. */
-    confirmPrediction(tick: number): void;
 }
 
 // Convenience composition exposed to components
-type GameStore = SnapshotStore & PredictionStore;
+type GameStore = SnapshotStore & MatchStatusStore & RevealStore;
 ```
 
 ---
@@ -50,9 +45,9 @@ type GameStore = SnapshotStore & PredictionStore;
 
 The renderer composes several small Zustand stores rather than one god-store (ISP).
 
-**Rule of thumb:** If state is owned by the main process (saves, settings, profiles, lobby membership), the renderer store is an IPC-mirror and writes only via an `apply*` method called by `renderer/bridge/ipcClient.ts`. If state is purely visual/local (predictions, toasts, perf samples, chat buffer), the store owns its source of truth and components may write directly.
+**Rule of thumb:** If state is owned by the main process (saves, settings, profiles, lobby membership), the renderer store is an IPC-mirror and writes only via an `apply*` method called by `renderer/bridge/ipcClient.ts`. If state is purely visual/local (toasts, perf samples, chat buffer), the store owns its source of truth and components may write directly.
 
-**`applySnapshot` is paced against the display for a REALTIME game.** `ipcClient` holds the newest arriving `PlayerSnapshot` and writes it on the next animation frame. Newest-wins: a snapshot superseded inside one frame is dropped where it stands, never queued — a queue would put the renderer a frame behind the host and would grow without bound whenever the host outpaced it. `confirmPrediction` moves with the snapshot it belongs to and still runs before it.
+**`applySnapshot` is paced against the display for a REALTIME game.** `ipcClient` holds the newest arriving `PlayerSnapshot` and writes it on the next animation frame. Newest-wins: a snapshot superseded inside one frame is dropped where it stands, never queued — a queue would put the renderer a frame behind the host and would grow without bound whenever the host outpaced it.
 
 `applyTick` is NOT paced — holding a clock-only beat for a frame would delay the cheapest update the bridge has for the sake of the most expensive one. That splits the two channels, and the split has a consequence the un-paced bridge could not produce: `applySnapshot` writes `currentTick: snapshot.tick`, so a snapshot held for a frame can land BEHIND a beat that already arrived, rewinding the store clock that stamps every dispatched action. The bridge repairs it by re-asserting a beat that arrived while the snapshot was waiting, and only when that beat is genuinely ahead — a snapshot may carry a lower tick on purpose, because a restore rewinds the match to a checkpoint.
 
@@ -60,7 +55,7 @@ The choice is the GAME's, not the engine's. A realtime game pushes faster than a
 
 | Store                | Scope   | Source of truth                                                                                              | Writers                                                                                                                                                                                          | Clears on      |
 | -------------------- | ------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
-| `gameStore`          | match   | main (snapshot) / renderer (prediction)                                                                      | `ipcClient` only — `applySnapshot`, `applyTick`, `addPrediction`, `confirmPrediction`                                                                                                            | match end      |
+| `gameStore`          | match   | main (snapshot)                                                                                              | `applySnapshot`, `applyTick` — never from a component                                                                                                                                            | match end      |
 | `lobbyStore`         | session | main (`LobbyManager`)                                                                                        | `ipcClient.applyLobbyState`                                                                                                                                                                      | disconnect     |
 | `saveStore`          | app     | main (`SaveManager`) — slot list; main (`SessionRestoreCoordinator`) — restore-status slim projection (#828) | `ipcClient.applySaveSlots` / `applyRestoreStatus` (bootstrap only); components (selection; `dismissRestore` — sanctioned optimistic reset of the local restore mirror, main stays authoritative) | —              |
 | `settingsStore`      | app     | main (`SettingsManager`)                                                                                     | `ipcClient.applySettings`; settings UI via `settings.update()` IPC                                                                                                                               | —              |

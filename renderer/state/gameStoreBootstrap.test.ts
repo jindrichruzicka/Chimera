@@ -5,16 +5,14 @@
  *
  * Unit tests for bootstrapGameStore.
  * Verifies that bootstrapGameStore registers the onSnapshot callback and
- * routes incoming PlayerSnapshot pushes into gameStore via confirmPrediction
- * and applySnapshot.
+ * routes incoming PlayerSnapshot pushes into gameStore via applySnapshot.
  *
- * Architecture reference: §4.4 — Renderer State Stores;
- *                         §6  — simulation/engine/prediction · Client Prediction
+ * Architecture reference: §4.4 — Renderer State Stores
  *
  * Invariants upheld:
  *   #3 — GameSnapshot never crosses any IPC boundary; only PlayerSnapshot.
  *   #4 — Renderer never writes simulation state directly; writes go via ipcClient,
- *        and addPrediction / confirmPrediction are ipcClient only.
+ *        and applySnapshot / applyTick are ipcClient only.
  */
 
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
@@ -29,7 +27,6 @@ import { playerId, gamePhase } from '@chimera-engine/simulation/bridge/api-types
 import { bootstrapGameStore } from './gameStoreBootstrap.js';
 import { createGameStore } from './gameStore.js';
 import { setSnapshotPacingEnabled } from './snapshotPacing.js';
-import { createIpcClient } from '../bridge/ipcClient.js';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -48,16 +45,11 @@ function makeSnapshot(tick: number): PlayerSnapshot {
     };
 }
 
-function makeAction(tick: number, type = 'test:move'): EngineAction {
-    return { type, playerId: playerId('p1'), tick, payload: {} };
-}
-
 type SnapshotListener = (snapshot: PlayerSnapshot) => void;
 
 function makeApi(
     options: {
         captureSnapshotListener?: (cb: SnapshotListener) => void;
-        predictableTypes?: readonly string[];
     } = {},
 ): {
     api: GameAPI;
@@ -65,7 +57,6 @@ function makeApi(
     onSnapshotSpy: ReturnType<typeof vi.fn>;
     onTickSpy: ReturnType<typeof vi.fn>;
     onActionRejectedSpy: ReturnType<typeof vi.fn>;
-    getPredictableActionTypesSpy: ReturnType<typeof vi.fn>;
 } {
     const sendActionSpy = vi.fn<(action: EngineAction) => void>();
     const onSnapshotSpy = vi.fn<(cb: SnapshotListener) => Unsubscribe>((cb) => {
@@ -77,9 +68,6 @@ function makeApi(
         vi.fn(),
     );
     const onRevealSpy = vi.fn(() => vi.fn());
-    const getPredictableActionTypesSpy = vi.fn<() => Promise<readonly string[]>>(() =>
-        Promise.resolve(options.predictableTypes ?? []),
-    );
 
     const api: GameAPI = {
         sendAction: sendActionSpy,
@@ -87,7 +75,6 @@ function makeApi(
         onTick: onTickSpy,
         onActionRejected: onActionRejectedSpy,
         onReveal: onRevealSpy,
-        getPredictableActionTypes: getPredictableActionTypesSpy,
         getCurrentSnapshot: vi.fn<() => Promise<PlayerSnapshot | null>>(() =>
             Promise.resolve(null),
         ),
@@ -99,7 +86,6 @@ function makeApi(
         onSnapshotSpy,
         onTickSpy,
         onActionRejectedSpy,
-        getPredictableActionTypesSpy,
     };
 }
 
@@ -157,22 +143,6 @@ describe('bootstrapGameStore()', () => {
         expect(store.getState().snapshot).toBe(snap);
     });
 
-    it('calls confirmPrediction(tick) evicting predictions at or before the snapshot tick', async () => {
-        let captured: SnapshotListener | undefined;
-        const { api } = makeApi({ captureSnapshotListener: (cb) => (captured = cb) });
-        const store = createGameStore();
-        // Pre-seed a prediction with tick=7 so we can observe eviction
-        store.getState().addPrediction(makeAction(7));
-        expect(store.getState().predictedActions).toHaveLength(1);
-
-        await bootstrapGameStore(api, store.getState());
-        captured!(makeSnapshot(7));
-        await nextFrame();
-
-        // tick=7 prediction should be evicted (confirmed)
-        expect(store.getState().predictedActions).toHaveLength(0);
-    });
-
     it('does not call sendAction on the api during bootstrap', async () => {
         const { api, sendActionSpy } = makeApi();
         await bootstrapGameStore(api, createGameStore().getState());
@@ -191,47 +161,6 @@ describe('bootstrapGameStore()', () => {
 
         expect(store.getState().canUndo).toBe(true);
         expect(store.getState().canRedo).toBe(false);
-    });
-
-    it('calls getPredictableActionTypes() exactly once during bootstrap', async () => {
-        const { api, getPredictableActionTypesSpy } = makeApi();
-        await bootstrapGameStore(api, createGameStore().getState());
-        expect(getPredictableActionTypesSpy).toHaveBeenCalledOnce();
-    });
-
-    it('registers the snapshot listener before predictable action types resolve', async () => {
-        let resolvePredictableTypes: (value: readonly string[]) => void = () => undefined;
-        const predictableTypesPromise = new Promise<readonly string[]>((resolve) => {
-            resolvePredictableTypes = resolve;
-        });
-        const { api, onSnapshotSpy, getPredictableActionTypesSpy } = makeApi();
-        getPredictableActionTypesSpy.mockReturnValueOnce(predictableTypesPromise);
-
-        const bootstrapPromise = bootstrapGameStore(api, createGameStore().getState());
-
-        expect(onSnapshotSpy).toHaveBeenCalledOnce();
-        resolvePredictableTypes([]);
-        await bootstrapPromise;
-    });
-
-    it('enqueues addPrediction for predictable types but not for others (predicate wiring)', async () => {
-        // Capture the isPredictable predicate that bootstrapGameStore constructs
-        // from the getPredictableActionTypes() response and passes to createIpcClient.
-        let capturedPredicate: ((type: string) => boolean) | undefined;
-        const factory: Parameters<typeof bootstrapGameStore>[2] = (port, store, isPredictable) => {
-            capturedPredicate = isPredictable;
-            return createIpcClient(port, store, isPredictable);
-        };
-        const { api } = makeApi({ predictableTypes: ['tactics:move', 'tactics:rotate'] });
-        await bootstrapGameStore(api, createGameStore().getState(), factory);
-
-        expect(capturedPredicate).toBeDefined();
-        // Types returned by getPredictableActionTypes must be recognised as predictable.
-        expect(capturedPredicate!('tactics:move')).toBe(true);
-        expect(capturedPredicate!('tactics:rotate')).toBe(true);
-        // Types NOT in the list must not be recognised as predictable.
-        expect(capturedPredicate!('tactics:chat')).toBe(false);
-        expect(capturedPredicate!('engine:end_turn')).toBe(false);
     });
 
     it('applies a snapshot from getCurrentSnapshot() when it returns non-null', async () => {
@@ -264,6 +193,28 @@ describe('bootstrapGameStore()', () => {
         await bootstrapPromise;
 
         expect(store.getState().snapshot).toBe(newerLiveSnapshot);
+    });
+
+    it('HOLDS an arrival until the frame runs — the bootstrap builds a paced scheduler', async () => {
+        // The scheduler `bootstrapGameStore` constructs, pinned at the only
+        // moment the two arms differ: the instant of arrival. Every other case
+        // in this block reads the settled end state, which is the same either
+        // way — so without this one the bootstrap could stop passing a
+        // scheduler at all, every realtime game would lose its pacing, and the
+        // suite would stay green.
+        let captured: SnapshotListener | undefined;
+        const { api } = makeApi({ captureSnapshotListener: (cb) => (captured = cb) });
+        const store = createGameStore();
+        await bootstrapGameStore(api, store.getState());
+
+        const snap = makeSnapshot(7);
+        captured!(snap);
+
+        expect(store.getState().snapshot).toBeNull();
+
+        await nextFrame();
+
+        expect(store.getState().snapshot).toBe(snap);
     });
 
     it('does not let a snapshot still waiting on a frame land on top of the catch-up', async () => {

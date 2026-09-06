@@ -184,7 +184,6 @@ function isUnitVisibleToViewer(unit: TacticsUnitEntity, viewerId: PlayerId): boo
 export const tacticsMoveUnitDefinition: ActionDefinition<TacticsMoveUnitPayload, BaseGameSnapshot> =
     {
         type: TACTICS_MOVE_UNIT_ACTION,
-        predictable: true,
 
         parsePayload(raw: Readonly<Record<string, unknown>>): TacticsMoveUnitPayload {
             return TacticsMoveUnitPayloadSchema.parse(raw);

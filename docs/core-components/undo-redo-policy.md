@@ -48,7 +48,7 @@ Chimera's undo system combines two classical patterns:
 4. Returns the reconstructed GameSnapshot
 5. ActionPipeline broadcasts the reconstructed snapshot to all viewers
 6. ActionHistoryEntry for the undo itself is appended (engine:undo is an EngineAction)
-7. canUndo / canRedo are updated in PredictionStore → rendered in UI
+7. canUndo / canRedo are updated in MatchStatusStore → rendered in UI
 ```
 
 ### Turn Boundary Rules
@@ -153,4 +153,4 @@ Consequences:
 ## Cross-References
 
 - [Simulation Core](simulation-core-action-pipeline.md) — `TurnMemento`, `ActionHistory`, `UndoManager`
-- [Renderer State Stores](renderer-state-stores.md) — `PredictionStore.canUndo` / `canRedo` mirrors
+- [Renderer State Stores](renderer-state-stores.md) — `MatchStatusStore.canUndo` / `canRedo` mirrors

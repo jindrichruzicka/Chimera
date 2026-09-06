@@ -141,9 +141,6 @@ chimera/
 │   │   ├── DeterministicRng.ts      # Seeded PRNG derived from (snapshot.seed, tick); passed via ReduceContext
 │   │   ├── GameTimer.ts             # Tick-based deterministic timer registry; TimerManager helper; see §4.20
 │   │   ├── FixedPoint.ts            # Q32.32 fixed-point integer math (mul, div, sqrt, sin, cos); see §4.31
-│   │   ├── prediction/              # Optional client-side replay of own actions; see §6
-│   │   │   ├── ClientPredictor.ts   # Optimistic local application of own actions (predictable: true)
-│   │   │   └── ReconcileBuffer.ts   # Replays unconfirmed actions on top of authoritative snapshots
 │   ├── projection/                  # StateProjector + commitment scheme — fog-of-war, cryptographic commitment (§8)
 │   │   ├── index.ts                 # Public API: exports types for state projection
 │   │   ├── types.ts                 # ObservedEntityState, ObservedPlayerState, VisibilityRules, VisibilityScope

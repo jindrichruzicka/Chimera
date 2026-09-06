@@ -78,8 +78,8 @@ engine handles the rest.
 - **Determinism you can bank on.** Pure reducers, seeded RNG, fixed-point math — bit-identical
   across macOS, Windows, and Linux. Saves, replays, and undo/redo fall out for free.
 - **Multiplayer is the default, not a retrofit.** Host-authoritative architecture with a local
-  WebSocket host, pluggable providers (LAN today, Steam unchanged tomorrow), client-side
-  prediction, and reconnect + resync.
+  WebSocket host, pluggable providers (LAN today, Steam unchanged tomorrow), and
+  reconnect + resync.
 - **Fog of war by construction.** Per-player state projection means clients never even receive
   what they shouldn't see; a commitment scheme keeps shuffles, dice, and hidden cards cheat-proof.
 - **Batteries included.** Lobby with AI seats, save/load with migrations, replay export,

@@ -990,18 +990,6 @@ export interface GameAPI {
     /** Stream of verified commitment reveals from the main-process trust gate. */
     onReveal(cb: (reveal: CommitmentReveal) => void): Unsubscribe;
     /**
-     * Returns the set of action type strings whose `ActionDefinition.predictable`
-     * field is `true` in the main-process `ActionRegistry`.
-     *
-     * Called once at renderer bootstrap so the prediction bridge can decide
-     * which `sendAction()` calls enqueue an optimistic prediction. The result
-     * is cached by `bootstrapGameStore` — there is no per-action round-trip.
-     *
-     * Returns an empty array when no `ActionRegistry` is available (e.g. before
-     * a game session is active, or on builds that omit the prediction module).
-     */
-    getPredictableActionTypes(): Promise<readonly string[]>;
-    /**
      * Returns the most-recently-sent {@link PlayerSnapshot} for this window,
      * or `null` when no snapshot has been pushed yet.
      *

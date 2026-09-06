@@ -8,7 +8,7 @@
  *
  * Registers the IPC onSnapshot listener so that incoming PlayerSnapshot
  * pushes from the main process are routed into gameStore via
- * `confirmPrediction` + `applySnapshot`.
+ * `applySnapshot`.
  *
  * Also handles automatic navigation: when a snapshot arrives (game started) on
  * a surface in the entry allow-set — `lobby`, `saves`, `main-menu` or a game
@@ -21,14 +21,12 @@
  * publishes, and both navigations ARM the store's transition so a game's
  * background can move on the same fade this effect runs.
  *
- * Architecture reference: §4.4 — Renderer State Stores;
- *                         §6  — simulation/engine/prediction · Client Prediction
+ * Architecture reference: §4.4 — Renderer State Stores
  *
  * Invariants upheld:
  *   #3  — Only PlayerSnapshot (never GameSnapshot) crosses the IPC boundary.
- *   #4  — The renderer reads state and never writes it directly: addPrediction /
- *          confirmPrediction are called only via ipcClient (bootstrapGameStore
- *          wires this); components never call them.
+ *   #4  — The renderer reads state and never writes it directly: components
+ *          never call the store's `apply*` methods.
  */
 
 import { useEffect, useRef } from 'react';

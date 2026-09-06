@@ -24,12 +24,7 @@ import type {
 } from '../api-types.js';
 import type { IpcListener, PushListenerPort } from '../shared/listener.js';
 import { subscribePush, subscribeValidatedPush } from '../shared/listener.js';
-import {
-    ActionRejectionSchema,
-    CommitmentRevealSchema,
-    parseInvokeResponse,
-    PredictableActionTypesSchema,
-} from '../shared/schemas.js';
+import { ActionRejectionSchema, CommitmentRevealSchema } from '../shared/schemas.js';
 
 /** `ipcRenderer.send` target for {@link GameAPI.sendAction}. */
 export const GAME_SEND_ACTION_CHANNEL = 'chimera:game:send-action';
@@ -68,14 +63,6 @@ export const GAME_REVEAL_CHANNEL = 'chimera:game:reveal';
  * (direct-game E2E path, renderer reload mid-session).
  */
 export const GAME_GET_CURRENT_SNAPSHOT_CHANNEL = 'chimera:game:get-current-snapshot';
-
-/**
- * `ipcRenderer.invoke` target for {@link GameAPI.getPredictableActionTypes}.
- * Main returns the filtered list of action type strings whose
- * `ActionDefinition.predictable` is `true` in the active `ActionRegistry`.
- * Returns an empty array when no registry is available.
- */
-export const GAME_PREDICTABLE_TYPES_CHANNEL = 'chimera:game:predictable-action-types';
 
 /**
  * Back-compat alias for {@link IpcListener}. Retained so test files that
@@ -129,16 +116,6 @@ export function createGameApi(ipc: GameApiIpcPort): GameAPI {
                 CommitmentRevealSchema,
                 cb,
             ),
-        getPredictableActionTypes: (): Promise<readonly string[]> =>
-            ipc
-                .invoke(GAME_PREDICTABLE_TYPES_CHANNEL)
-                .then((value) =>
-                    parseInvokeResponse(
-                        PredictableActionTypesSchema,
-                        GAME_PREDICTABLE_TYPES_CHANNEL,
-                        value,
-                    ),
-                ),
         getCurrentSnapshot: (): Promise<PlayerSnapshot | null> =>
             ipc.invoke(GAME_GET_CURRENT_SNAPSHOT_CHANNEL).then((value) => {
                 if (value === null || value === undefined) return null;

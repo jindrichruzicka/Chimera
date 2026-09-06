@@ -692,13 +692,6 @@ export interface ActionDefinition<
         playerId: PlayerId,
         ctx: GameReduceContext,
     ): TState;
-
-    /**
-     * Whether clients may tentatively apply this action before host confirmation.
-     * Default: `false`. Only set `true` for own-player-only, non-randomised,
-     * non-contested actions (§4.2, §6).
-     */
-    readonly predictable?: boolean;
 }
 
 // ─── Role marker interfaces ───────────────────────────────────────────────────

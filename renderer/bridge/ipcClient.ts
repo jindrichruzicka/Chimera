@@ -2,9 +2,8 @@
  * renderer/bridge/ipcClient.ts
  *
  * Typed bridge between renderer game state and the `window.__chimera.game`
- * IPC surface. Wraps `sendAction()` to enqueue optimistic predictions for
- * actions marked `predictable: true`, and wires the authoritative snapshot
- * stream into the `gameStore` via `applySnapshot` / `confirmPrediction`.
+ * IPC surface. Wires the authoritative snapshot stream into the `gameStore`
+ * via `applySnapshot`.
  *
  * Snapshot application can be paced against the DISPLAY rather than against IPC
  * arrival: the newest snapshot is held and applied on the next frame. Whether
@@ -14,21 +13,19 @@
  * if the host outpaced the renderer. The clock (`onTick`) is never paced, and
  * it writes the store on every beat.
  *
- * Architecture reference: §4.4 — Renderer State Stores;
- *                         §6  — simulation/engine/prediction · Client Prediction
+ * Architecture reference: §4.4 — Renderer State Stores
  *
  * Module boundary rules (hard constraints):
- *  - Must NOT import `ClientPredictor` or `ReconcileBuffer` from simulation/.
  *  - Must NOT import from electron/main/, apps/<name>/data, or any DOM API.
- *  - Renderer interacts with `PredictionStore` methods only; simulation types
- *    stay in simulation/.
+ *  - Renderer interacts with the store's `apply*` methods only; simulation
+ *    types stay in simulation/.
  *
  * Invariants upheld:
  *  #3  — `GameSnapshot` never crosses the IPC boundary; only `PlayerSnapshot`.
  *  #4  — Renderer never writes simulation state directly; all writes go
- *          through `sendAction()` → IPC → `ActionPipeline`. `addPrediction`
- *          and `confirmPrediction` are `// ipcClient only`; components never
- *          call them.
+ *          through `sendAction()` → IPC → `ActionPipeline`. `applySnapshot`
+ *          and `applyTick` are `// ipcClient only`; components never call
+ *          them.
  */
 
 import type {
@@ -56,14 +53,10 @@ export interface IpcGamePort {
 // ── Store interface ───────────────────────────────────────────────────────────
 
 /**
- * Narrow `GameStore` prediction surface that `ipcClient` is allowed to write.
+ * Narrow `GameStore` snapshot surface that `ipcClient` is allowed to write.
  * Components must never call these methods directly.
  */
-export interface IpcPredictionStore {
-    /** ipcClient only — appends action to prediction queue. */
-    addPrediction(action: EngineAction): void;
-    /** ipcClient only — evicts confirmed predictions at or before `tick`. */
-    confirmPrediction(tick: number): void;
+export interface IpcSnapshotStore {
     /** ipcClient only — applies authoritative snapshot from host. */
     applySnapshot(snapshot: PlayerSnapshot): void;
     /** ipcClient only — applies authoritative tick-only updates from host. */
@@ -73,10 +66,7 @@ export interface IpcPredictionStore {
 // ── IpcClient interface ───────────────────────────────────────────────────────
 
 export interface IpcClient {
-    /**
-     * Dispatch `action` via IPC. When `isPredictable(action.type)` is `true`,
-     * enqueues an optimistic prediction in the store before sending.
-     */
+    /** Dispatch `action` via IPC. */
     sendAction(action: EngineAction): void;
     /**
      * Register the `onSnapshot` push listener. Must be called once at
@@ -177,14 +167,10 @@ export function defaultFrameScheduler(): FrameScheduler {
 // ── Factory ───────────────────────────────────────────────────────────────────
 
 /**
- * Create a typed IPC client with prediction wiring.
+ * Create a typed IPC client.
  *
  * @param port          - Narrow `GameAPI` surface (`window.__chimera.game`).
- * @param store         - `GameStore` prediction write surface (ipcClient only).
- * @param isPredictable - Returns `true` when the action type is marked
- *                        `predictable: true` in its `ActionDefinition`.
- *                        Injected so the bridge does not import `ActionRegistry`
- *                        from `simulation/` (module boundary rule).
+ * @param store         - `GameStore` snapshot write surface (ipcClient only).
  * @param scheduler     - What snapshot application is paced against. Defaults to
  *                        application on arrival, the behaviour every game had
  *                        before the pacing existed: pacing is opted into, never
@@ -194,8 +180,7 @@ export function defaultFrameScheduler(): FrameScheduler {
  */
 export function createIpcClient(
     port: IpcGamePort,
-    store: IpcPredictionStore,
-    isPredictable: (type: string) => boolean,
+    store: IpcSnapshotStore,
     scheduler: FrameScheduler = immediateFrameScheduler,
 ): IpcClient {
     // NEWEST-WINS, never a queue. A snapshot superseded inside one frame is
@@ -225,11 +210,6 @@ export function createIpcClient(
         if (snapshot === null) {
             return;
         }
-        // Evict first, then apply — the order the un-paced bridge had.
-        // Confirming only the SURVIVOR loses nothing: `confirmPrediction`
-        // evicts every prediction at or below the tick it is given, so the
-        // newer tick's eviction covers the superseded one's.
-        store.confirmPrediction(snapshot.tick);
         store.applySnapshot(snapshot);
         // `applySnapshot` writes `currentTick: snapshot.tick`, so a snapshot
         // held for a frame can put the clock BEHIND a beat that already
@@ -259,9 +239,6 @@ export function createIpcClient(
 
     return {
         sendAction(action: EngineAction): void {
-            if (isPredictable(action.type)) {
-                store.addPrediction(action);
-            }
             port.sendAction(action);
         },
 

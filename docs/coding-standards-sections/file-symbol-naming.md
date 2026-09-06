@@ -27,5 +27,5 @@ Test files mirror their source: `ActionPipeline.test.ts` alongside `ActionPipeli
 - **React components**: `PascalCase`.
 - **Hooks**: `useCamelCase`.
 - **IPC channels**: `chimera:<domain>:<verb>` — all lowercase kebab. Example: `chimera:game:send-action`.
-- **Zustand store methods**: `camelCase` verbs — `applySnapshot`, `setLobbyState`, `clearPredictions`.
+- **Zustand store methods**: `camelCase` verbs — `applySnapshot`, `setLobbyState`, `applyReveal`.
 - **Action types**: `<namespace>:<verb_noun>` — all lowercase with underscores for space. Example: `<game>:move_unit`, `engine:end_turn`.

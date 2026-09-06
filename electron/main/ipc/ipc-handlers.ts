@@ -19,7 +19,6 @@ import {
     GAME_REVEAL_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
-    GAME_PREDICTABLE_TYPES_CHANNEL,
     GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
 } from '../../preload/apis/game-api.js';
 import {
@@ -174,7 +173,6 @@ export {
     GAME_REVEAL_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
-    GAME_PREDICTABLE_TYPES_CHANNEL,
     GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
     LOBBY_HOST_CHANNEL,
     LOBBY_GET_CURRENT_STATE_CHANNEL,
@@ -392,21 +390,6 @@ export interface RegisterGameHandlersOptions {
     /** Dispatches a validated action envelope to the live host session. */
     readonly actionDispatcher?: (action: EngineAction) => void;
     /**
-     * Optional `ActionRegistry`-shaped authority for the
-     * `chimera:game:predictable-action-types` channel. When provided, the
-     * handler returns all type strings whose `ActionDefinition.predictable`
-     * is `true`. When absent, the handler returns an empty array (prediction
-     * disabled at runtime — safe, graceful degradation).
-     *
-     * The narrow interface is used instead of importing `ActionRegistry`
-     * directly so this handler module remains loosely coupled and the type
-     * can be satisfied by a stub in tests without the full simulation graph.
-     */
-    readonly actionRegistry?: {
-        registeredTypes(): readonly string[];
-        resolve(type: string): { readonly predictable?: boolean };
-    };
-    /**
      * Returns the most-recently-sent `PlayerSnapshot` for the main window,
      * or `null` when no snapshot has been pushed yet. Used by the renderer
      * to replay a snapshot that arrived before its listener was registered.
@@ -472,10 +455,10 @@ function buildIpcValidationRejection(
  *         no parallel list in this file to drift out of sync.
  */
 export function registerGameHandlers(options: RegisterGameHandlersOptions): void {
-    const { ipcMain, actionDispatcher, actionRegistry } = options;
+    const { ipcMain, actionDispatcher } = options;
     const logger = options.logger ?? createNoopLogger();
     logger.info('registering chimera:game:* handlers', {
-        channels: [GAME_SEND_ACTION_CHANNEL, GAME_PREDICTABLE_TYPES_CHANNEL],
+        channels: [GAME_SEND_ACTION_CHANNEL, GAME_GET_CURRENT_SNAPSHOT_CHANNEL],
     });
 
     ipcMain.on(GAME_SEND_ACTION_CHANNEL, (event, action) => {
@@ -540,15 +523,6 @@ export function registerGameHandlers(options: RegisterGameHandlersOptions): void
                 actionType: validatedAction.type,
             } satisfies ActionRejection);
         }
-    });
-
-    ipcMain.handle(GAME_PREDICTABLE_TYPES_CHANNEL, () => {
-        if (actionRegistry === undefined) {
-            return [];
-        }
-        return actionRegistry
-            .registeredTypes()
-            .filter((type) => actionRegistry.resolve(type).predictable === true);
     });
 
     ipcMain.handle(GAME_GET_CURRENT_SNAPSHOT_CHANNEL, () => {

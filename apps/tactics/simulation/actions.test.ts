@@ -20,7 +20,6 @@ import { entityId, gamePhase, playerId } from '@chimera-engine/simulation/engine
 import { DefaultStateProjector } from '@chimera-engine/simulation/projection/StateProjector.js';
 import {
     TACTICS_ATTACK_ACTION,
-    TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
     registerTacticsActions,
     tacticsAttackDefinition,
@@ -139,15 +138,6 @@ describe('tactics move unit action', () => {
     it('normalises movement coordinates through the branded integer constructor', () => {
         expect(tacticsGridCoordinate(1)).toBe(1);
         expect(() => tacticsGridCoordinate(0.5)).toThrow('tactics coordinates must be integers.');
-    });
-
-    it('registers the move action as predictable', () => {
-        const registry = new ActionRegistry();
-
-        registerTacticsActions(registry);
-
-        expect(registry.has(TACTICS_MOVE_UNIT_ACTION)).toBe(true);
-        expect(registry.resolve(TACTICS_MOVE_UNIT_ACTION).predictable).toBe(true);
     });
 
     it('exports and registers the attack action for deterministic game resolution', () => {

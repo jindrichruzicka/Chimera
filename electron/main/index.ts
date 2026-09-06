@@ -3691,7 +3691,6 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
 
             lobbyManager.sendAction(action);
         },
-        actionRegistry: gameRegistry,
         getCurrentSnapshot: () => lastSentPlayerSnapshot,
         logger: logger.child({ module: 'game' }),
     });
