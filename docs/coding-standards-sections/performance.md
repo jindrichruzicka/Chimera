@@ -13,7 +13,7 @@ tags: [performance, simulation, IPC, renderer, memory, useMemo, selectors, codin
 ## 13.1 Simulation hot path
 
 - No per-tick allocations that can be hoisted out of the loop. Create objects once; reuse them.
-- `ActionPipeline` must complete in ≤ 16 ms at 20 Hz on the target hardware baseline.
+- `ActionPipeline` must complete inside `TICK_BUDGET_DUTY` of the game's DECLARED tick period on the target hardware baseline — `tickBudgetMsFor(tickRateMs)` in [`simulation/foundation/perf-budget.ts`](../../simulation/foundation/perf-budget.ts). The budget is a fraction of the period it is measured against rather than an absolute, because `resolveTickerHz` accepts any finite positive `tickRateMs`. `TICK_BUDGET_MS` is the value at the default rate, for a caller with no rate of its own to pass. §13.5 below records what each benchmark evaluates.
 
 ## 13.2 IPC
 
@@ -35,7 +35,7 @@ tags: [performance, simulation, IPC, renderer, memory, useMemo, selectors, codin
 
 ## 13.5 Enforcement (F49)
 
-The §13.1 and §13.4 budgets are constants in [`simulation/foundation/perf-budget.ts`](../../simulation/foundation/perf-budget.ts) (`TICK_BUDGET_MS`, `RENDERER_HEAP_BUDGET_MB`, `MAIN_HEAP_BUDGET_MB`) and are exercised by:
+The §13.1 and §13.4 budgets live in [`simulation/foundation/perf-budget.ts`](../../simulation/foundation/perf-budget.ts) — `tickBudgetMsFor()` with its locked `TICK_BUDGET_DUTY`, the derived `TICK_BUDGET_MS`, plus the `RENDERER_HEAP_BUDGET_MB` and `MAIN_HEAP_BUDGET_MB` absolutes. They are test-only: no runtime module reads any of them. They are exercised by:
 
 - **Engine tick + heap** — [`apps/tactics/__tests__/ActionPipelinePerf.bench.test.ts`](../../apps/tactics/__tests__/ActionPipelinePerf.bench.test.ts) drives `ActionPipeline.process()` (the shared live + replay hot path, Invariants #42/#70) and a long-run heap-growth check. Run with `npm run test:perf` (sets `--expose-gc` so the host-heap leak gate activates). The benchmark lives with the tactics reference game whose fixtures it drives — keeping `electron/main` free of game-specific test coupling — and uses `performance.now`, which is ESLint-banned in `simulation/**`, `ai/**`, and `apps/*/actions/**` (Invariant #43) but permitted under `apps/*/__tests__/`.
 - **Outbound wave** — [`apps/action/__tests__/OutboundPerBeatPerf.bench.test.ts`](../../apps/action/__tests__/OutboundPerBeatPerf.bench.test.ts) times what Stage 7 costs the host per eventful beat — `StateProjector.project()`, then `JSON.stringify` and `crc32` of the projection, once per viewer — over the action app's shipped visibility rules, at the two grids [§7.5](simulation-layer.md#per-beat-outbound-cost-baseline) records. The 500 × 4 grid is gated against `TICK_BUDGET_MS`; the 2000 × 8 grid is logged only and compared against nothing. Also run by `npm run test:perf`.

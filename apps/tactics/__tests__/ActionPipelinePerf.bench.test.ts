@@ -3,8 +3,12 @@
 // Executable §13 performance baseline for the engine's action hot path,
 // exercised through the tactics reference game's fixtures.
 //
-//   §13.1 — `ActionPipeline.process()` must complete in ≤ 16 ms at 20 Hz.
+//   §13.1 — `ActionPipeline.process()` must complete inside `TICK_BUDGET_DUTY`
+//           of the game's declared tick period.
 //   §13.4 — the host heap must not grow unbounded during a match.
+//
+// Tactics declares `realtime: false`, so it pins no `tickRateMs` of its own and
+// is gated against `TICK_BUDGET_MS`, the budget at the default period.
 //
 // This benchmark lives WITH the game whose fixtures it drives (it imports
 // tactics actions/entities/stamina to build a representative mid-match board),
@@ -167,8 +171,10 @@ function measure(
 // central-tendency check while catching a regression that spikes the tail without
 // moving the median. (max is left informational — a single GC/scheduler outlier
 // must not fail the gate.) median/p95/max are all logged every run.
-describe('ActionPipeline performance baseline (§13.1, ≤ 16 ms at 20 Hz)', () => {
-    it('processes engine:tick — the always-on 20 Hz path — within the tick budget', () => {
+describe('ActionPipeline performance baseline (§13.1, the default-rate tick budget)', () => {
+    // `engine:tick` is the heartbeat action a realtime host dispatches every
+    // beat, measured here through the shared engine path.
+    it('processes engine:tick — the engine heartbeat action — within the tick budget', () => {
         const stats = measure(
             'engine:tick',
             (snapshot) => ({

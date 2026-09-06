@@ -13,7 +13,8 @@ export const DEFAULT_WINDOW_TITLE = 'Chimera';
 /**
  * Default heartbeat interval, in milliseconds, for a real-time game that does
  * not pin its own `tickRateMs`. 50ms ≈ 20Hz — the per-tick perf-budget
- * baseline (`TICK_BUDGET_MS = 16`, see {@link simulation/foundation/perf-budget.ts}).
+ * baseline: `simulation/foundation/perf-budget.ts` derives `TICK_BUDGET_MS`
+ * from this constant.
  */
 export const DEFAULT_TICK_RATE_MS = 50;
 
