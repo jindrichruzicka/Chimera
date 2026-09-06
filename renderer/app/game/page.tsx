@@ -55,6 +55,20 @@ type GameActionType = 'engine:undo' | 'engine:redo' | 'engine:end_turn';
 // match advances to once the result is resolved (see GameScreenRegistry).
 const POST_GAME_SCENE_ID = 'engine:post-game';
 
+/**
+ * The authoritative clock, READ at dispatch rather than SUBSCRIBED to.
+ *
+ * A selector for `currentTick` re-renders this route on every clock-only beat
+ * and hands a fresh `sendAction` to the whole match tree below it. The store's
+ * own state object is the freshest source there is — zustand publishes it
+ * inside `set`, before any subscriber has run — so an envelope stamped from
+ * here can never carry a tick that a render lagged behind, which a value
+ * closed over at render time can.
+ */
+function readCurrentTick(): number {
+    return useGameStore.getState().currentTick;
+}
+
 type RendererGameLoadState =
     | { readonly status: 'idle' }
     | { readonly status: 'loading'; readonly gameId: string }
@@ -67,7 +81,6 @@ export default function GamePage(): React.ReactElement | null {
     const fadeRef = React.useRef(fade);
     fadeRef.current = fade;
     const snapshot = useGameStore((state) => state.snapshot);
-    const currentTick = useGameStore((state) => state.currentTick);
     const lastReveal = useGameStore((state) => state.lastReveal);
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const hasLoadedInitialLobbyState = useLobbyStore((state) => state.hasLoadedInitialState);
@@ -97,6 +110,13 @@ export default function GamePage(): React.ReactElement | null {
         snapshot?.sceneRequiredAssets,
     );
     const sendActionToHost = useSendAction();
+    // Re-pointed every render and read at DISPATCH, never closed over: the
+    // callbacks below are pinned to dependency lists that no longer name the
+    // snapshot, so anything captured directly would be frozen at the render
+    // that built the closure. Same reason `ActionPlayfield` holds its own
+    // dispatch inputs in refs.
+    const snapshotRef = React.useRef(snapshot);
+    snapshotRef.current = snapshot;
     const sendAction = React.useCallback(
         (action: EngineAction): void => {
             // A spectator is a read-only session viewer (Invariant #114): it has
@@ -106,6 +126,7 @@ export default function GamePage(): React.ReactElement | null {
             if (isSpectator) {
                 return;
             }
+            const latestSnapshot = snapshotRef.current;
             // A resolved match stops GAMEPLAY, not the scene lifecycle. A
             // transition can be in flight when `gameResult` lands, and its ack
             // — dispatched from inside the shell by `useFadeTransition` — comes
@@ -113,17 +134,19 @@ export default function GamePage(): React.ReactElement | null {
             // waiting on an ack no other code path sends. The pipeline's own
             // gate reads the same predicate.
             if (
-                snapshot !== null &&
-                isTerminalSnapshot(snapshot) &&
+                latestSnapshot !== null &&
+                isTerminalSnapshot(latestSnapshot) &&
                 !isSceneTransitionCompletionAction(action.type)
             ) {
                 return;
             }
 
-            const actionTick = typeof currentTick === 'number' ? currentTick : action.tick;
-            sendActionToHost({ ...action, tick: actionTick });
+            // The stamp: whatever `tick` the caller built its action with is
+            // replaced by the clock as of this call. See `page.beat.test.tsx`,
+            // "stamps the CURRENT clock on a dispatched action".
+            sendActionToHost({ ...action, tick: readCurrentTick() });
         },
-        [currentTick, isSpectator, sendActionToHost, snapshot],
+        [isSpectator, sendActionToHost],
     );
 
     // Leave-to-main-menu. useLeaveGame() raises this flag; routing owns the
@@ -203,11 +226,10 @@ export default function GamePage(): React.ReactElement | null {
             return;
         }
 
-        const actionTick = typeof currentTick === 'number' ? currentTick : snapshotForAction.tick;
         const action: EngineAction = {
             type,
             playerId,
-            tick: actionTick,
+            tick: snapshotForAction.tick,
             payload,
         };
         sendAction(action);
@@ -218,30 +240,28 @@ export default function GamePage(): React.ReactElement | null {
             if (!event.pressed || snapshot === null) return;
             if (isTerminalSnapshot(snapshot)) return;
             if (!snapshot.undoMeta.canUndo) return;
-            const actionTick = typeof currentTick === 'number' ? currentTick : snapshot.tick;
             sendAction({
                 type: 'engine:undo',
                 playerId: snapshot.viewerId,
-                tick: actionTick,
+                tick: snapshot.tick,
                 payload: { steps: 1 },
             });
         },
-        [snapshot, sendAction, currentTick],
+        [snapshot, sendAction],
     );
     const onRedoKey = React.useCallback(
         (event: InputEvent) => {
             if (!event.pressed || snapshot === null) return;
             if (isTerminalSnapshot(snapshot)) return;
             if (!snapshot.undoMeta.canRedo) return;
-            const actionTick = typeof currentTick === 'number' ? currentTick : snapshot.tick;
             sendAction({
                 type: 'engine:redo',
                 playerId: snapshot.viewerId,
-                tick: actionTick,
+                tick: snapshot.tick,
                 payload: { steps: 1 },
             });
         },
-        [snapshot, sendAction, currentTick],
+        [snapshot, sendAction],
     );
     const onEndTurnKey = React.useCallback(
         (event: InputEvent) => {
@@ -258,15 +278,14 @@ export default function GamePage(): React.ReactElement | null {
                 return;
             }
             if (!snapshot.isMyTurn) return;
-            const actionTick = typeof currentTick === 'number' ? currentTick : snapshot.tick;
             sendAction({
                 type: 'engine:end_turn',
                 playerId: snapshot.viewerId,
-                tick: actionTick,
+                tick: snapshot.tick,
                 payload: {},
             });
         },
-        [snapshot, sendAction, currentTick, loadedGame],
+        [snapshot, sendAction, loadedGame],
     );
     // A game that declares no undo gets NO key registration — the hook call
     // stays unconditional (rules of hooks) and its subscription is what is
@@ -378,6 +397,13 @@ export default function GamePage(): React.ReactElement | null {
 
     return (
         <>
+            {/*
+             * `currentTick` is deliberately NOT passed. Omitting it is what
+             * tells the shell to let its HUD leaf subscribe to the live clock
+             * itself, so a clock-only beat re-renders that one leaf instead of
+             * this route and the whole match tree hanging off it. The replay
+             * player, whose clock is its own, passes the prop.
+             */}
             <GameShell
                 registry={loadedGame.registry}
                 assetManager={assetManager}
@@ -388,7 +414,6 @@ export default function GamePage(): React.ReactElement | null {
                     ? {}
                     : { inputActions: loadedGame.inputActions })}
                 snapshot={snapshot}
-                currentTick={currentTick}
                 sendAction={sendAction}
                 {...(gameContent === undefined ? {} : { content: gameContent })}
                 reveal={lastReveal}

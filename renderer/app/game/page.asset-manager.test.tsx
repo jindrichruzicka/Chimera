@@ -46,12 +46,17 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('../../state/gameStore', () => ({
-    useGameStore: (
-        selector: (state: {
-            readonly snapshot: PlayerSnapshot | null;
-            readonly currentTick: number | undefined;
-        }) => unknown,
-    ) => selector({ snapshot: mockSnapshot, currentTick: mockCurrentTick }),
+    useGameStore: Object.assign(
+        (
+            selector: (state: {
+                readonly snapshot: PlayerSnapshot | null;
+                readonly currentTick: number | undefined;
+            }) => unknown,
+        ) => selector({ snapshot: mockSnapshot, currentTick: mockCurrentTick }),
+        // Mirrors the real store: `applySnapshot` seeds `currentTick` from the
+        // snapshot, and the route reads it off `getState()` at dispatch.
+        { getState: () => ({ currentTick: mockCurrentTick ?? mockSnapshot?.tick ?? 0 }) },
+    ),
 }));
 
 vi.mock('../../state/lobbyStore', () => ({

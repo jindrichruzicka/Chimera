@@ -76,7 +76,17 @@ vi.mock('../../state/gameStore', () => ({
                 readonly currentTick: number | undefined;
             }) => unknown,
         ) => selector({ snapshot: mockSnapshot, currentTick: mockCurrentTick }),
-        { getState: () => ({ reset: mockReset }) },
+        // `currentTick` is read off `getState()` at dispatch rather than through
+        // the selector, because the route no longer subscribes to the clock.
+        // It answers the snapshot's own tick when no test sets one, which is
+        // what the real store holds: `applySnapshot` seeds `currentTick` from
+        // the snapshot and only `applyTick` moves it on from there.
+        {
+            getState: () => ({
+                reset: mockReset,
+                currentTick: mockCurrentTick ?? mockSnapshot?.tick ?? 0,
+            }),
+        },
     ),
 }));
 

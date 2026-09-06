@@ -356,6 +356,11 @@ export function useFadeTransition({
     // transition OBJECT — that identity changes on every broadcast, and
     // re-arming per broadcast would mean the cadence never fires under a
     // realtime tick stream.
+    //
+    // `dispatchReadyIfNeeded` is the OTHER term that decides that, and this
+    // hook does not own it: it is pinned to the caller's `sendAction`, so a
+    // caller that re-creates that callback per beat clears and re-arms this
+    // interval faster than its own period, and it never fires.
     useEffect(() => {
         if (transitionKey === null || transition === undefined || transition === null) {
             return;

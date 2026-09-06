@@ -58,7 +58,18 @@ export interface SceneRouterProps {
     readonly onScenePending?: (pending: boolean) => void;
 }
 
-export function SceneRouter({
+/**
+ * Memoised on its props, so a parent that re-renders for a reason this router
+ * does not read — a toast, a save, a lobby edge — leaves the fade machine and
+ * the game screen beneath it alone. The bail-out is worth only as much as the
+ * caller's callback identities, which `SceneRouter.memo.test.tsx` measures.
+ *
+ * Not a substitute for the route's own restraint: `snapshot` genuinely changes
+ * on an authoritative beat, and no memo can (or should) stop that one.
+ */
+export const SceneRouter = React.memo(SceneRouterImpl);
+
+function SceneRouterImpl({
     registry,
     snapshot,
     localPlayerId,
@@ -542,12 +553,44 @@ function readSceneDefaultScreen(snapshot: PlayerSnapshot): string | undefined {
         : undefined;
 }
 
+/**
+ * Memo wrappers, keyed on the game's own component.
+ *
+ * A MODULE-level cache, because the wrapper is the element's TYPE: a type that
+ * changes identity between two renders of the same mount unmounts the screen
+ * and remounts it. Keyed on the component rather than on a mount, so two
+ * routers over one registry — the game route and the replay player — resolve
+ * the same wrapper.
+ */
+const memoisedScreens = new WeakMap<
+    GameScreenComponent<GameScreenProps>,
+    GameScreenComponent<GameScreenProps>
+>();
+
+/**
+ * Wraps a registry screen in `React.memo` so the router's OWN state churn — a
+ * preload fraction, a Suspense fallback mounting, a beat phase — stops
+ * re-rendering the game's screen. What the bail-out rests on is measured in
+ * `SceneRouter.memo.test.tsx`.
+ */
+function memoiseScreen(
+    Screen: GameScreenComponent<GameScreenProps>,
+): GameScreenComponent<GameScreenProps> {
+    const cached = memoisedScreens.get(Screen);
+    if (cached !== undefined) {
+        return cached;
+    }
+    const wrapped = React.memo(Screen);
+    memoisedScreens.set(Screen, wrapped);
+    return wrapped;
+}
+
 function resolveScreen(
     registry: GameScreenRegistry,
     activeScreenKey: string,
 ): GameScreenComponent<GameScreenProps> {
     if (activeScreenKey === 'playfield') {
-        return registry.playfield;
+        return memoiseScreen(registry.playfield);
     }
-    return registry.screens?.[activeScreenKey] ?? registry.playfield;
+    return memoiseScreen(registry.screens?.[activeScreenKey] ?? registry.playfield);
 }

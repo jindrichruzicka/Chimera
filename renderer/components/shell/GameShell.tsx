@@ -32,6 +32,7 @@ import { useCriticalAssetPreload } from '../../assets/criticalAssetPreload.js';
 import type { InputAction } from '../../input/InputAction.js';
 import { useInputActionRegistry } from '../../input/InputActionRegistryContext.js';
 import { registerInputActions } from '../../input/registerInputActions.js';
+import { useGameStore } from '../../state/gameStore.js';
 import { useActiveScreen } from '../../state/uiStore.js';
 import { EventAudioPlayer } from '../audio/EventAudioPlayer.js';
 import { SceneRouter } from '../scene/SceneRouter.js';
@@ -46,7 +47,16 @@ import { TimeScaleBridge } from './TimeScaleBridge.js';
 
 interface GameShellBaseProps {
     readonly children?: ReactNode;
-    readonly tick: number;
+    /**
+     * The authoritative clock shown by the HUD.
+     *
+     * OMIT it when the clock is the live match store's: the HUD leaf subscribes
+     * to that store itself, so a clock-only beat re-renders the leaf alone
+     * rather than cascading a render from whoever owns this prop down through
+     * the frame, the router and the game screen. Pass it only when the clock is
+     * NOT the live store's — the replay player drives its own.
+     */
+    readonly tick?: number;
     /**
      * Whether the match chrome may be mounted yet (§4.33). `false` withholds
      * the HUD row and the spectator HUD while a loading beat still owns the
@@ -121,6 +131,7 @@ interface GameShellGameHudProps extends GameShellBaseProps {
 interface GameShellRegistryProps {
     readonly registry: GameScreenRegistry;
     readonly snapshot: PlayerSnapshot;
+    /** See {@link GameShellBaseProps.tick}; forwarded to the frame as `tick`. */
     readonly currentTick?: number;
     readonly sendAction: SendAction;
     readonly localPlayerId?: PlayerId;
@@ -256,7 +267,7 @@ function RegistryGameShell({
             <ContentDatabaseProvider value={contentDatabase}>
                 <FadeProvider>
                     <GameShellFrame
-                        tick={currentTick ?? snapshot.tick}
+                        {...(currentTick === undefined ? {} : { tick: currentTick })}
                         canUndo={snapshot.undoMeta.canUndo}
                         canRedo={snapshot.undoMeta.canRedo}
                         canEndTurn={canEndTurn ?? snapshot.isMyTurn}
@@ -562,7 +573,7 @@ function GameShellFrame(
                 Hud={props.hud}
                 snapshot={props.snapshot}
                 sendAction={props.sendAction}
-                tick={tick}
+                {...(tick === undefined ? {} : { tick })}
                 undoDisabled={undoDisabled}
                 redoDisabled={redoDisabled}
                 endTurnDisabled={endTurnDisabled}
@@ -623,14 +634,28 @@ interface GameHudControlsProps {
     readonly handleEndTurn: () => void;
 }
 
-interface GameHudSlotProps extends GameHudProps {
+interface GameHudSlotProps extends Omit<GameHudProps, 'tick'> {
     readonly Hud: GameScreenComponent<GameHudProps>;
+    /** See {@link GameShellBaseProps.tick}; absent means "read the live clock". */
+    readonly tick?: number;
 }
 
-function GameHudSlot({ Hud, ...hudProps }: GameHudSlotProps): React.ReactElement {
+/**
+ * Subscribes to the match clock HERE, at the leaf, rather than at the route:
+ * `tick` is the only thing a clock-only beat changes, and a subscription any
+ * higher re-renders the frame, the router and the game screen to move one text
+ * node. Measured in `GameShell.beat.test.tsx`.
+ */
+function GameHudSlot({ Hud, tick, ...hudProps }: GameHudSlotProps): React.ReactElement {
+    // `null` when the store holds no match, which is NOT the same as tick 0:
+    // the shell is also mounted over a snapshot the live store never saw (the
+    // replay player, unit tests), and 0 is a legal tick — so absence needs its
+    // own value rather than a zero that would read as "the match just started".
+    const liveTick = useGameStore((state) => (state.snapshot === null ? null : state.currentTick));
+    const resolvedTick = tick ?? liveTick ?? hudProps.snapshot.tick;
     return (
         <React.Suspense fallback={null}>
-            <Hud {...hudProps} />
+            <Hud {...hudProps} tick={resolvedTick} />
         </React.Suspense>
     );
 }

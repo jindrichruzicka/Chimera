@@ -78,7 +78,9 @@ vi.mock('../../state/gameStore', () => ({
                 readonly lastReveal: null;
             }) => unknown,
         ) => selector({ snapshot: mockSnapshot, currentTick: undefined, lastReveal: null }),
-        { getState: () => ({ reset: mockReset }) },
+        // Mirrors the real store: `applySnapshot` seeds `currentTick` from the
+        // snapshot, and the route reads it off `getState()` at dispatch.
+        { getState: () => ({ reset: mockReset, currentTick: mockSnapshot?.tick ?? 0 }) },
     ),
 }));
 
