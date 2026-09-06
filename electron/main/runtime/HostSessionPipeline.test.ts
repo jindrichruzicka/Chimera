@@ -381,3 +381,84 @@ describe('buildHostSessionPipeline — injected action-history bound', () => {
         expect(undoManager.canUndo(P1)).toBe(false);
     });
 });
+
+// ─── retainedActionCount ──────────────────────────────────────────────────────
+
+describe('buildHostSessionPipeline — retainedActionCount', () => {
+    it('reports the session history occupancy', () => {
+        const { pipeline, retainedActionCount } = buildHostSessionPipeline(
+            makeRegistry(),
+            () => {},
+            {
+                gameId: 'test-game',
+                savePort: { autoSave: vi.fn() },
+                retainActions: MAX_ACTION_HISTORY_ENTRIES,
+            },
+        );
+
+        expect(retainedActionCount()).toBe(0);
+
+        let snapshot = makeSnapshot();
+        for (let i = 0; i < 5; i += 1) {
+            snapshot = pipeline.process(snapshot, advanceEnvelope(snapshot.tick));
+        }
+
+        expect(retainedActionCount()).toBe(5);
+    });
+
+    it('reports the whole history, not the undoable tail after a memento boundary', () => {
+        // Which reader this follows is load-bearing and the two are numerically
+        // identical until a memento is saved. `saveTurnMemento` re-bases the
+        // undoable segment, so from here `sizeSinceLastMemento()` counts only
+        // the actions since — the tail, not the occupancy a declared
+        // `retainActions` bound is about.
+        const { pipeline, undoManager, retainedActionCount } = buildHostSessionPipeline(
+            makeRegistry(),
+            () => {},
+            {
+                gameId: 'test-game',
+                savePort: { autoSave: vi.fn() },
+                retainActions: MAX_ACTION_HISTORY_ENTRIES,
+            },
+        );
+
+        let snapshot = makeSnapshot();
+        for (let i = 0; i < 3; i += 1) {
+            snapshot = pipeline.process(snapshot, advanceEnvelope(snapshot.tick));
+        }
+        undoManager.saveTurnMemento(snapshot, P1);
+        for (let i = 0; i < 2; i += 1) {
+            snapshot = pipeline.process(snapshot, advanceEnvelope(snapshot.tick));
+        }
+
+        expect(retainedActionCount()).toBe(5);
+    });
+
+    it('stops following the applied-action count once the declared bound saturates', () => {
+        // The property a retention gate reads: past `retainActions` the
+        // occupancy is flat while actions keep arriving.
+        const bound = 4;
+        const { pipeline, retainedActionCount } = buildHostSessionPipeline(
+            makeRegistry(),
+            () => {},
+            {
+                gameId: 'test-game',
+                savePort: { autoSave: vi.fn() },
+                retainActions: bound,
+            },
+        );
+
+        let snapshot = makeSnapshot();
+        for (let i = 0; i < bound; i += 1) {
+            snapshot = pipeline.process(snapshot, advanceEnvelope(snapshot.tick));
+        }
+        const atBound = retainedActionCount();
+
+        for (let i = 0; i < bound * 10; i += 1) {
+            snapshot = pipeline.process(snapshot, advanceEnvelope(snapshot.tick));
+        }
+
+        expect(atBound).toBe(bound);
+        expect(retainedActionCount()).toBe(bound);
+    });
+});

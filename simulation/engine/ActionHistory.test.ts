@@ -561,3 +561,59 @@ describe('InMemoryActionHistory — what the overflow report claims (Invariant #
         expect(logger.warn).not.toHaveBeenCalled();
     });
 });
+
+// ─── size() ───────────────────────────────────────────────────────────────────
+
+describe('InMemoryActionHistory.size', () => {
+    it('reports the live entry count', () => {
+        const history = new InMemoryActionHistory();
+
+        expect(history.size()).toBe(0);
+        history.append(makeEntry(1));
+        history.append(makeEntry(2));
+
+        expect(history.size()).toBe(2);
+    });
+
+    it('saturates at maxEntries instead of tracking append count', () => {
+        // The property the whole bound exists for: past capacity the occupancy
+        // stops following the number of appends.
+        const history = new InMemoryActionHistory({ maxEntries: 3 });
+        for (let i = 0; i < 3; i += 1) history.append(makeEntry(i));
+
+        expect(history.size()).toBe(3);
+
+        for (let i = 3; i < 60; i += 1) history.append(makeEntry(i));
+
+        expect(history.size()).toBe(3);
+    });
+
+    it('excludes tombstoned slots the head cursor has evicted', () => {
+        // `entries.length` counts tombstones until `#compactIfNeeded()` reclaims
+        // them, so a size read off the array over-reports until it does. The
+        // shape matters: compaction fires only once the head reaches half the
+        // array, so a prune that drops MOST of the entries reclaims them
+        // immediately and leaves nothing tombstoned to exclude. Three at turn 1
+        // and seven at turn 5 keeps head (3) below the live region (7), so the
+        // tombstones survive the prune and `entries.length` is 10 where the
+        // live size is 7.
+        const history = new InMemoryActionHistory({ maxEntries: 100 });
+        for (let i = 0; i < 3; i += 1) history.append(makeEntry(i, 1));
+        for (let i = 3; i < 10; i += 1) history.append(makeEntry(i, 5));
+
+        history.pruneTo(5);
+
+        expect(history.size()).toBe(7);
+    });
+
+    it('is unaffected by a memento boundary, unlike sizeSinceLastMemento', () => {
+        const history = new InMemoryActionHistory();
+        history.append(makeEntry(1));
+        history.append(makeEntry(2));
+        history.markMementoBoundary();
+        history.append(makeEntry(3));
+
+        expect(history.sizeSinceLastMemento()).toBe(1);
+        expect(history.size()).toBe(3);
+    });
+});

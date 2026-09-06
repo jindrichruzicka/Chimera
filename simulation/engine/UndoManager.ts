@@ -307,6 +307,20 @@ export class InMemoryActionHistory implements ActionHistory {
         return this.#evictedSinceMemento;
     }
 
+    /**
+     * Live entry count — what the `maxEntries` bound actually bounds.
+     *
+     * Distinct from {@link sizeSinceLastMemento}, which re-bases on
+     * `markMementoBoundary()` and from then on measures only the undoable tail,
+     * and from `entries.length`, which still counts the tombstoned slots
+     * `#compactIfNeeded()` has not reclaimed. Past capacity this stops
+     * following the number of appends, which is the property the bound exists
+     * for and the one a sustained-match retention gate reads (Invariant #45).
+     */
+    size(): number {
+        return this.#size();
+    }
+
     pruneTo(cutoff: number): void {
         // Advance the head past any entries whose turnNumber is below the cutoff.
         // O(k) where k is the number of evicted entries — never re-touches

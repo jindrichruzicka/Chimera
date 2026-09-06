@@ -212,23 +212,14 @@ export function undoPolicyForMatchHistory(support: Required<GameMatchHistorySupp
     return support.undo ? DEFAULT_UNDO_POLICY : { ...DEFAULT_UNDO_POLICY, allowUndo: false };
 }
 
-/**
- * Result of `buildHostSessionPipeline`.
- *
- * `pipeline`         — the fully wired `ActionPipeline` with history and undo context.
- * `processAction`    — thin wrapper around `pipeline.process` that fires autosave
- *                      fire-and-forget after a successful `engine:end_turn`.
- *                      Prefer calling this over `pipeline.process` directly.
- * `undoManager`      — direct access to the `InMemoryUndoManager` for calling
- *                      `saveTurnMemento` at turn-start and any out-of-band queries.
- * `clearUndoHistory` — call at session close to release per-player undo memory
- *                      (Invariant #7 teardown requirement).
- */
+/** Result of `buildHostSessionPipeline`. */
 export interface HostSessionPipelineResult {
+    /** The fully wired `ActionPipeline`, with history and undo context. */
     readonly pipeline: ActionPipeline;
     /**
      * Process one action envelope and fire autosave if the action is
-     * `engine:end_turn` and a `savePort` was supplied at construction.
+     * `engine:end_turn` and a `savePort` was supplied at construction. Prefer
+     * this over calling `pipeline.process` directly, which fires none.
      *
      * The autosave call is fire-and-forget (`void`); any rejection is caught
      * and logged — it NEVER propagates to the caller (Invariant #25).
@@ -240,8 +231,23 @@ export interface HostSessionPipelineResult {
         snapshot: Readonly<BaseGameSnapshot>,
         action: ActionEnvelope,
     ) => BaseGameSnapshot;
+    /**
+     * The session's `InMemoryUndoManager`, for `saveTurnMemento` at turn-start
+     * and any out-of-band query.
+     */
     readonly undoManager: InMemoryUndoManager;
+    /**
+     * Call at session close to release per-player undo memory — the
+     * Invariant #7 teardown requirement.
+     */
     readonly clearUndoHistory: (activePlayerIds: readonly PlayerId[]) => void;
+    /**
+     * Live entry count of this session's `InMemoryActionHistory` — the
+     * occupancy of the bound `retainActions` declares, whole rather than the
+     * undoable tail `sizeSinceLastMemento()` reports once a turn memento has
+     * re-based it (Invariant #45).
+     */
+    readonly retainedActionCount: () => number;
     /**
      * The session's pure replay callback (same instance injected into
      * `InMemoryUndoManager`). Exposed so the debug bridge can reconstruct
@@ -268,7 +274,6 @@ export interface HostSessionPipelineResult {
  * @param options     - Optional per-session configuration.  Supply `gameId` and
  *                      `savePort` to enable autosave after `engine:end_turn`.
  *
- * @returns `HostSessionPipelineResult` — pipeline, processAction, undoManager, and a teardown helper.
  *
  * ## Autosave wiring (Invariants #25 and #43)
  *
@@ -461,5 +466,12 @@ export function buildHostSessionPipeline(
         return nextState;
     };
 
-    return { pipeline, processAction, undoManager, clearUndoHistory, replay };
+    return {
+        pipeline,
+        processAction,
+        undoManager,
+        clearUndoHistory,
+        replay,
+        retainedActionCount: () => history.size(),
+    };
 }
