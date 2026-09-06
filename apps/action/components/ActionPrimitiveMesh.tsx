@@ -3,7 +3,9 @@
 import type { ThreeEvent } from '@react-three/fiber';
 import React from 'react';
 
-import type { ActionPrimitiveShape } from '../simulation/constants.js';
+import { useEntityInterpolation } from '@chimera-engine/renderer/components/r3f';
+
+import { ACTION_TICK_RATE_MS, type ActionPrimitiveShape } from '../simulation/constants.js';
 import type { ActionScenePrimitive } from './actionSceneModel.js';
 
 // One movable primitive. The shape comes off the snapshot, so a cube stays a
@@ -17,6 +19,22 @@ import type { ActionScenePrimitive } from './actionSceneModel.js';
 const CONTROLLED_COLOR = '#f59e0b';
 const OTHER_SEAT_COLOR = '#38bdf8';
 const UNCLAIMED_COLOR = '#94a3b8';
+
+/**
+ * A move at least this far is drawn as a teleport, not a slide.
+ *
+ * A beat advances a primitive at most one cell per axis, so the longest walk
+ * the arena can produce is a diagonal — √2 world units. This sits above that,
+ * with room for the cell size to change without turning ordinary diagonals into
+ * teleports.
+ *
+ * What the hook measures is the distance from where the primitive is DRAWN, not
+ * from the cell it was last on. The slide lasts one beat, so the two normally
+ * coincide by the time the next beat lands; where they do not — a frame budget
+ * that lost several beats' worth of frames — the larger distance snapping is
+ * the right outcome anyway.
+ */
+const PRIMITIVE_TELEPORT_SNAP_DISTANCE = 2;
 
 /** Unit-ish geometry so a primitive sits one cell wide on the arena grid. */
 const CUBE_ARGS = [0.8, 0.8, 0.8] as const;
@@ -69,8 +87,26 @@ export function ActionPrimitiveMesh({
         onSelect(primitive.id);
     };
 
+    // No `position` prop: the hook owns this mesh's transform and writes it
+    // for as long as a slide is in flight. The arena advances a primitive a
+    // whole cell per beat, so drawn straight from the snapshot it would step
+    // ten times a second — and a diagonal beat would cover √2 world units at
+    // once. What this trades for the smoothing is up to one beat of
+    // presentation delay; anything that has to agree with the host reads
+    // `primitive.grid`, not the mesh.
+    const meshRef = useEntityInterpolation({
+        entityId: primitive.id,
+        target: primitive.world,
+        // The same constant the manifest declares `tickRateMs` from
+        // (`manifest.test.ts` measures that). It is the UNDILATED period: the
+        // host scales its own beat by the live `timeScalePermille`, and this
+        // does not follow.
+        durationMs: ACTION_TICK_RATE_MS,
+        snapDistance: PRIMITIVE_TELEPORT_SNAP_DISTANCE,
+    });
+
     return (
-        <mesh castShadow name={primitive.id} position={primitive.world} onClick={handleClick}>
+        <mesh castShadow name={primitive.id} ref={meshRef} onClick={handleClick}>
             <ShapeGeometry shape={primitive.shape} />
             <meshStandardMaterial
                 color={resolveColor(primitive, isControlled)}

@@ -1,6 +1,6 @@
 ---
 title: 'Curves, Tweening & Pointer Interactions'
-description: 'EasingFn types (linear/easeIn/easeOut/easeInOut), useTween hook, useTweenCallback, useGameInteraction hook, InteractionBlocker context, and hover state rules for R3F game entities.'
+description: 'EasingFn types (linear/easeIn/easeOut/easeInOut), useTween hook, useTweenCallback, useEntityInterpolation entity smoothing, useGameInteraction hook, InteractionBlocker context, and hover state rules for R3F game entities.'
 tags: [animation, tweening, curves, interaction, r3f, renderer]
 ---
 
@@ -17,6 +17,7 @@ The public surface of this page is reached through one specifier — `Interactio
 import {
     useTween,
     useTweenCallback,
+    useEntityInterpolation,
     useGameInteraction,
     InteractionBlocker,
     useInteractionContext,
@@ -28,6 +29,7 @@ import {
     type EasingFn,
     type TweenState,
     type TweenCallbackHandlers,
+    type EntityInterpolationOptions,
     type InteractionHandlers,
 } from '@chimera-engine/renderer/components/r3f';
 ```
@@ -112,9 +114,27 @@ export function useTweenCallback(
 
 `onComplete` fires exactly once after natural completion. `onCancel` fires exactly once when `stop()` cancels an active tween. These lifecycle callbacks are mutually exclusive for a single animation lifecycle.
 
+### useEntityInterpolation Hook
+
+`useEntityInterpolation({ entityId, target, durationMs, snapDistance? })` smooths one entity between two AUTHORITATIVE positions and returns the ref to attach to the object being moved. Exported from `@chimera-engine/renderer/components/r3f`.
+
+A game whose entities live on a unit grid advances them a whole cell per beat, so an entity driven straight from the snapshot teleports one cell at a time: ten visible steps a second at a 100 ms beat, and a diagonal step covering √2 world units at once. The hook draws the move instead of the arrival: it writes the transform from `useFrame`, through the ref, so a slide costs no React commit per frame.
+
+**It shows the entity one beat behind.** What it draws is between the PREVIOUS authoritative position and the current one, so the picture trails the host by up to `durationMs`. That is the standard price of interpolation and the hook does not offer a way out of it: the alternative is extrapolating past the newest snapshot, which invents positions the simulation never produced and has to take them back when it guesses wrong. Anything that must agree with the host — hit testing against gameplay state, a rule, an assertion — reads the snapshot, never the interpolated transform.
+
+Three discontinuities are handled rather than smoothed:
+
+- **An entity appearing mid-match** starts where it belongs — nothing slides in from the origin. What takes that seed, and when, is `useEntityInterpolation.test.tsx` ("seeds the mount only once the ref is ATTACHED").
+- **A change of `entityId`** snaps. One mounted component may be reused for a different entity, and tweening across that swap would draw a move between two different things.
+- **A move at least `snapDistance` far** snaps — measured from where the entity is DRAWN to the new target. A deliberate teleport is not a fast walk. A caller picks the threshold from its own geometry: `apps/action` sets it above the longest walk a beat can make, a one-cell diagonal.
+
+`durationMs` is the caller's, and `0` disables the smoothing entirely — a game's beat is not something the renderer holds, so a realtime game passes the same constant its manifest declares `tickRateMs` from, and a turn-based one passes a motion token (which is how `apps/tactics` gets reduced-motion for free).
+
+The caller must NOT also set `position` on the object it attaches the ref to: the hook owns that transform.
+
 ### Invariant
 
-**#56** — `curves.ts`, `useTween`, and `useTweenCallback` are renderer-only. They must never be imported by anything under `simulation/`. Visual smoothing is a client-local concern; authoritative state does not move smoothly.
+**#56** — `curves.ts`, `useTween`, `useTweenCallback`, and `useEntityInterpolation` are renderer-only. They must never be imported by anything under `simulation/`. Visual smoothing is a client-local concern; authoritative state does not move smoothly.
 
 ---
 

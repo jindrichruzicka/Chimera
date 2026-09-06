@@ -84,6 +84,7 @@ export { useCamera, CameraAnimationCancelled } from '../../hooks/useCamera';
 export { lerp, linear, easeIn, easeOut, easeInOut } from '../../utils/curves';
 export { useGameInteraction } from '../../hooks/useGameInteraction';
 export { InteractionBlocker, useInteractionContext } from './InteractionBlocker';
+export { useEntityInterpolation } from './useEntityInterpolation';
 export { useModelAnimation } from './useModelAnimation';
 export { useClipPlayer } from './useClipPlayer';
 export { useSpriteClipPlayer } from './useSpriteClipPlayer';
@@ -100,6 +101,7 @@ export type {
     PassageTickEvent,
     UseClipPlayerOptions,
 } from './useClipPlayer';
+export type { EntityInterpolationOptions } from './useEntityInterpolation';
 export type { UseSpriteClipPlayerOptions } from './useSpriteClipPlayer';
 export type { AnimatedSpriteProps } from './AnimatedSprite';
 export type {

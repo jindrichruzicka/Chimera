@@ -1,8 +1,8 @@
 'use client';
 
-import { useFrame, type ThreeEvent } from '@react-three/fiber';
-import React, { useLayoutEffect, useRef, useState } from 'react';
-import type { Group } from 'three';
+import { type ThreeEvent } from '@react-three/fiber';
+import React, { useState } from 'react';
+import { useEntityInterpolation } from '@chimera-engine/renderer/components/r3f';
 import type { TacticsSceneUnit } from './tacticsSceneModel.js';
 import { TacticsSelectionRing } from './TacticsSelectionRing.js';
 
@@ -15,18 +15,6 @@ const UNIT_NORMAL_SCALE = [1, 1, 1] as const;
 const UNIT_AFFORDANCE_SCALE = [1.12, 1.12, 1.12] as const;
 const DEFAULT_UNIT_MOVEMENT_DURATION_MS = 250;
 const UNIT_MOVEMENT_DURATION_TOKEN = '--ch-duration-normal';
-
-interface TacticsVisualPosition {
-    readonly x: number;
-    readonly z: number;
-}
-
-interface TacticsMovementTween {
-    readonly from: TacticsVisualPosition;
-    readonly to: TacticsVisualPosition;
-    readonly elapsedMs: number;
-    readonly durationMs: number;
-}
 
 export interface TacticsUnitPrimitiveProps {
     readonly unit: Pick<TacticsSceneUnit, 'id' | 'world' | 'isAlive'>;
@@ -42,90 +30,26 @@ export function TacticsUnitPrimitive({
     onSelect,
 }: TacticsUnitPrimitiveProps): React.ReactElement {
     const [isHovered, setIsHovered] = useState(false);
-    const groupRef = useRef<Group | null>(null);
-    const visualPositionRef = useRef(toVisualPosition(unit.world));
-    const targetPositionRef = useRef(toVisualPosition(unit.world));
-    const unitIdRef = useRef(unit.id);
-    const movementTweenRef = useRef<TacticsMovementTween | null>(null);
     const isAfforded = isHovered || isSelected;
     const unitColor = unit.isAlive ? color : TACTICS_UNIT_INACTIVE_COLOR;
     const ringColor = isSelected ? TACTICS_UNIT_SELECTED_RING_COLOR : TACTICS_UNIT_HOVER_RING_COLOR;
-    const position = [
-        visualPositionRef.current.x,
-        UNIT_POSITION_Y,
-        visualPositionRef.current.z,
-    ] as const;
 
-    useLayoutEffect(() => {
-        const nextTarget = toVisualPosition(unit.world);
-        const group = groupRef.current;
-
-        if (unitIdRef.current !== unit.id) {
-            unitIdRef.current = unit.id;
-            targetPositionRef.current = nextTarget;
-            movementTweenRef.current = null;
-            visualPositionRef.current = nextTarget;
-            applyVisualPosition(group, nextTarget);
-            return;
-        }
-
-        if (areSameVisualPosition(targetPositionRef.current, nextTarget)) {
-            return;
-        }
-
-        targetPositionRef.current = nextTarget;
-
-        const fromPosition = visualPositionRef.current;
-        const durationMs = resolveUnitMovementDurationMs();
-
-        if (durationMs === 0 || areSameVisualPosition(fromPosition, nextTarget)) {
-            movementTweenRef.current = null;
-            visualPositionRef.current = nextTarget;
-            applyVisualPosition(group, nextTarget);
-            return;
-        }
-
-        movementTweenRef.current = {
-            from: fromPosition,
-            to: nextTarget,
-            elapsedMs: 0,
-            durationMs,
-        };
-    }, [unit.id, unit.world.x, unit.world.z]);
-
-    useFrame((state, deltaSeconds) => {
-        const movementTween = movementTweenRef.current;
-        const group = groupRef.current;
-
-        if (movementTween === null || group === null) {
-            return;
-        }
-
-        const elapsedMs = movementTween.elapsedMs + Math.max(0, deltaSeconds * 1000);
-
-        if (elapsedMs >= movementTween.durationMs) {
-            movementTweenRef.current = null;
-            visualPositionRef.current = movementTween.to;
-            applyVisualPosition(group, movementTween.to);
-            // Inert on the engine canvas this board renders through — neither
-            // frameloop `useEngineFrameloop()` returns honours a demand-render
-            // request. Kept for the same reason the engine's tween hooks keep
-            // theirs: it is the correct contract for a `frameloop="demand"`
-            // canvas, and it costs nothing here.
-            state.invalidate();
-            return;
-        }
-
-        const progress = easeOutUnit(elapsedMs / movementTween.durationMs);
-        const nextPosition = {
-            x: lerpNumber(movementTween.from.x, movementTween.to.x, progress),
-            z: lerpNumber(movementTween.from.z, movementTween.to.z, progress),
-        } satisfies TacticsVisualPosition;
-
-        visualPositionRef.current = nextPosition;
-        movementTweenRef.current = { ...movementTween, elapsedMs };
-        applyVisualPosition(group, nextPosition);
-        state.invalidate();
+    // The engine seam, not a tween of this game's own: what it does between two
+    // authoritative positions — and the one-beat presentation delay that buys —
+    // is `useEntityInterpolation`'s contract. The board is turn-based, so the
+    // duration is a motion token rather than a beat period, and it collapses to
+    // 0 under reduced motion, which the hook reads as "apply on arrival".
+    // Re-read only when the target moves: `getComputedStyle` on the document
+    // element forces a style resolve, and every unit on the board renders
+    // whenever any of them does.
+    const durationMs = React.useMemo(
+        () => resolveUnitMovementDurationMs(),
+        [unit.world.x, unit.world.z],
+    );
+    const groupRef = useEntityInterpolation({
+        entityId: unit.id,
+        target: [unit.world.x, UNIT_POSITION_Y, unit.world.z],
+        durationMs,
     });
 
     const handleClick = (event: ThreeEvent<MouseEvent>): void => {
@@ -144,7 +68,7 @@ export function TacticsUnitPrimitive({
     };
 
     return (
-        <group ref={groupRef} position={position}>
+        <group ref={groupRef}>
             <mesh
                 castShadow
                 scale={isAfforded ? UNIT_AFFORDANCE_SCALE : UNIT_NORMAL_SCALE}
@@ -158,42 +82,6 @@ export function TacticsUnitPrimitive({
             <TacticsSelectionRing color={ringColor} isVisible={isAfforded} />
         </group>
     );
-}
-
-function toVisualPosition(
-    world: Pick<TacticsSceneUnit['world'], 'x' | 'z'>,
-): TacticsVisualPosition {
-    return { x: world.x, z: world.z };
-}
-
-function applyVisualPosition(group: Group | null, position: TacticsVisualPosition): void {
-    group?.position.set(position.x, UNIT_POSITION_Y, position.z);
-}
-
-function areSameVisualPosition(
-    first: TacticsVisualPosition,
-    second: TacticsVisualPosition,
-): boolean {
-    return first.x === second.x && first.z === second.z;
-}
-
-function lerpNumber(from: number, to: number, progress: number): number {
-    return from + (to - from) * progress;
-}
-
-function easeOutUnit(progress: number): number {
-    const clampedProgress = clampUnit(progress);
-    return clampedProgress * (2 - clampedProgress);
-}
-
-function clampUnit(value: number): number {
-    if (value <= 0) {
-        return 0;
-    }
-    if (value >= 1) {
-        return 1;
-    }
-    return value;
 }
 
 function resolveUnitMovementDurationMs(): number {

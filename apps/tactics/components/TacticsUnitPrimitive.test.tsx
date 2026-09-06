@@ -94,6 +94,26 @@ describe('TacticsUnitPrimitive', () => {
         }
     });
 
+    it('re-reads the motion token when the unit moves, not once at mount', async () => {
+        // Reduced motion can be turned on from the in-match settings surface,
+        // which flips `--ch-duration-normal` to 0ms under a mounted board. A
+        // duration read once at mount would keep tweening every unit for the
+        // rest of the match.
+        document.documentElement.style.setProperty('--ch-duration-normal', '250ms');
+        const renderer = await renderUnit({ isSelected: false });
+
+        try {
+            const group = findThreeObject(renderer.scene, 'Group');
+
+            document.documentElement.style.setProperty('--ch-duration-normal', '0ms');
+            await renderer.update(renderUnitElement({ unit: MOVED_OWN_UNIT, isSelected: false }));
+
+            expect(group.instance.position.toArray()).toEqual([4, 0.45, 1]);
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
     it('starts remounted units at the current projected position', async () => {
         const renderer = await renderUnit({ isSelected: false });
 

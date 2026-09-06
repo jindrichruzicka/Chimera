@@ -56,6 +56,77 @@ describe('ActionPrimitiveMesh', () => {
         }
     });
 
+    it('slides between two cells instead of stepping, and lands on the new one', async () => {
+        // The arena advances a primitive a whole cell per beat, so drawn
+        // straight from the snapshot it would jump ten times a second. The
+        // mid-beat sample is the measurement that matters: strictly BETWEEN the
+        // two cells, on both axes it moved.
+        // The longest move a beat can make: one cell on BOTH axes.
+        const from = makePrimitive({ grid: { x: 2, y: -1 } });
+        const to = makePrimitive({
+            grid: { x: 3, y: 0 },
+            world: arenaToWorld({ x: 3, y: 0 }, ACTION_PRIMITIVE_HEIGHT),
+        });
+        const renderer = await ReactThreeTestRenderer.create(
+            <ActionPrimitiveMesh primitive={from} isControlled={false} onSelect={vi.fn()} />,
+        );
+        try {
+            const mesh = findByType(renderer.scene, 'Mesh').instance as Mesh;
+            expect(mesh.position.toArray()).toEqual([2, ACTION_PRIMITIVE_HEIGHT, -1]);
+
+            await renderer.update(
+                <ActionPrimitiveMesh primitive={to} isControlled={false} onSelect={vi.fn()} />,
+            );
+            // A beat is 100 ms; a frame partway in must show the primitive
+            // partway across.
+            await renderer.advanceFrames(1, 0.03);
+
+            const midBeat = mesh.position.toArray();
+            expect(midBeat[0]).toBeGreaterThan(2);
+            expect(midBeat[0]).toBeLessThan(3);
+            expect(midBeat[2]).toBeGreaterThan(-1);
+            expect(midBeat[2]).toBeLessThan(0);
+            expect(midBeat[1]).toBe(ACTION_PRIMITIVE_HEIGHT);
+
+            await renderer.advanceFrames(1, 0.2);
+
+            expect(mesh.position.toArray()).toEqual([3, ACTION_PRIMITIVE_HEIGHT, 0]);
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
+    it('snaps rather than slides across a jump no beat could have made', async () => {
+        // A restore, or a rules teleport, moves further in one step than a beat
+        // can. Sliding it would draw a path across the arena the simulation
+        // never took — so the snap threshold sits above the longest real move,
+        // a one-cell diagonal.
+        const from = makePrimitive({ grid: { x: 2, y: -1 } });
+        const teleported = makePrimitive({
+            grid: { x: 9, y: 6 },
+            world: arenaToWorld({ x: 9, y: 6 }, ACTION_PRIMITIVE_HEIGHT),
+        });
+        const renderer = await ReactThreeTestRenderer.create(
+            <ActionPrimitiveMesh primitive={from} isControlled={false} onSelect={vi.fn()} />,
+        );
+        try {
+            const mesh = findByType(renderer.scene, 'Mesh').instance as Mesh;
+
+            await renderer.update(
+                <ActionPrimitiveMesh
+                    primitive={teleported}
+                    isControlled={false}
+                    onSelect={vi.fn()}
+                />,
+            );
+            await renderer.advanceFrames(1, 0.001);
+
+            expect(mesh.position.toArray()).toEqual([9, ACTION_PRIMITIVE_HEIGHT, 6]);
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
     it('names the mesh after the entity, so the scene is addressable', async () => {
         const renderer = await ReactThreeTestRenderer.create(
             <ActionPrimitiveMesh

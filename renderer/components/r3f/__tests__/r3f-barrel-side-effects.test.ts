@@ -264,6 +264,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'useAnimationTimeScale',
             'useCamera',
             'useClipPlayer',
+            'useEntityInterpolation',
             'useGameInteraction',
             'useInteractionContext',
             'useModelAnimation',
@@ -273,7 +274,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         ]);
     });
 
-    it('pulls in exactly forty-three modules — four stores, the log bridge, both animation halves, and no clone seam', async () => {
+    it('pulls in exactly forty-four modules — four stores, the log bridge, both animation halves, and no clone seam', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // EXHAUSTIVE, not a denylist (see the audio sibling for why). The four
@@ -354,6 +355,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'r3f/useClipPlayback.ts',
             'r3f/useClipPlayer.ts',
             'r3f/useEngineFrameloop.ts',
+            'r3f/useEntityInterpolation.ts',
             'r3f/useModelAnimation.ts',
             'r3f/useOwnedMixer.ts',
             'r3f/useSpriteClipPlayer.ts',
