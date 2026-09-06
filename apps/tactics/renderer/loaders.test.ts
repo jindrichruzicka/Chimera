@@ -24,6 +24,15 @@ describe('tactics renderer loaders', () => {
         expect(game.matchHistory?.undo).toBe(true);
     });
 
+    it('forwards the realtime declaration, so snapshots are NOT paced to frames', async () => {
+        // Tactics is turn-based: it pushes on a player's action, where a frame
+        // of presentation lag buys nothing and costs interaction fidelity.
+        const game = await loadTacticsRendererGame();
+
+        expect(game.realtime).toBe(tacticsManifest.realtime);
+        expect(game.realtime).toBe(false);
+    });
+
     // The SHELL payload is the one a menu route loads, so it is the payload
     // that has to carry the actions for pre-match input and the Controls pane
     // (§4.26). Identity, not equality: one array reaches both payloads, so the

@@ -6,8 +6,8 @@ import { ACTION_GAME_ID, ACTION_TICK_RATE_MS } from './simulation/constants.js';
  * The action app's game manifest — the engine's second reference consumer and
  * its FIRST realtime one.
  *
- * `realtime: true` is the whole point: it is the single flag the host reads to
- * start a `RealtimeTicker`, which then dispatches `engine:tick` every
+ * `realtime: true` is the whole point. The host reads it to start a
+ * `RealtimeTicker`, which then dispatches `engine:tick` every
  * {@link ACTION_TICK_RATE_MS} milliseconds. The simulation's per-beat movement
  * pass rides that tick, so the manifest and the simulation must agree on the
  * interval — hence the imported constant rather than a second literal here.

@@ -1,6 +1,5 @@
-// __Game Title__'s manifest — the small, pure-data descriptor the host (window
-// title + real-time ticker selection) and the renderer (shell display name) both
-// read from one source of truth.
+// __Game Title__'s manifest — the small, pure-data descriptor the host and the
+// renderer both read from one source of truth.
 
 import type { GameManifest } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 

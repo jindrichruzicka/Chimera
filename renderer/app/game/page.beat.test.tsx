@@ -36,6 +36,7 @@ import type {
 import { I18nProvider } from '../../i18n/I18nProvider';
 import { SCENE_READY_RETRY_MS } from '../../components/scene/useFadeTransition.js';
 import { useGameStore } from '../../state/gameStore';
+import { snapshotPacingEnabled } from '../../state/snapshotPacing';
 import { useToastStore } from '../../state/toastStore';
 import { useUiStore } from '../../state/uiStore';
 import { ThemeProvider } from '../../theme/ThemeProvider';
@@ -363,3 +364,42 @@ function sceneReadyAckCount(): number {
 function dispatchedActions(): readonly EngineAction[] {
     return mockSendAction.mock.calls.map((call) => call[0] as EngineAction);
 }
+
+describe('GamePage — publishing the active game snapshot pacing', () => {
+    it('turns pacing ON while a game that declares realtime is mounted', async () => {
+        loadRendererGameMock.mockResolvedValue({ registry: testRegistry, realtime: true });
+
+        await mountGamePage();
+
+        expect(snapshotPacingEnabled()).toBe(true);
+    });
+
+    it('leaves pacing OFF for a game that declares itself turn-based', async () => {
+        loadRendererGameMock.mockResolvedValue({ registry: testRegistry, realtime: false });
+
+        await mountGamePage();
+
+        expect(snapshotPacingEnabled()).toBe(false);
+    });
+
+    it('leaves pacing OFF for a game that declares nothing', async () => {
+        // Absent is the pre-declaration answer: apply on arrival.
+        loadRendererGameMock.mockResolvedValue({ registry: testRegistry });
+
+        await mountGamePage();
+
+        expect(snapshotPacingEnabled()).toBe(false);
+    });
+
+    it('clears pacing when the route unmounts', async () => {
+        // Outside a match no game's declaration still applies, and the client
+        // that reads this store outlives the route.
+        loadRendererGameMock.mockResolvedValue({ registry: testRegistry, realtime: true });
+        await mountGamePage();
+        expect(snapshotPacingEnabled()).toBe(true);
+
+        cleanup();
+
+        expect(snapshotPacingEnabled()).toBe(false);
+    });
+});

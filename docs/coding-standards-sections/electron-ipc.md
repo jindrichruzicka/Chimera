@@ -38,5 +38,5 @@ These settings are **Invariants 3 and 4** in [Architecture Invariants](../execut
 
 ## 8.4 File system
 
-- All file writes use an atomic write pattern: write to `<target>.tmp`, then `fs.rename` to the final path. Direct writes to the final path are forbidden (crash-safe writes, Invariant 38).
+- All file writes use an atomic write pattern: write to a temp file beside the target, then `fs.rename` to the final path. Direct writes to the final path are forbidden — crash-safe writes, stated per repository by Invariants #23 (saves), #33 (settings) and #68 (crash dumps). Where a path has more than one writer that nothing serialises, `<target>.tmp` is not enough: the first rename moves the file out from under the second, whose rename then fails with `ENOENT` and whose caller sees its write rejected. `FileSaveRepository` names its temp file per write for that reason; see it for the shape and what it costs.
 - User file paths must be derived from `app.getPath('userData')` only. No user-supplied path is ever used without sanitisation.

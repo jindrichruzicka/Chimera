@@ -277,6 +277,21 @@ export interface LoadedRendererGame {
      * `retainActions`; they arrive because the resolver returns them.
      */
     readonly matchHistory?: Required<GameMatchHistorySupport>;
+    /**
+     * The manifest's `realtime` flag, forwarded from the game's own
+     * `renderer/loaders.ts` for the same reason {@link matchHistory} is: manifest
+     * data reaches the renderer only as registration payload (Invariants #80/#94).
+     *
+     * What reads it: `/game` publishes it to `renderer/state/snapshotPacing`, which decides
+     * whether authoritative snapshots are applied on the frame clock or on
+     * arrival. A realtime game pushes faster than a display can show and wants
+     * the pacing; a turn-based one pushes on a player's action, where a frame of
+     * presentation lag buys nothing and costs interaction fidelity.
+     *
+     * Absent ⇒ not realtime, which is what every game got before the field
+     * existed.
+     */
+    readonly realtime?: boolean;
 }
 
 export class UnknownRendererGameError extends Error {

@@ -118,6 +118,8 @@ export interface SaveRepository {
 
 Stores files at `userData/saves/<gameId>/<slotId>.chimera`. All writes use a `.tmp` file + atomic rename to prevent corruption on crash.
 
+The temp file is named per WRITE (`<slotId>.chimera.<n>.tmp`), not per slot. One slot has more than one writer and nothing serialises them: `HostSessionPipeline` fires `savePort.autoSave(...)` after every accepted `engine:end_turn` without awaiting it, and an explicit `saves.save()` that names no `slotId` also lands on the autosave slot (`SessionRuntime.captureSaveFile` defaults it to `AUTOSAVE_SLOT_NAME`). Sharing one temp path let the first rename move the file out from under the second, which then failed with `ENOENT` and rejected its caller's save — while a file the OTHER writer produced sat on disk. With a temp path of its own each write is whole before it renames, and the rename picks the winner.
+
 > **Invariant #23** — `FileSaveRepository.save()` always writes to a `.tmp` file and renames atomically.
 > **Invariant #24** — `SessionRuntime.applyRestoredFile()` is the only entry point for replacing the live `GameSnapshot` from a file. The two-step load flow is (1) `SaveManager.restoreFromSave(slotId)` reads and migrates the file, then (2) `SessionRuntime.applyRestoredFile(file)` replaces the live snapshot. Its two callers — the in-session same-match load branch and the `SessionRestoreCoordinator` menu-restore flow — both funnel through the composition root's single apply helper.
 > **Invariant #25** — `engine:save` and `engine:load` are validated `EngineAction` types — only the designated host player may dispatch them.

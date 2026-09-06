@@ -45,6 +45,10 @@ export async function loadActionRendererGame(): Promise<LoadedRendererGame> {
         // `LoadedRendererGame.matchHistory` for why the renderer needs it
         // forwarded rather than read.
         matchHistory: resolveMatchHistorySupport(actionManifest),
+        // Forwarded, not read: the renderer cannot reach a manifest. `/game`
+        // publishes it so authoritative snapshots are paced to frames here —
+        // this game pushes faster than a display can show.
+        realtime: actionManifest.realtime,
         // Read back off the SHELL rather than re-stated: the same array reaches
         // both payloads, so the engine's app-boot registration and `GameShell`'s
         // re-registration cannot disagree about what an id means (§4.26). Spread

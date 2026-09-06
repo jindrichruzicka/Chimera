@@ -17,7 +17,7 @@
  *        and addPrediction / confirmPrediction are ipcClient only.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import type {
     GameAPI,
     Unsubscribe,
@@ -28,6 +28,7 @@ import type {
 import { playerId, gamePhase } from '@chimera-engine/simulation/bridge/api-types.js';
 import { bootstrapGameStore } from './gameStoreBootstrap.js';
 import { createGameStore } from './gameStore.js';
+import { setSnapshotPacingEnabled } from './snapshotPacing.js';
 import { createIpcClient } from '../bridge/ipcClient.js';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -105,6 +106,20 @@ function makeApi(
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('bootstrapGameStore()', () => {
+    // The PACED arm, deliberately. `bootstrapGameStore` builds a scheduler that
+    // asks `snapshotPacing` whenever it requests a frame, and that module reads `false`
+    // until a game declares otherwise — so a suite that left it alone would
+    // apply every snapshot on arrival and could not tell a frame-paced bridge
+    // from an un-paced one. The un-paced arm is measured in the last case of
+    // this block, and the scheduler's own two arms in `ipcClient.test.ts`.
+    beforeEach(() => {
+        setSnapshotPacingEnabled(true);
+    });
+
+    afterEach(() => {
+        setSnapshotPacingEnabled(false);
+    });
+
     it('registers an onSnapshot callback with the bridge', async () => {
         const { api, onSnapshotSpy } = makeApi();
         await bootstrapGameStore(api, createGameStore().getState());
@@ -137,6 +152,7 @@ describe('bootstrapGameStore()', () => {
         expect(captured).toBeDefined();
         const snap = makeSnapshot(7);
         captured!(snap);
+        await nextFrame();
 
         expect(store.getState().snapshot).toBe(snap);
     });
@@ -151,6 +167,7 @@ describe('bootstrapGameStore()', () => {
 
         await bootstrapGameStore(api, store.getState());
         captured!(makeSnapshot(7));
+        await nextFrame();
 
         // tick=7 prediction should be evicted (confirmed)
         expect(store.getState().predictedActions).toHaveLength(0);
@@ -170,6 +187,7 @@ describe('bootstrapGameStore()', () => {
 
         const snap = { ...makeSnapshot(1), undoMeta: { canUndo: true, canRedo: false } };
         captured!(snap);
+        await nextFrame();
 
         expect(store.getState().canUndo).toBe(true);
         expect(store.getState().canRedo).toBe(false);
@@ -248,6 +266,77 @@ describe('bootstrapGameStore()', () => {
         expect(store.getState().snapshot).toBe(newerLiveSnapshot);
     });
 
+    it('does not let a snapshot still waiting on a frame land on top of the catch-up', async () => {
+        // The same rule as the test above, but with the live snapshot NEWER
+        // and still waiting on a frame when the catch-up resolves — the shape
+        // frame pacing introduced. Without the flush, the catch-up sees
+        // nothing newer than what it has APPLIED, writes tick 10, and the
+        // pending frame then puts tick 11's predecessor ordering in reverse.
+        let captured: SnapshotListener | undefined;
+        let resolveCurrentSnapshot: (snapshot: PlayerSnapshot | null) => void = () => undefined;
+        const currentSnapshotPromise = new Promise<PlayerSnapshot | null>((resolve) => {
+            resolveCurrentSnapshot = resolve;
+        });
+        const { api } = makeApi({ captureSnapshotListener: (cb) => (captured = cb) });
+        (api.getCurrentSnapshot as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+            currentSnapshotPromise,
+        );
+        const store = createGameStore();
+
+        const bootstrapPromise = bootstrapGameStore(api, store.getState());
+        const liveSnapshot = makeSnapshot(11);
+        captured!(liveSnapshot);
+        resolveCurrentSnapshot(makeSnapshot(10));
+        await bootstrapPromise;
+        // No frame has run yet, and pacing is on for this block — so the flush
+        // inside bootstrap is the only thing that can have applied it.
+        expect(store.getState().snapshot).toBe(liveSnapshot);
+
+        // And the frame that was cancelled must not re-apply it afterwards.
+        await nextFrame();
+        expect(store.getState().snapshot).toBe(liveSnapshot);
+    });
+
+    it('flushes AFTER the catch-up round trip, not before it', async () => {
+        // The window the flush's position exists for: the snapshot arrives
+        // while `getCurrentSnapshot()` is still in flight, so a flush placed
+        // ahead of that await has already run and cannot see it. The catch-up
+        // would then find nothing newer than what it has APPLIED, write the
+        // older tick, and the pending frame would put the newer one back —
+        // ordering reversed, with the store ending on the older.
+        let captured: SnapshotListener | undefined;
+        const liveSnapshot = makeSnapshot(11);
+        const { api } = makeApi({ captureSnapshotListener: (cb) => (captured = cb) });
+        (api.getCurrentSnapshot as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+            // Delivered from INSIDE the round trip: bootstrap is suspended on
+            // this promise, past any flush that ran before it.
+            captured!(liveSnapshot);
+            return makeSnapshot(10);
+        });
+        const store = createGameStore();
+
+        await bootstrapGameStore(api, store.getState());
+
+        expect(store.getState().snapshot).toBe(liveSnapshot);
+    });
+
+    it('applies on ARRIVAL when the active game declared no pacing', async () => {
+        // The other arm of the scheduler this bootstrap builds. A turn-based
+        // game must keep the un-paced behaviour it had before the pacing
+        // existed — and a bootstrap wired to a fixed frame-paced scheduler
+        // would defer its snapshots too.
+        setSnapshotPacingEnabled(false);
+        let captured: SnapshotListener | undefined;
+        const { api } = makeApi({ captureSnapshotListener: (cb) => (captured = cb) });
+        const store = createGameStore();
+        await bootstrapGameStore(api, store.getState());
+
+        const snap = makeSnapshot(7);
+        captured!(snap);
+
+        expect(store.getState().snapshot).toBe(snap);
+    });
+
     it('leaves the store empty when getCurrentSnapshot() returns null', async () => {
         const { api } = makeApi();
         const store = createGameStore();
@@ -257,3 +346,12 @@ describe('bootstrapGameStore()', () => {
         expect(store.getState().snapshot).toBeNull();
     });
 });
+
+/** Waits for the frame the bridge paces snapshot application against. */
+async function nextFrame(): Promise<void> {
+    await new Promise<void>((resolve) => {
+        globalThis.requestAnimationFrame(() => {
+            resolve();
+        });
+    });
+}

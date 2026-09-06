@@ -86,12 +86,42 @@ describe('FileSaveRepository — integration', () => {
         expect(entries.filter((e) => e.endsWith('.tmp'))).toHaveLength(0);
     });
 
+    it('survives two concurrent saves to ONE slot, leaving a whole file and no .tmp', async () => {
+        // The autosave slot has two independent writers that are not
+        // serialised against each other: `HostSessionPipeline` fires
+        // `autoSave` after every accepted `engine:end_turn` and does not await
+        // it, and an explicit `saves.save()` that names no slot ALSO lands on
+        // the autosave slot (`SessionRuntime.captureSaveFile` defaults it).
+        // With one shared temp path the second rename finds nothing and the
+        // caller's save is rejected — with a file on disk that the OTHER
+        // writer put there.
+        const repo = makeRepo(tmpDir);
+
+        await Promise.all([
+            repo.save(makeFile('tactics', 'autosave')),
+            repo.save(makeFile('tactics', 'autosave')),
+        ]);
+
+        const dir = path.join(tmpDir, 'tactics');
+        const entries = await fs.readdir(dir);
+        expect(entries).toContain('autosave.chimera');
+        expect(entries.filter((e) => e.endsWith('.tmp'))).toHaveLength(0);
+        // Whole, not half: whichever write renamed last must be readable in
+        // full, which a torn or truncated file would fail.
+        await expect(repo.load('tactics/autosave')).resolves.toBeDefined();
+    });
+
     it('list excludes stale .tmp files left by a crashed write', async () => {
         const repo = makeRepo(tmpDir);
-        // Simulate a crash mid-write: a .tmp file exists but the .chimera file does not.
+        // Simulate a crash mid-write: .tmp files exist but no .chimera file
+        // does. Two artefacts with DIFFERENT discriminators, because the temp
+        // path now belongs to the write: `list()` filters on the `.chimera`
+        // suffix, so what stands between the discriminator is irrelevant and
+        // this test must not start depending on one particular value.
         const dir = path.join(tmpDir, 'tactics');
         await fs.mkdir(dir, { recursive: true });
-        await fs.writeFile(path.join(dir, 'autosave.chimera.tmp'), 'corrupt-partial');
+        await fs.writeFile(path.join(dir, 'autosave.chimera.1.tmp'), 'corrupt-partial');
+        await fs.writeFile(path.join(dir, 'autosave.chimera.427.tmp'), 'corrupt-partial');
 
         const slots = await repo.list('tactics');
 

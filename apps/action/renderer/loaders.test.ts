@@ -42,6 +42,16 @@ describe('action renderer loaders', () => {
         expect(game.matchHistory?.undo).toBe(false);
     });
 
+    it('forwards the realtime declaration, which is what paces snapshots to frames', async () => {
+        // Without this forward the payload carries `undefined`, /game publishes
+        // "not realtime", and the engine applies every snapshot on arrival — the
+        // pacing is silently inert for the one shipped game that wants it.
+        const game = await loadActionRendererGame();
+
+        expect(game.realtime).toBe(actionManifest.realtime);
+        expect(game.realtime).toBe(true);
+    });
+
     // The SHELL payload is the one a menu route loads, so it is the payload that
     // has to carry the actions for pre-match input and the Controls pane
     // (§4.26). Identity, not equality: ONE array reaches both payloads, so the

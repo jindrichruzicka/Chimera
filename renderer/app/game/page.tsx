@@ -40,6 +40,7 @@ import { TOAST_KEYS } from '../../i18n/engine-keys';
 import { useTranslate } from '../../i18n/useTranslate';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useGameStore } from '../../state/gameStore';
+import { setSnapshotPacingEnabled } from '../../state/snapshotPacing';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useIsSpectator, useLobbyUiStore } from '../../state/lobbyUiStore';
 import { useSaveStore } from '../../state/saveStore';
@@ -148,6 +149,19 @@ export default function GamePage(): React.ReactElement | null {
         },
         [isSpectator, sendActionToHost],
     );
+
+    // Publish the active game's snapshot pacing. The IPC client was built at app
+    // start, before any game was known, and asks this module whenever it requests a frame —
+    // so a realtime game gets its snapshots paced to frames and a turn-based one
+    // keeps getting them on arrival. Cleared on the way out: outside a match
+    // there is no game whose declaration could still apply.
+    const declaresRealtime = loadedGame?.realtime ?? false;
+    useEffect(() => {
+        setSnapshotPacingEnabled(declaresRealtime);
+        return () => {
+            setSnapshotPacingEnabled(false);
+        };
+    }, [declaresRealtime]);
 
     // Leave-to-main-menu. useLeaveGame() raises this flag; routing owns the
     // navigation + stale-snapshot reset. Latch the in-flight leave in a ref so

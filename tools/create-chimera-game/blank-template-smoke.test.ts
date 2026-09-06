@@ -1249,6 +1249,11 @@ describe('blank template shell contributions', () => {
         expect(payloadFields(gamePayload).get('matchHistory')).toBe(
             'resolveMatchHistorySupport(__gameCamel__Manifest)',
         );
+        // The same reasoning for the realtime forward: without it the engine
+        // applies every snapshot on arrival, so a scaffolded realtime game
+        // silently loses its frame pacing. Asserted as the exact initialiser
+        // text, because a hardcoded literal is lint-clean and silently wrong.
+        expect(payloadFields(gamePayload).get('realtime')).toBe('__gameCamel__Manifest.realtime');
     });
 
     it('leaves the manifest match-history declaration commented out, so the defaults are what a fresh game gets', async () => {

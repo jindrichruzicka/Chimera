@@ -32,7 +32,11 @@ import type {
 export interface SnapshotStore {
     /** Projected per-viewer snapshot; null before the first IPC push. */
     readonly snapshot: PlayerSnapshot | null;
-    /** Latest authoritative logical tick, including tick-only updates. */
+    /**
+     * The authoritative logical tick, written by both `applySnapshot` and
+     * `applyTick`. What it is NOT is monotonic: a restore rewinds the match to
+     * an earlier checkpoint, and its snapshot carries that checkpoint's tick.
+     */
     readonly currentTick: number;
 
     /**

@@ -111,6 +111,12 @@ export async function load__GamePascal__RendererGame(): Promise<LoadedRendererGa
         // engine's /game route know whether to offer undo — without this line a
         // game that wants no undo still gets its undo key bound.
         matchHistory: resolveMatchHistorySupport(__gameCamel__Manifest),
+        // The manifest's realtime flag, forwarded for the same reason. It is what
+        // decides whether the engine paces authoritative snapshots to animation
+        // frames: a realtime game pushes faster than a display can show, while a
+        // turn-based one pushes on a player's action, where a frame of
+        // presentation lag buys nothing.
+        realtime: __gameCamel__Manifest.realtime,
         // Read BACK off the shell rather than restated: the same array reaches
         // both payloads, so the engine's app-boot registration and the game
         // shell's cannot disagree about what an id means. Spread rather than

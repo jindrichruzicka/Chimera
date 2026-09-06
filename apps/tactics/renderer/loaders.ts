@@ -38,6 +38,10 @@ export async function loadTacticsRendererGame(): Promise<LoadedRendererGame> {
         // `LoadedRendererGame.matchHistory` for why the renderer needs it
         // forwarded rather than read.
         matchHistory: resolveMatchHistorySupport(tacticsManifest),
+        // Forwarded, not read: the renderer cannot reach a manifest. Read off
+        // the manifest rather than written as `false`, so the two cannot drift
+        // if this game ever declares otherwise.
+        realtime: tacticsManifest.realtime,
         // Read back off the shell rather than re-stated: the same array reaches
         // both payloads, so the engine's app-boot registration and `GameShell`'s
         // re-registration cannot disagree about what an id means (§4.26). Spread

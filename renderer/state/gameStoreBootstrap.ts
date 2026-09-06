@@ -26,8 +26,13 @@ import type {
     PlayerSnapshot,
     Unsubscribe,
 } from '@chimera-engine/simulation/bridge/api-types.js';
-import { createIpcClient, type IpcPredictionStore } from '../bridge/ipcClient.js';
+import {
+    createConditionalFrameScheduler,
+    createIpcClient,
+    type IpcPredictionStore,
+} from '../bridge/ipcClient.js';
 import { useGameStore, type RevealStore } from './gameStore.js';
+import { snapshotPacingEnabled } from './snapshotPacing.js';
 
 /** Shape of the `createIpcClient` factory; injectable for testing. */
 type IpcClientFactory = typeof createIpcClient;
@@ -76,7 +81,19 @@ export async function bootstrapGameStore(
     };
     let predictableTypes = new Set<string>();
     const predictableTypesPromise = api.getPredictableActionTypes();
-    const client = clientFactory(api, trackedStore, (type: string) => predictableTypes.has(type));
+    const client = clientFactory(
+        api,
+        trackedStore,
+        (type: string) => predictableTypes.has(type),
+        // Per-GAME, asked whenever the client requests a frame. A realtime game pushes faster than a
+        // display can show and wants its snapshots paced to frames; a
+        // turn-based one pushes on a player's action, where a frame of
+        // presentation lag buys nothing and costs interaction fidelity. `/game`
+        // publishes the active game's declaration; outside a match it
+        // reads false, which is application on arrival — what every game got
+        // before the pacing existed.
+        createConditionalFrameScheduler(snapshotPacingEnabled),
+    );
     const unsubscribeClient = client.bootstrap();
     // Commitment battle mode: main pushes only reveals that already passed
     // `CommitmentScheme.verify()` (Invariant #9). The playfield plays each revealed
@@ -92,6 +109,14 @@ export async function bootstrapGameStore(
     // (direct-game E2E start, renderer reload mid-session), apply it now so
     // the match page does not redirect back to /lobby on mount.
     const currentSnapshot = await api.getCurrentSnapshot();
+    // The flush is what makes the comparison below mean anything, and it goes
+    // AFTER the last await rather than before it. The client paces snapshot
+    // application against the frame clock, so an arrival during those awaits
+    // may still be waiting on a frame — leaving `latestSnapshot` behind what
+    // has actually arrived, and letting that frame land an OLDER snapshot on
+    // top of the catch-up a moment later. Nothing awaits between here and the
+    // comparison, so there is no window left for a second arrival to reopen.
+    client.flush();
     if (currentSnapshot !== null && isNewerThanLatest(currentSnapshot, latestSnapshot)) {
         latestSnapshot = currentSnapshot;
         resolvedStore.applySnapshot(currentSnapshot);

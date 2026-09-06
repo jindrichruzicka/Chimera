@@ -246,7 +246,7 @@ A damage action flows like this:
 2. Host `ActionPipeline.process()` runs the 7-step pipeline (§4.7): validate → reduce → history → project → broadcast.
 3. `reduce()` returns a new `GameSnapshot` where `entities['entity-42'].hp = 22`.
 4. `StateProjector` produces a `PlayerSnapshot` per player (fog of war applied — an entity in fog never reaches the renderer at all).
-5. IPC pushes the `PlayerSnapshot` into `gameStore.applySnapshot(...)` (§4.4).
+5. IPC pushes the `PlayerSnapshot` into `gameStore.applySnapshot(...)` (§4.4). For a game that declares `realtime`, that write lands on the next display frame rather than on arrival: `ipcClient` holds the newest snapshot and applies one per frame, and a snapshot superseded inside a frame is dropped rather than queued. A turn-based game keeps application on arrival — it pushes on a player's action, where a frame of presentation lag buys nothing.
 6. React re-renders `<Entity>`; `pickSpriteRef` now returns `def.sprites.critical`; `useAsset` returns the critical texture from the `AssetManager` cache (§4.10). If it was preloaded as `'critical'` priority, no flicker.
 
 ### B.5 Why the Indirection Is Worth It

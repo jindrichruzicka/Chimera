@@ -2,12 +2,10 @@
 //
 // Per-game manifest: the small, pure-data descriptor each game declares about
 // itself — identity, loop mode, and optional capability declarations. Lives in the
-// `simulation/foundation/` leaf with zero platform imports so BOTH the main process (window title +
-// RealtimeTicker) and the renderer (game-shell display name, cursor token
-// overrides) read one source of truth.
+// `simulation/foundation/` leaf with zero platform imports so both the main
+// process and the renderer read one source of truth.
 // The host wall-clock fields (`realtime`, `tickRateMs`) never enter the
-// deterministic core — they only steer how the host drives `engine:tick`
-// (Invariant #2).
+// deterministic core (Invariant #2).
 
 /** Window title used when no game manifest supplies one. */
 export const DEFAULT_WINDOW_TITLE = 'Chimera';

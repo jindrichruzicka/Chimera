@@ -8,7 +8,7 @@
  *
  * `save()` always writes to a `.tmp` file first, then renames atomically to
  * the final path. An in-progress crash therefore leaves a `.tmp` artefact that
- * is invisible to `list()` and will be overwritten on the next `save()` call.
+ * is invisible to `list()`.
  *
  * The default `baseDir` is `app.getPath('userData')/saves` from Electron.
  * In tests, supply a custom `baseDir` pointing to a temp directory.
@@ -63,6 +63,20 @@ export class InvalidSlotIdError extends Error {
 
 /** Allowlist pattern for every path component used in save-file paths. */
 const SLOT_COMPONENT_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+
+/**
+ * Distinguishes one in-flight write from another within this process.
+ *
+ * A counter rather than a timestamp: two writes started in the same
+ * millisecond are exactly the case that needs telling apart. Process-local is
+ * enough — the save directory belongs to one running app.
+ */
+let tempWriteCounter = 0;
+
+function nextTempId(): string {
+    tempWriteCounter += 1;
+    return String(tempWriteCounter);
+}
 
 /**
  * Validate a single path component (gameId or slotName).
@@ -202,7 +216,15 @@ export class FileSaveRepository implements SaveRepository {
         };
 
         const dest = this.slotPath(file.header.gameId, file.header.slotId);
-        const tmp = `${dest}.tmp`;
+        // Per-WRITE, not per-slot. One slot has more than one writer and they
+        // are not serialised against each other — the fire-and-forget autosave
+        // after `engine:end_turn`, and an explicit `saves.save()` that names no
+        // slot and so defaults onto the autosave slot. Sharing one temp path
+        // let the first rename move the file out from under the second, whose
+        // rename then failed with ENOENT and whose caller saw its save
+        // rejected. With a path of its own, each write is whole before it
+        // renames and the rename itself decides the winner.
+        const tmp = `${dest}.${nextTempId()}.tmp`;
 
         const fh = await fs.open(tmp, 'w');
         try {
