@@ -10,8 +10,13 @@
  * packaged build folds to the literal `false` — so none of it is ever
  * constructed in a distributable. It is not merely unreachable there but
  * ABSENT: the app bundler folds the debug gate in `electron/main/index.ts` and
- * prunes the dynamic import that reaches this barrel, so none of these modules
- * enter a packaged bundle.
+ * prunes the dynamic import that reaches this barrel, so nothing this barrel
+ * owns enters a packaged bundle.
+ *
+ * The re-exported `diffSnapshots` is the exception, and is not this barrel's:
+ * it lives in the contract leaf and `StateBroadcaster` imports it directly, so
+ * it ships. Why the marker set excludes it is
+ * `electron/packaged-bundle/debug-bundle-markers.ts`'s to say.
  *
  * The source stays, and this barrel stays public: `DebugProtocol` has type-only
  * importers reaching the renderer, which cost zero runtime bytes. Absence from

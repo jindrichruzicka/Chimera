@@ -6,8 +6,8 @@
  * called (Stage 7 of ActionPipeline.process()), StateBroadcaster projects the
  * full host snapshot and delegates only the resulting PlayerSnapshot to
  * transport.sendSnapshot(viewerId, snapshot), then fans that wave out to any
- * spectators. Point-sends to a single viewer (reconnect re-sync, host-renderer
- * seat switch) use broadcast(), which never touches spectator traffic.
+ * spectators. Point-sends to a single viewer use broadcast(), which never
+ * touches spectator traffic.
  *
  * Architecture: §4.6, §4.14 — StateProjector / StateBroadcaster
  *
@@ -21,7 +21,12 @@
 
 import type { HostTransport, PlayerId, Unsubscribe } from '@chimera-engine/networking';
 import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
-import type { BaseGameSnapshot } from '@chimera-engine/simulation/engine/types.js';
+import { diffSnapshots } from '@chimera-engine/simulation/foundation/snapshot-diff.js';
+import { toSnapshotDelta } from '@chimera-engine/simulation/foundation/snapshot-delta.js';
+import type {
+    BaseGameSnapshot,
+    BroadcastOptions,
+} from '@chimera-engine/simulation/engine/types.js';
 import type {
     PlayerSnapshot,
     StateProjector,
@@ -61,7 +66,52 @@ export interface SpectatorViewSource {
 export type StateBroadcasterOptions = (
     | { readonly hostViewerId?: PlayerId; readonly e2eHooks?: undefined }
     | { readonly hostViewerId: PlayerId; readonly e2eHooks: E2eHooks }
-) & { readonly spectators?: SpectatorViewSource };
+) & {
+    readonly spectators?: SpectatorViewSource;
+    /**
+     * Beats between forced keyframes on the transport leg, per recipient.
+     * Defaults to {@link DEFAULT_KEYFRAME_INTERVAL_BEATS}.
+     */
+    readonly keyframeIntervalBeats?: number;
+};
+
+/**
+ * The default for `keyframeIntervalBeats`.
+ *
+ * Not a loss-recovery number: the wire is ordered and reliable, so a frame is
+ * never simply missing — a session that breaks reconnects and asks for a full
+ * snapshot. It bounds how long a recipient whose chain broke for any other
+ * reason stays wrong before the host repairs it without being asked.
+ */
+export const DEFAULT_KEYFRAME_INTERVAL_BEATS = 60;
+
+/** What was actually put on the wire, for the measurement this path exists to justify. */
+export interface SnapshotDeltaMetrics {
+    /** Whole projections sent, for every reason a keyframe is owed. */
+    readonly keyframes: number;
+    /** Beats that put only changed paths on the wire. */
+    readonly deltas: number;
+    /** Keyframes sent BECAUSE the delta would not have been smaller. */
+    readonly sizeFallbacks: number;
+}
+
+/**
+ * What the broadcaster remembers about one transport recipient, so the next
+ * beat can be expressed as a difference from the last one.
+ *
+ * Bounded by construction: one entry per recipient the host has sent to, and
+ * `onPlayerLeft` drops the entry. Keyed by RECIPIENT rather than by seat —
+ * a spectator is diffed against what that spectator received, not against the
+ * seat it follows.
+ */
+interface RecipientDeltaState {
+    /** The last whole projection this recipient was sent; every delta's baseline. */
+    lastProjection: Readonly<PlayerSnapshot>;
+    /** Serialised length of the last keyframe, the yardstick a delta must beat. */
+    keyframeBytes: number;
+    /** Beats on deltas alone since that keyframe. */
+    beatsSinceKeyframe: number;
+}
 
 /**
  * Fans out projected `PlayerSnapshot` objects to connected players via
@@ -85,6 +135,12 @@ export class StateBroadcaster {
     private lastSpectatorSnapshot: Readonly<BaseGameSnapshot> | null = null;
     /** Last tick value forwarded to spectators (ticks advance monotonically). */
     private lastSpectatorTick: number | null = null;
+    /** Per-recipient delta baselines (see {@link RecipientDeltaState}). */
+    private readonly deltaState = new Map<PlayerId, RecipientDeltaState>();
+    private readonly metrics = { keyframes: 0, deltas: 0, sizeFallbacks: 0 };
+    private readonly keyframeIntervalBeats: number;
+    /** Drops a departed recipient's baseline; released by {@link dispose}. */
+    private readonly unsubscribePlayerLeft: Unsubscribe;
 
     constructor(
         private readonly transport: HostTransport,
@@ -93,6 +149,26 @@ export class StateBroadcaster {
         private readonly options: StateBroadcasterOptions = {},
     ) {
         this.log = logger.child({ module: 'state-broadcaster' });
+        this.keyframeIntervalBeats =
+            options.keyframeIntervalBeats ?? DEFAULT_KEYFRAME_INTERVAL_BEATS;
+        // Subscribed here rather than wired from the composition root because the
+        // root's own player-left handler returns early down several branches (a
+        // spectator leaving, a lobby-phase leave), and a baseline left behind on
+        // any of them is the unbounded map this whole arc exists to remove.
+        this.unsubscribePlayerLeft = transport.onPlayerLeft((playerId) => {
+            this.deltaState.delete(playerId);
+        });
+    }
+
+    /**
+     * What this broadcaster has put on the wire so far.
+     *
+     * A diagnostic seam. Nothing in the running app reads it today; the size
+     * fallback also leaves a `trace` line, which is what an operator would ask
+     * for. The counters are what the tests assert a decision on.
+     */
+    deltaMetrics(): SnapshotDeltaMetrics {
+        return { ...this.metrics };
     }
 
     registerRendererRecipient(recipient: RendererSnapshotRecipient): Unsubscribe {
@@ -120,10 +196,9 @@ export class StateBroadcaster {
      * Project the full host snapshot for `viewerId` and forward only that
      * player-safe view to the transport and registered renderer boundaries.
      *
-     * A point-send to ONE viewer — it never touches spectator traffic. The
-     * reconnect re-sync and the host-renderer seat switch use this so a
-     * host-local action never fans a snapshot out to every remote spectator;
-     * the Stage-7 wave uses {@link broadcastWave}.
+     * A point-send to ONE viewer — it never touches spectator traffic, so a
+     * host-local action never fans a snapshot out to every remote spectator.
+     * The Stage-7 wave uses {@link broadcastWave}.
      *
      * No-ops silently if `dispose()` has already been called.
      */
@@ -131,7 +206,10 @@ export class StateBroadcaster {
         if (this.disposed) return;
         const playerSnapshot = this.projector.project(snapshot, viewerId);
         this.log.trace('broadcast', { viewerId, tick: playerSnapshot.tick });
-        this.transport.sendSnapshot(viewerId, playerSnapshot);
+        // A point-send is always a KEYFRAME. Every caller of it is asking for
+        // the whole thing by definition — a viewer whose baseline the host
+        // cannot vouch for, or one whose projection was just replaced wholesale.
+        this.sendKeyframe(viewerId, playerSnapshot);
         this.sendToRendererRecipients(viewerId, playerSnapshot);
         this.notifyE2eHooks(viewerId, playerSnapshot);
     }
@@ -147,10 +225,18 @@ export class StateBroadcaster {
      *
      * No-ops silently if `dispose()` has already been called.
      */
-    broadcastWave(snapshot: Readonly<BaseGameSnapshot>, viewerId: PlayerId): void {
+    broadcastWave(
+        snapshot: Readonly<BaseGameSnapshot>,
+        viewerId: PlayerId,
+        options: BroadcastOptions = { forceFull: false },
+    ): void {
         if (this.disposed) return;
-        this.broadcast(snapshot, viewerId);
-        this.fanOutToSpectators(snapshot);
+        const playerSnapshot = this.projector.project(snapshot, viewerId);
+        this.log.trace('broadcast', { viewerId, tick: playerSnapshot.tick });
+        this.sendProjection(viewerId, playerSnapshot, options.forceFull);
+        this.sendToRendererRecipients(viewerId, playerSnapshot);
+        this.notifyE2eHooks(viewerId, playerSnapshot);
+        this.fanOutToSpectators(snapshot, options.forceFull);
     }
 
     /**
@@ -185,7 +271,8 @@ export class StateBroadcaster {
         }
         const projected = this.projector.project(snapshot, followedId);
         this.log.debug('spectator unicast', { spectatorId, followedId, tick: projected.tick });
-        this.transport.sendSnapshot(spectatorId, projected);
+        // A unicast re-sync, so a keyframe for the same reason `broadcast()` is.
+        this.sendKeyframe(spectatorId, projected);
     }
 
     /**
@@ -193,7 +280,7 @@ export class StateBroadcaster {
      * broadcast wave (see `lastSpectatorSnapshot`). Spectators are remote by
      * definition, so renderer recipients and E2E host hooks are not involved.
      */
-    private fanOutToSpectators(snapshot: Readonly<BaseGameSnapshot>): void {
+    private fanOutToSpectators(snapshot: Readonly<BaseGameSnapshot>, forceFull: boolean): void {
         const spectators = this.options.spectators;
         if (spectators === undefined) return;
         if (snapshot === this.lastSpectatorSnapshot) return;
@@ -205,7 +292,7 @@ export class StateBroadcaster {
                 followedId,
                 tick: projected.tick,
             });
-            this.transport.sendSnapshot(spectatorId, projected);
+            this.sendProjection(spectatorId, projected, forceFull);
         }
     }
 
@@ -217,6 +304,78 @@ export class StateBroadcaster {
         for (const [spectatorId] of spectators.entries()) {
             this.transport.sendTick(spectatorId, tick);
         }
+    }
+
+    /**
+     * Put this beat's projection on the wire as a delta where that is both
+     * possible and cheaper, and as a whole snapshot otherwise.
+     *
+     * Five conditions owe a keyframe, each for its own reason:
+     *  - the pipeline forced the wave (`engine:sync_request`) — the viewer that
+     *    asked to be re-synced is exactly the one whose baseline the host cannot
+     *    vouch for, so a delta against that baseline is the one thing it must
+     *    not be sent. Nothing observable identifies this case: a re-sync after a
+     *    run of clock-only beats has a projection that genuinely DID change;
+     *  - no baseline — this recipient has been sent nothing to difference from;
+     *  - the periodic interval elapsed;
+     *  - the projection did not change, so a delta would carry no entries;
+     *  - the delta is not smaller than the last keyframe, so the delta path
+     *    would cost bytes rather than save them.
+     *
+     * The size comparison is against the last keyframe's length rather than
+     * against a fresh serialisation of this projection: the snapshot is stable
+     * in size from beat to beat, and serialising it every beat to decide would
+     * pay the exact cost the delta is here to avoid. Only the delta — small
+     * whenever the answer is "send the delta" — is measured per beat.
+     */
+    private sendProjection(
+        recipientId: PlayerId,
+        projection: PlayerSnapshot,
+        forceFull: boolean,
+    ): void {
+        const state = this.deltaState.get(recipientId);
+        if (
+            forceFull ||
+            state === undefined ||
+            state.beatsSinceKeyframe + 1 >= this.keyframeIntervalBeats
+        ) {
+            this.sendKeyframe(recipientId, projection);
+            return;
+        }
+
+        const delta = toSnapshotDelta(diffSnapshots(state.lastProjection, projection));
+        if (delta.entries.length === 0) {
+            this.sendKeyframe(recipientId, projection);
+            return;
+        }
+
+        const deltaBytes = JSON.stringify(delta).length;
+        if (deltaBytes >= state.keyframeBytes) {
+            this.log.trace('delta not smaller than keyframe — sending the snapshot', {
+                recipientId,
+                deltaBytes,
+                keyframeBytes: state.keyframeBytes,
+            });
+            this.metrics.sizeFallbacks += 1;
+            this.sendKeyframe(recipientId, projection);
+            return;
+        }
+
+        this.metrics.deltas += 1;
+        state.lastProjection = projection;
+        state.beatsSinceKeyframe += 1;
+        this.transport.sendSnapshotDelta(recipientId, delta);
+    }
+
+    /** Send the whole projection and make it this recipient's new baseline. */
+    private sendKeyframe(recipientId: PlayerId, projection: PlayerSnapshot): void {
+        this.metrics.keyframes += 1;
+        this.deltaState.set(recipientId, {
+            lastProjection: projection,
+            keyframeBytes: JSON.stringify(projection).length,
+            beatsSinceKeyframe: 0,
+        });
+        this.transport.sendSnapshot(recipientId, projection);
     }
 
     private notifyE2eHooks(viewerId: PlayerId, snapshot: PlayerSnapshot): void {
@@ -259,5 +418,7 @@ export class StateBroadcaster {
     dispose(): void {
         this.disposed = true;
         this.rendererRecipients.clear();
+        this.deltaState.clear();
+        this.unsubscribePlayerLeft();
     }
 }

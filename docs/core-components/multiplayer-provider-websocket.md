@@ -39,6 +39,7 @@ interface HostedSession {
 
 interface HostTransport {
     sendSnapshot(playerId: PlayerId, snapshot: PlayerSnapshot): void;
+    sendSnapshotDelta(playerId: PlayerId, delta: SnapshotDelta): void;
     broadcastLobbyState(state: LobbyState): void;
     /** Side-channel: non-authoritative, not in ActionHistory, not in saves/replays */
     sendSideChannel(target: PlayerId | 'broadcast', msg: SideChannelMessage): void;
@@ -117,7 +118,7 @@ class LobbyManager {
 
 Neither module references WebSocket directly:
 
-- **`StateBroadcaster`** — wired as `BroadcastContext.broadcast` callback. Pipeline stage 7 → `StateBroadcaster` → `transport.sendSnapshot(playerId, projected)`.
+- **`StateBroadcaster`** — wired as `BroadcastContext.broadcast` callback. Pipeline stage 7 → `StateBroadcaster` → `transport.sendSnapshot` or `transport.sendSnapshotDelta`, per recipient; §4.3 has the rule and `StateBroadcaster.test.ts` measures it.
 - **`MessageRouter`** — subscribes to `transport.onActionReceived()`. `LocalWebSocketProvider` deserialises frames and delivers typed `EngineAction` objects.
 
 Both are provider-agnostic and require zero changes when switching to Steam.

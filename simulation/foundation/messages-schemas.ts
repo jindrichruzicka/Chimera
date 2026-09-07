@@ -25,7 +25,7 @@
  */
 
 import { z } from 'zod';
-import type { ClientMessage, ServerMessage } from './messages.js';
+import { SNAPSHOT_DELTA_VERSION, type ClientMessage, type ServerMessage } from './messages.js';
 import { ChatScopeSchema } from './chat-schemas.js';
 
 // ─── Primitive re-usable schemas ──────────────────────────────────────────────
@@ -431,6 +431,45 @@ const SnapshotMessage = z
     })
     .strict();
 
+/**
+ * One entry of a `SNAPSHOT_DELTA`. `after` is `z.unknown()`, deliberately: the
+ * value is a subtree of a PROJECTED snapshot, whose shape belongs to the game,
+ * not to the transport. What guards the receiver is not this schema but
+ * `applySnapshotDelta`'s applicability rules — a path that does not fit the
+ * baseline is refused there, and the viewer asks for a keyframe.
+ *
+ * `.strict()` matters more than usual here: an entry carrying `before` is a
+ * frame built against the INSPECTOR's diff shape rather than the wire's, and
+ * silently stripping it would hide that a producer is sending twice the bytes.
+ */
+const SnapshotDeltaEntryMessage = z
+    .object({
+        path: z.string(),
+        kind: z.enum(['added', 'removed', 'changed']),
+        after: z.unknown().optional(),
+    })
+    .strict();
+
+const SnapshotDeltaBody = z
+    .object({
+        fromTick: z.number().int(),
+        toTick: z.number().int(),
+        entries: z.array(SnapshotDeltaEntryMessage),
+    })
+    .strict();
+
+const SnapshotDeltaMessage = z
+    .object({
+        type: z.literal('SNAPSHOT_DELTA'),
+        // Required, with no default: a frame from a host that predates the
+        // field cannot be assumed to mean v1, and guessing is the failure mode
+        // the version exists to prevent.
+        version: z.literal(SNAPSHOT_DELTA_VERSION),
+        delta: SnapshotDeltaBody,
+        checksum: z.number(),
+    })
+    .strict();
+
 const TickMessage = z
     .object({
         type: z.literal('TICK'),
@@ -512,6 +551,7 @@ const ProfileRejectMessage = z
 export const ServerMessageSchema = z.discriminatedUnion('type', [
     WelcomeMessage,
     SnapshotMessage,
+    SnapshotDeltaMessage,
     TickMessage,
     DeltaMessage,
     RejectMessage,

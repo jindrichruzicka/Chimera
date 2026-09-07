@@ -19,6 +19,9 @@ import type {
     LobbyPlayerEntry,
 } from '../../MultiplayerProvider.js';
 import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
+import { SNAPSHOT_DELTA_VERSION } from '@chimera-engine/simulation/foundation/messages.js';
+import { ServerMessageSchema } from '@chimera-engine/simulation/foundation/messages-schemas.js';
+import type { SnapshotDelta } from '@chimera-engine/simulation/foundation/snapshot-delta.js';
 import type {
     ClientMessage,
     ServerMessage,
@@ -111,9 +114,10 @@ function makeTransport(): { server: LobbyServer; transport: HostTransport } {
 // ─── HostTransport interface compliance ──────────────────────────────────────
 
 describe('WsHostTransport — implements HostTransport', () => {
-    it('exposes all HostTransport methods', () => {
+    it('exposes a sample of HostTransport members at runtime', () => {
         const { transport } = makeTransport();
         expect(typeof transport.sendSnapshot).toBe('function');
+        expect(typeof transport.sendSnapshotDelta).toBe('function');
         expect(typeof transport.broadcastLobbyState).toBe('function');
         expect(typeof transport.sendSideChannel).toBe('function');
         expect(typeof transport.onActionReceived).toBe('function');
@@ -621,6 +625,113 @@ describe('WsHostTransport — profile_reject side-channel', () => {
         if (received.type === 'PROFILE_REJECT') {
             expect(received.reason).toBe('profile:NAMESPACE_COLLISION');
         }
+        ws.close();
+    });
+});
+
+// ─── sendSnapshotDelta ────────────────────────────────────────────────────────
+
+describe('WsHostTransport — sendSnapshotDelta', () => {
+    const makeDelta = (): SnapshotDelta => ({
+        fromTick: 6,
+        toTick: 7,
+        entries: [
+            { path: 'tick', kind: 'changed', after: 7 },
+            { path: 'entities.unit-1.cell.x', kind: 'changed', after: 2 },
+            { path: 'entities.unit-2', kind: 'removed' },
+        ],
+    });
+
+    it('delivers a SNAPSHOT_DELTA message carrying the delta verbatim', async () => {
+        const { server, transport } = makeTransport();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+
+        const p = new Promise<ServerMessage>((resolve) => {
+            ws.once('message', (raw) => resolve(JSON.parse(rawToString(raw)) as ServerMessage));
+        });
+
+        const delta = makeDelta();
+        transport.sendSnapshotDelta(playerId, delta);
+
+        const msg = await p;
+        expect(msg.type).toBe('SNAPSHOT_DELTA');
+        if (msg.type === 'SNAPSHOT_DELTA') {
+            expect(msg.delta).toEqual(delta);
+            expect(msg.version).toBe(SNAPSHOT_DELTA_VERSION);
+        }
+        ws.close();
+    });
+
+    it('sets checksum to crc32Json(delta) — the integrity guard covers what is SENT', async () => {
+        const { server, transport } = makeTransport();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+
+        const p = new Promise<ServerMessage>((resolve) => {
+            ws.once('message', (raw) => resolve(JSON.parse(rawToString(raw)) as ServerMessage));
+        });
+
+        const delta = makeDelta();
+        transport.sendSnapshotDelta(playerId, delta);
+
+        const msg = await p;
+        expect(msg.type).toBe('SNAPSHOT_DELTA');
+        if (msg.type === 'SNAPSHOT_DELTA') {
+            expect(msg.checksum).toBe(crc32Json(delta));
+        }
+        ws.close();
+    });
+
+    it('parses under the wire schema, so a real client accepts the frame it assembles', async () => {
+        // The frame is hand-assembled around a pre-serialised body rather than
+        // stringified from an object, so nothing but a parse of the actual bytes
+        // proves the two agree.
+        const { server, transport } = makeTransport();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+
+        const raw = new Promise<string>((resolve) => {
+            ws.once('message', (data) => resolve(rawToString(data)));
+        });
+
+        transport.sendSnapshotDelta(playerId, makeDelta());
+
+        const parsed = ServerMessageSchema.safeParse(JSON.parse(await raw));
+        expect(parsed.success).toBe(true);
+        ws.close();
+    });
+
+    it('serialises nothing and computes no checksum for a target with no open socket', async () => {
+        const { server, transport } = makeTransport();
+        await server.ready();
+        const hostSeat = toPlayerId('host-seat-served-in-process');
+
+        const stringify = vi.spyOn(JSON, 'stringify');
+        try {
+            transport.sendSnapshotDelta(hostSeat, makeDelta());
+            expect(stringify).not.toHaveBeenCalled();
+        } finally {
+            stringify.mockRestore();
+        }
+    });
+
+    it('serialises the delta exactly once for a delivered frame', async () => {
+        const { server, transport } = makeTransport();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+        const p = new Promise<ServerMessage>((resolve) => {
+            ws.once('message', (data) => resolve(JSON.parse(rawToString(data)) as ServerMessage));
+        });
+
+        const stringify = vi.spyOn(JSON, 'stringify');
+        try {
+            transport.sendSnapshotDelta(playerId, makeDelta());
+            expect(stringify).toHaveBeenCalledTimes(1);
+        } finally {
+            stringify.mockRestore();
+        }
+        await p;
         ws.close();
     });
 });

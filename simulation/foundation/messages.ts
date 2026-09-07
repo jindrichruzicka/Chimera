@@ -24,6 +24,7 @@
 import type { PlayerId, EngineAction, GameResult } from './engine-contract.js';
 import type { WirePlayerSnapshot as PlayerSnapshot } from './snapshot-contract.js';
 import type { LobbyState } from './lobby-contract.js';
+import type { SnapshotDelta } from './snapshot-delta.js';
 import type { ChatScope } from './chat.js';
 
 // ─── Re-export for consumers in local/ ───────────────────────────────────────
@@ -31,7 +32,7 @@ import type { ChatScope } from './chat.js';
 // carries the loose `WirePlayerSnapshot`, re-exported here as `PlayerSnapshot`
 // so local/ consumers reach it under that name.
 
-export type { PlayerId, EngineAction, GameResult, PlayerSnapshot, LobbyState };
+export type { PlayerId, EngineAction, GameResult, PlayerSnapshot, LobbyState, SnapshotDelta };
 
 // ─── Stub / forward-declared types ───────────────────────────────────────────
 
@@ -167,11 +168,21 @@ export type ClientMessage =
  *                 was admitted as a seated 'player' or a read-only 'spectator'
  *                 (Invariant #114); absent ⇒ 'player' for old hosts.
  * - SNAPSHOT      Full projected PlayerSnapshot for the receiving client.
- *                 GameSnapshot NEVER appears here (Invariant #3).
+ *                 GameSnapshot NEVER appears here (Invariant #3). Also the
+ *                 KEYFRAME a SNAPSHOT_DELTA is measured against.
+ * - SNAPSHOT_DELTA The changed paths between the receiver's last projection and
+ *                 its new one, computed per viewer strictly after
+ *                 `StateProjector.project()` (Invariants #3/#8), so it can carry
+ *                 no field the SNAPSHOT before it could not have carried.
+ *                 `version` pins the frame's shape: a client that predates a
+ *                 future shape fails to PARSE the frame rather than applying it
+ *                 as if it were this one. `checksum` is CRC32 of JSON(delta) —
+ *                 the same integrity guard SNAPSHOT carries, over what is
+ *                 actually sent.
  * - TICK          Tiny authoritative clock update for idle ticks where no
  *                 projected state changed.
- * - DELTA         Incremental event stream optimisation. Placeholder for now —
- *                 hosts always send full SNAPSHOT.
+ * - DELTA         Incremental event stream optimisation. Nothing emits it;
+ *                 incremental state travels on SNAPSHOT_DELTA above.
  * - REJECT        Signals that the host rejected an ACTION (stale tick, checksum
  *                 mismatch, etc.) or a JOIN. Known join-time `reason` values
  *                 include `match_in_progress` (the game declares no spectator
@@ -208,6 +219,12 @@ export type ServerMessage =
           readonly role?: 'player' | 'spectator';
       }
     | { readonly type: 'SNAPSHOT'; readonly snapshot: PlayerSnapshot; readonly checksum: number }
+    | {
+          readonly type: 'SNAPSHOT_DELTA';
+          readonly version: typeof SNAPSHOT_DELTA_VERSION;
+          readonly delta: SnapshotDelta;
+          readonly checksum: number;
+      }
     | { readonly type: 'TICK'; readonly tick: number }
     | {
           readonly type: 'DELTA';
@@ -228,6 +245,21 @@ export type ServerMessage =
     | { readonly type: 'PONG'; readonly sentAt: number }
     | { readonly type: 'LOBBY_STATE'; readonly state: LobbyState }
     | { readonly type: 'PROFILE_REJECT'; readonly reason: string };
+
+/**
+ * The shape version of a `SNAPSHOT_DELTA` frame.
+ *
+ * A wire contract needs a version because the receiver APPLIES what it carries
+ * rather than replacing state with it: a frame whose entry shape has changed
+ * would not read as malformed, it would read as a different set of paths.
+ * Pinned as a literal on the frame, so a client built against this version
+ * fails `ServerMessageSchema.safeParse` — loudly, at the receive boundary —
+ * on a frame from a host that has moved on, instead of applying it.
+ *
+ * Bump it in the same commit as any change to `SnapshotDelta`'s shape or to
+ * what a receiver must do with an entry.
+ */
+export const SNAPSHOT_DELTA_VERSION = 1;
 
 // ─── Shared REJECT.reason constants ───────────────────────────────────────────
 //
@@ -273,6 +305,7 @@ const CLIENT_MESSAGE_TYPES = new Set<string>([
 const SERVER_MESSAGE_TYPES = new Set<string>([
     'WELCOME',
     'SNAPSHOT',
+    'SNAPSHOT_DELTA',
     'TICK',
     'DELTA',
     'REJECT',

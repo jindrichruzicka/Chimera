@@ -20,11 +20,13 @@ import type {
     JoinGateResult,
     JoinClassification,
     JoinClassifierContext,
+    SnapshotDelta,
 } from '../../MultiplayerProvider.js';
 import { crc32 } from '@chimera-engine/simulation/foundation/crc32.js';
-import type {
-    ServerMessage,
-    WireCommitmentReveal,
+import {
+    SNAPSHOT_DELTA_VERSION,
+    type ServerMessage,
+    type WireCommitmentReveal,
 } from '@chimera-engine/simulation/foundation/messages.js';
 import type { LobbyServer } from './LobbyServer.js';
 import type { MessageRouter } from './MessageRouter.js';
@@ -63,6 +65,22 @@ export class WsHostTransport implements HostTransport {
         this.server.sendRawToPlayer(
             playerId,
             `{"type":"SNAPSHOT","snapshot":${body},"checksum":${checksum}}`,
+        );
+    }
+
+    sendSnapshotDelta(playerId: PlayerId, delta: SnapshotDelta): void {
+        // Same shape as `sendSnapshot` for the same reasons: the socket check
+        // comes before the serialisation and the CRC walk, and the frame is
+        // hand-assembled around the pre-serialised body so the checksum covers
+        // exactly the bytes that go out. The CRC is over the DELTA, which is
+        // what this frame carries — a checksum of the snapshot it produces would
+        // guard something the receiver has not been sent.
+        if (!this.server.hasOpenSocket(playerId)) return;
+        const body = JSON.stringify(delta);
+        const checksum = crc32(body);
+        this.server.sendRawToPlayer(
+            playerId,
+            `{"type":"SNAPSHOT_DELTA","version":${SNAPSHOT_DELTA_VERSION},"delta":${body},"checksum":${checksum}}`,
         );
     }
 

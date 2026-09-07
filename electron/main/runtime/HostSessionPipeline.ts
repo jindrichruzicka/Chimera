@@ -29,6 +29,7 @@ import type { ActionRegistry } from '@chimera-engine/simulation/engine/ActionReg
 import type {
     ActionEnvelope,
     BaseGameSnapshot,
+    BroadcastOptions,
     PlayerId,
     GameResult,
 } from '@chimera-engine/simulation/engine/types.js';
@@ -293,7 +294,11 @@ export interface HostSessionPipelineResult {
  */
 export function buildHostSessionPipeline(
     registry: ActionRegistry,
-    broadcastFn: (snapshot: Readonly<BaseGameSnapshot>, viewerId: PlayerId) => void,
+    broadcastFn: (
+        snapshot: Readonly<BaseGameSnapshot>,
+        viewerId: PlayerId,
+        options: BroadcastOptions,
+    ) => void,
     broadcastTickFnOrOptions?:
         | ((tick: number, viewerId: PlayerId) => void)
         | HostSessionPipelineOptions,

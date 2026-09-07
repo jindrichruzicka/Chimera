@@ -26,6 +26,7 @@ import type {
     ServerMessage,
     WireCommitmentReveal,
 } from '@chimera-engine/simulation/foundation/messages.js';
+import type { SnapshotDelta } from '@chimera-engine/simulation/foundation/snapshot-delta.js';
 import { ServerConnection } from './ServerConnection.js';
 import { WsClientTransport } from './WsClientTransport.js';
 
@@ -808,5 +809,229 @@ describe('WsClientTransport — pre-subscriber snapshot latch', () => {
         transport.onSnapshotReceived((s) => received.push(s));
 
         expect(received).toEqual([]);
+    });
+});
+
+// ─── SNAPSHOT_DELTA ───────────────────────────────────────────────────────────
+
+describe('WsClientTransport — SNAPSHOT_DELTA', () => {
+    /** Collect every snapshot and checksum the transport hands its subscriber. */
+    const collect = (
+        transport: ClientTransport,
+    ): { snapshots: PlayerSnapshot[]; checksums: number[] } => {
+        const snapshots: PlayerSnapshot[] = [];
+        const checksums: number[] = [];
+        transport.onSnapshotReceived((snapshot, checksum) => {
+            snapshots.push(snapshot);
+            checksums.push(checksum);
+        });
+        return { snapshots, checksums };
+    };
+
+    /** Resolves once `count` snapshots have landed on `snapshots`. */
+    const waitForCount = async (snapshots: readonly unknown[], count: number): Promise<void> => {
+        await vi.waitFor(() => {
+            expect(snapshots.length).toBeGreaterThanOrEqual(count);
+        });
+    };
+
+    const advance = (from: PlayerSnapshot, tick: number): SnapshotDelta => ({
+        fromTick: from.tick,
+        toTick: tick,
+        entries: [
+            { path: 'tick', kind: 'changed', after: tick },
+            { path: 'isMyTurn', kind: 'changed', after: !from.isMyTurn },
+        ],
+    });
+
+    it('hands its subscriber the whole snapshot the delta produces', async () => {
+        // `ClientTransport.onSnapshotReceived` promises a whole projection, so
+        // the reconstruction lives here rather than above the transport: no
+        // consumer of the contract learns that a delta was on the wire.
+        const { hostTransport, playerId, transport } = await makeClientTransport();
+        const { snapshots } = collect(transport);
+
+        const baseline = makeSnapshot(playerId);
+        hostTransport.sendSnapshot(playerId, baseline);
+        await waitForCount(snapshots, 1);
+        hostTransport.sendSnapshotDelta(playerId, advance(baseline, 11));
+        await waitForCount(snapshots, 2);
+
+        expect(snapshots[1]).toEqual({ ...baseline, tick: 11, isMyTurn: false });
+    });
+
+    it('passes the frame checksum through rather than measuring the rebuild', async () => {
+        // Measuring would not give the host's number: `ServerMessageSchema`
+        // rebuilds a parsed snapshot in the SCHEMA's key order, so the baseline
+        // here — and every rebuild from it — is keyed differently from the host
+        // projector's object, and `crc32Json` is order-sensitive. The frame's
+        // own checksum is what the host stamped, over the delta it sent.
+        const { hostTransport, playerId, transport } = await makeClientTransport();
+        const { snapshots, checksums } = collect(transport);
+
+        const baseline = makeSnapshot(playerId);
+        hostTransport.sendSnapshot(playerId, baseline);
+        await waitForCount(snapshots, 1);
+        const delta = advance(baseline, 11);
+        hostTransport.sendSnapshotDelta(playerId, delta);
+        await waitForCount(snapshots, 2);
+
+        expect(checksums[1]).toBe(crc32Json(delta));
+        expect(checksums[1]).not.toBe(crc32Json(snapshots[1]));
+    });
+
+    it('chains deltas: the second applies to what the first produced', async () => {
+        const { hostTransport, playerId, transport } = await makeClientTransport();
+        const { snapshots } = collect(transport);
+
+        const baseline = makeSnapshot(playerId);
+        hostTransport.sendSnapshot(playerId, baseline);
+        await waitForCount(snapshots, 1);
+        hostTransport.sendSnapshotDelta(playerId, advance(baseline, 11));
+        await waitForCount(snapshots, 2);
+        hostTransport.sendSnapshotDelta(playerId, {
+            fromTick: 11,
+            toTick: 12,
+            entries: [{ path: 'tick', kind: 'changed', after: 12 }],
+        });
+        await waitForCount(snapshots, 3);
+
+        expect(snapshots[2]?.tick).toBe(12);
+    });
+
+    it('asks the host for a full re-sync when a delta arrives with no baseline', async () => {
+        const { server, hostTransport, playerId, transport } = await makeClientTransport();
+        const { snapshots } = collect(transport);
+
+        const resync = waitForServerInboundMessage(
+            server,
+            (_from, msg) => msg.type === 'ACTION' && msg.action.type === 'engine:sync_request',
+        );
+        hostTransport.sendSnapshotDelta(playerId, advance(makeSnapshot(playerId), 11));
+
+        expect((await resync).from).toBe(playerId);
+        // Nothing partial reached the subscriber while that was in flight.
+        expect(snapshots).toEqual([]);
+    });
+
+    it('asks for a full re-sync when the delta will not apply, and delivers nothing', async () => {
+        const { server, hostTransport, playerId, transport } = await makeClientTransport();
+        const { snapshots } = collect(transport);
+
+        const baseline = makeSnapshot(playerId);
+        hostTransport.sendSnapshot(playerId, baseline);
+        await waitForCount(snapshots, 1);
+
+        const resync = waitForServerInboundMessage(
+            server,
+            (_from, msg) => msg.type === 'ACTION' && msg.action.type === 'engine:sync_request',
+        );
+        // A baseline tick that is not the held one — the common desync.
+        hostTransport.sendSnapshotDelta(playerId, {
+            fromTick: 99,
+            toTick: 100,
+            entries: [{ path: 'tick', kind: 'changed', after: 100 }],
+        });
+
+        await resync;
+        expect(snapshots).toHaveLength(1);
+    });
+
+    it('asks only once while a re-sync is outstanding', async () => {
+        // A broken chain would otherwise ask on EVERY beat, and each request
+        // makes the host broadcast a full snapshot to every viewer, not just to
+        // the asker — so an unlatched request turns one client's desync into a
+        // host-wide cost.
+        const { server, hostTransport, playerId, transport } = await makeClientTransport();
+        const { snapshots } = collect(transport);
+        const requests: ClientMessage[] = [];
+        server.onMessage((_from, msg) => {
+            if (msg.type === 'ACTION' && msg.action.type === 'engine:sync_request') {
+                requests.push(msg);
+            }
+        });
+
+        const stale = (tick: number): SnapshotDelta => ({
+            fromTick: 99,
+            toTick: tick,
+            entries: [{ path: 'tick', kind: 'changed', after: tick }],
+        });
+        hostTransport.sendSnapshotDelta(playerId, stale(100));
+        hostTransport.sendSnapshotDelta(playerId, stale(101));
+        hostTransport.sendSnapshotDelta(playerId, stale(102));
+        // A frame the client DOES publish, sent last. The socket is ordered, so
+        // observing it proves all three refusals were routed first — where a
+        // fixed sleep would only prove the clock advanced, and on a slow runner
+        // would assert "asked once" without the later two having arrived at all.
+        hostTransport.sendSnapshot(playerId, makeSnapshot(playerId));
+        await waitForCount(snapshots, 1);
+
+        expect(requests).toHaveLength(1);
+    });
+
+    it('asks again after a keyframe answered the previous request', async () => {
+        const { server, hostTransport, playerId, transport } = await makeClientTransport();
+        const { snapshots } = collect(transport);
+        const requests: ClientMessage[] = [];
+        server.onMessage((_from, msg) => {
+            if (msg.type === 'ACTION' && msg.action.type === 'engine:sync_request') {
+                requests.push(msg);
+            }
+        });
+
+        const stale = (tick: number): SnapshotDelta => ({
+            fromTick: 99,
+            toTick: tick,
+            entries: [{ path: 'tick', kind: 'changed', after: tick }],
+        });
+        hostTransport.sendSnapshotDelta(playerId, stale(100));
+        await vi.waitFor(() => {
+            expect(requests).toHaveLength(1);
+        });
+
+        // The keyframe the host answers with clears the latch AND re-baselines.
+        hostTransport.sendSnapshot(playerId, makeSnapshot(playerId));
+        await waitForCount(snapshots, 1);
+
+        hostTransport.sendSnapshotDelta(playerId, stale(200));
+        await vi.waitFor(() => {
+            expect(requests).toHaveLength(2);
+        });
+    });
+
+    it('re-baselines on a keyframe, so the next delta applies to it', async () => {
+        const { hostTransport, playerId, transport } = await makeClientTransport();
+        const { snapshots } = collect(transport);
+
+        hostTransport.sendSnapshot(playerId, makeSnapshot(playerId));
+        await waitForCount(snapshots, 1);
+        const keyframe = { ...makeSnapshot(playerId), tick: 50 };
+        hostTransport.sendSnapshot(playerId, keyframe);
+        await waitForCount(snapshots, 2);
+        hostTransport.sendSnapshotDelta(playerId, advance(keyframe, 51));
+        await waitForCount(snapshots, 3);
+
+        expect(snapshots[2]?.tick).toBe(51);
+    });
+
+    it('replays the reconstruction to a subscriber that arrives after it, exactly once', async () => {
+        // The latch covers the reconnect re-sync, where the host's answer can
+        // land before `LobbyManager` wires its listener. A delta beat has to
+        // latch the snapshot it PRODUCES, not the delta.
+        const { conn, hostTransport, playerId, transport } = await makeClientTransport();
+
+        const baseline = makeSnapshot(playerId);
+        hostTransport.sendSnapshot(playerId, baseline);
+        hostTransport.sendSnapshotDelta(playerId, advance(baseline, 11));
+        // Waited on the frame itself rather than on a sleep: the transport
+        // subscribed to the connection in its constructor, so by the time this
+        // resolves the delta has already been routed and latched. A sleep would
+        // only prove the clock advanced.
+        await waitForConnectionMessage(conn, (msg) => msg.type === 'SNAPSHOT_DELTA');
+
+        const { snapshots } = collect(transport);
+        await waitForCount(snapshots, 1);
+        expect(snapshots).toHaveLength(1);
+        expect(snapshots[0]?.tick).toBe(11);
     });
 });

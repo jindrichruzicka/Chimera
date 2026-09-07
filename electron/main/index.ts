@@ -2074,17 +2074,21 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             const { processAction, clearUndoHistory, undoManager, replay } =
                 buildHostSessionPipeline(
                     gameRegistry,
-                    (snap, to) => {
+                    (snap, to, options) => {
                         if (broadcasterRef.current === null) {
                             throw new Error(
                                 'StateBroadcaster used before hosted session wiring completed',
                             );
                         }
                         // Stage-7 wave: per-viewer send + a single spectator
-                        // fan-out per wave. Point-sends (reconnect re-sync,
-                        // host-renderer seat switch) use `broadcast` instead so
-                        // they never drive spectator traffic.
-                        broadcasterRef.current.broadcastWave(snap, to);
+                        // fan-out per wave. Point-sends use `broadcast` instead
+                        // so they never drive spectator traffic.
+                        //
+                        // `options` carries Stage 7's `forceFull`, which is what
+                        // makes an `engine:sync_request` reach every recipient as
+                        // a whole snapshot instead of as a difference from a
+                        // baseline the asker may not have.
+                        broadcasterRef.current.broadcastWave(snap, to, options);
                     },
                     (tick, to) => {
                         if (broadcasterRef.current === null) {

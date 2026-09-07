@@ -32,6 +32,8 @@ import type {
 } from './MultiplayerProvider.js';
 import type { PlayerId, EngineAction } from '@chimera-engine/simulation/contracts';
 import type { WireCommitmentReveal } from '@chimera-engine/simulation/foundation/messages.js';
+import type { SnapshotDelta } from '@chimera-engine/simulation/foundation/snapshot-delta.js';
+import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -93,11 +95,12 @@ describe('InMemoryMultiplayerProvider', () => {
             expect(session.lobbyCode.length).toBeGreaterThan(0);
         });
 
-        it('transport has all required HostTransport methods', async () => {
+        it('transport exposes a sample of HostTransport members at runtime', async () => {
             const provider = new InMemoryMultiplayerProvider();
             const session = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
             const t = session.transport;
             expect(typeof t.sendSnapshot).toBe('function');
+            expect(typeof t.sendSnapshotDelta).toBe('function');
             expect(typeof t.broadcastLobbyState).toBe('function');
             expect(typeof t.sendSideChannel).toBe('function');
             expect(typeof t.onActionReceived).toBe('function');
@@ -210,6 +213,131 @@ describe('InMemoryMultiplayerProvider', () => {
 
             hosted.transport.sendSnapshot(joined.localPlayerId, makeSnapshot(joined.localPlayerId));
             expect(received).toHaveLength(0);
+        });
+    });
+
+    // ─── Delta delivery ───────────────────────────────────────────────────────
+
+    describe('snapshot delta delivery', () => {
+        /** Host and one joined client, with every snapshot the client sees collected. */
+        const connect = async (): Promise<{
+            hosted: Awaited<ReturnType<MultiplayerProvider['hostLobby']>>;
+            joined: Awaited<ReturnType<MultiplayerProvider['joinLobby']>>;
+            received: PlayerSnapshot[];
+        }> => {
+            const provider = new InMemoryMultiplayerProvider();
+            const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+            const joined = await provider.joinLobby({ address: hosted.lobbyCode });
+            const received: PlayerSnapshot[] = [];
+            joined.transport.onSnapshotReceived((snap) => received.push(snap));
+            return { hosted, joined, received };
+        };
+
+        const advance = (from: PlayerSnapshot, tick: number): SnapshotDelta => ({
+            fromTick: from.tick,
+            toTick: tick,
+            entries: [
+                { path: 'tick', kind: 'changed', after: tick },
+                { path: 'isMyTurn', kind: 'changed', after: !from.isMyTurn },
+            ],
+        });
+
+        it('delivers the snapshot the delta produces, not the delta', async () => {
+            // `ClientTransport.onSnapshotReceived` promises a whole projection.
+            // A provider that handed a delta to that callback would break every
+            // consumer of the contract, so the reconstruction happens BELOW it.
+            const { hosted, joined, received } = await connect();
+            const baseline = makeSnapshot(joined.localPlayerId);
+            hosted.transport.sendSnapshot(joined.localPlayerId, baseline);
+            hosted.transport.sendSnapshotDelta(joined.localPlayerId, advance(baseline, 2));
+
+            expect(received).toHaveLength(2);
+            expect(received[1]).toEqual({ ...baseline, tick: 2, isMyTurn: false });
+        });
+
+        it('publishes the delta checksum, matching the WebSocket provider', async () => {
+            // `onSnapshotReceived` promises the CRC the host stamped on the frame
+            // that delivered the state — the delta for an incremental one — not a
+            // measurement of the rebuild. The two providers have to agree, or a
+            // consumer's behaviour would depend on which one it was wired to.
+            const { hosted, joined } = await connect();
+            const checksums: number[] = [];
+            joined.transport.onSnapshotReceived((_snap, checksum) => checksums.push(checksum));
+            const baseline = makeSnapshot(joined.localPlayerId);
+            hosted.transport.sendSnapshot(joined.localPlayerId, baseline);
+            const delta = advance(baseline, 2);
+            hosted.transport.sendSnapshotDelta(joined.localPlayerId, delta);
+
+            expect(checksums[1]).toBe(crc32Json(delta));
+        });
+
+        it('chains: the second delta applies to what the first produced', async () => {
+            const { hosted, joined, received } = await connect();
+            const baseline = makeSnapshot(joined.localPlayerId);
+            hosted.transport.sendSnapshot(joined.localPlayerId, baseline);
+            hosted.transport.sendSnapshotDelta(joined.localPlayerId, advance(baseline, 2));
+            hosted.transport.sendSnapshotDelta(joined.localPlayerId, {
+                fromTick: 2,
+                toTick: 3,
+                entries: [{ path: 'tick', kind: 'changed', after: 3 }],
+            });
+
+            expect(received).toHaveLength(3);
+            expect(received[2]?.tick).toBe(3);
+        });
+
+        it('delivers nothing for a delta with no baseline, rather than a partial snapshot', async () => {
+            const { hosted, joined, received } = await connect();
+            hosted.transport.sendSnapshotDelta(
+                joined.localPlayerId,
+                advance(makeSnapshot(joined.localPlayerId), 2),
+            );
+            expect(received).toEqual([]);
+        });
+
+        it('delivers nothing for a delta the baseline cannot carry', async () => {
+            const { hosted, joined, received } = await connect();
+            const baseline = makeSnapshot(joined.localPlayerId);
+            hosted.transport.sendSnapshot(joined.localPlayerId, baseline);
+            hosted.transport.sendSnapshotDelta(joined.localPlayerId, {
+                fromTick: 99,
+                toTick: 100,
+                entries: [{ path: 'tick', kind: 'changed', after: 100 }],
+            });
+            expect(received).toHaveLength(1);
+        });
+
+        it('re-baselines on a later full snapshot, so a keyframe recovers the chain', async () => {
+            const { hosted, joined, received } = await connect();
+            const baseline = makeSnapshot(joined.localPlayerId);
+            hosted.transport.sendSnapshot(joined.localPlayerId, baseline);
+            // A delta the baseline cannot carry: dropped, chain broken.
+            hosted.transport.sendSnapshotDelta(joined.localPlayerId, {
+                fromTick: 99,
+                toTick: 100,
+                entries: [{ path: 'tick', kind: 'changed', after: 100 }],
+            });
+            const keyframe = { ...makeSnapshot(joined.localPlayerId), tick: 100 };
+            hosted.transport.sendSnapshot(joined.localPlayerId, keyframe);
+            hosted.transport.sendSnapshotDelta(joined.localPlayerId, advance(keyframe, 101));
+
+            expect(received).toHaveLength(3);
+            expect(received[2]?.tick).toBe(101);
+        });
+
+        it("delivers nothing to a client that is not the delta's target", async () => {
+            const provider = new InMemoryMultiplayerProvider();
+            const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+            const first = await provider.joinLobby({ address: hosted.lobbyCode });
+            const second = await provider.joinLobby({ address: hosted.lobbyCode });
+            const received: PlayerSnapshot[] = [];
+            second.transport.onSnapshotReceived((snap) => received.push(snap));
+
+            const baseline = makeSnapshot(first.localPlayerId);
+            hosted.transport.sendSnapshot(first.localPlayerId, baseline);
+            hosted.transport.sendSnapshotDelta(first.localPlayerId, advance(baseline, 2));
+
+            expect(received).toEqual([]);
         });
     });
 

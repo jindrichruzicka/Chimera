@@ -451,6 +451,9 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             });
 
             // Stage 7 — broadcast reconstructed snapshot to all viewers.
+            // Not a `engine:sync_request` wave, so `forceFull` is false: an
+            // undo/redo changes state, and a callback sending incremental
+            // updates can express that as a difference like any other beat.
             // The broadcast callback receives the full BaseGameSnapshot.
             // Implementations (e.g., StateBroadcaster) must project it via
             // StateProjector.project() to produce the per-viewer PlayerSnapshot
@@ -458,7 +461,9 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             if (resolvedReconstructed !== snapshot) {
                 for (const pid of Object.keys(resolvedReconstructed.players)) {
                     const viewerId = pid as PlayerId;
-                    this.#context.broadcast?.(resolvedReconstructed, viewerId);
+                    this.#context.broadcast?.(resolvedReconstructed, viewerId, {
+                        forceFull: false,
+                    });
                 }
             }
 
@@ -601,12 +606,13 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         // not redundantly in the pipeline.
         if (this.#depth === 0 && this.#shouldNotifyViewers(action.type, snapshot, nextState)) {
             const clockOnly = this.#isClockOnlyTick(action.type, snapshot, nextState);
+            const forceFull = action.type === 'engine:sync_request';
             for (const pid of Object.keys(nextState.players)) {
                 const viewerId = pid as PlayerId;
                 if (clockOnly && this.#context?.broadcastTick !== undefined) {
                     this.#context.broadcastTick(nextState.tick, viewerId);
                 } else {
-                    this.#context?.broadcast?.(nextState, viewerId);
+                    this.#context?.broadcast?.(nextState, viewerId, { forceFull });
                 }
             }
         }

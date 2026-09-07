@@ -24,6 +24,7 @@ import type {
     HostTransport,
     ClientTransport,
     PlayerSnapshot,
+    SnapshotDelta,
     LobbyState,
     JoinGateResult,
     JoinClassification,
@@ -40,6 +41,7 @@ import {
     type WireCommitmentReveal,
 } from '@chimera-engine/simulation/foundation/messages.js';
 import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
+import { applySnapshotDelta } from '@chimera-engine/simulation/foundation/snapshot-delta.js';
 import { playerId as toPlayerId, JoinRejectedError } from './MultiplayerProvider.js';
 import { resolveRestoredSeat, sanitizeSeatClaims } from './seat-claims.js';
 import type { SeatResolutionContext } from './seat-claims.js';
@@ -71,6 +73,14 @@ function addSub<T>(set: Set<T>, cb: T): Unsubscribe {
 /** Per-client subscription state within a session. */
 interface ClientRecord {
     readonly playerId: PlayerId;
+    /**
+     * The last whole projection this client was handed, and the baseline a
+     * `sendSnapshotDelta` is applied to. Mutable because it is exactly the
+     * chain the delta path rides: a full snapshot re-baselines it, an applied
+     * delta advances it, and a delta that cannot be applied leaves it alone so
+     * the next full snapshot recovers.
+     */
+    lastSnapshot: PlayerSnapshot | null;
     readonly snapshotCbs: Set<SnapshotCb>;
     readonly tickCbs: Set<TickCb>;
     readonly sideChannelCbs: Set<ClientSideChannelCb>;
@@ -146,6 +156,7 @@ class InMemoryChannel {
     addClient(playerId: PlayerId): ClientRecord {
         const record: ClientRecord = {
             playerId,
+            lastSnapshot: null,
             snapshotCbs: new Set(),
             tickCbs: new Set(),
             sideChannelCbs: new Set(),
@@ -226,9 +237,36 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
             sendSnapshot: (playerId: PlayerId, snapshot: PlayerSnapshot): void => {
                 const client = channel.clients.get(playerId);
                 if (client) {
+                    client.lastSnapshot = snapshot;
                     const checksum = crc32Json(snapshot);
                     for (const cb of client.snapshotCbs) cb(snapshot, checksum);
                 }
+            },
+
+            sendSnapshotDelta: (playerId: PlayerId, delta: SnapshotDelta): void => {
+                // The reconstruction happens HERE, below `onSnapshotReceived`,
+                // which promises subscribers a whole projection — the same place
+                // the WebSocket client transport does it. Nothing above the
+                // transport needs to know a delta was on the wire.
+                //
+                // A delta that will not apply is DROPPED, never partially
+                // applied: `applySnapshotDelta` answers null, the baseline is
+                // left where it was, and the next full snapshot re-establishes
+                // the chain. See `delivers nothing for a delta the baseline
+                // cannot carry`.
+                const client = channel.clients.get(playerId);
+                if (client === undefined) return;
+                const baseline = client.lastSnapshot;
+                if (baseline === null) return;
+                const applied = applySnapshotDelta(baseline, delta);
+                if (applied === null) return;
+                client.lastSnapshot = applied;
+                // The DELTA's checksum, matching what the WebSocket provider
+                // publishes: `onSnapshotReceived` promises the CRC the host
+                // stamped on the frame that delivered the state, not a fresh
+                // measurement of the rebuild.
+                const checksum = crc32Json(delta);
+                for (const cb of client.snapshotCbs) cb(applied, checksum);
             },
 
             sendTick: (playerId: PlayerId, tick: number): void => {

@@ -43,7 +43,7 @@ Every collection that lives on `GameSnapshot` sits in every save checkpoint the 
 
 ### Per-beat outbound cost baseline
 
-What a realtime host pays per eventful beat is `O(entities × viewers)`: `StateProjector.project()` once per seated viewer, then one `JSON.stringify` of the projection and a `crc32` over the body per viewer with an open socket (`StateBroadcaster.broadcast` → `WsHostTransport.sendSnapshot`). [`apps/action/__tests__/OutboundPerBeatPerf.bench.test.ts`](../../apps/action/__tests__/OutboundPerBeatPerf.bench.test.ts) times exactly that leg — one wave = all viewers — over the action app's shipped (identity) visibility rules and logs the numbers on every run; `pnpm test:perf` re-runs it.
+What a realtime host pays per eventful beat is `O(entities × viewers)`: `StateProjector.project()` once per seated viewer, then serialisation and a `crc32` per outbound frame. `StateBroadcaster` decides whether that frame is a whole projection or a delta. [`apps/action/__tests__/OutboundPerBeatPerf.bench.test.ts`](../../apps/action/__tests__/OutboundPerBeatPerf.bench.test.ts) is the measurement — one wave = all viewers — over the action app's shipped (identity) visibility rules; `pnpm test:perf` re-runs it. What it does and does not cover is its own header's to state.
 
 | Grid (entities × viewers) | Wave median | Wave p95  | Body per viewer |
 | ------------------------- | ----------- | --------- | --------------- |

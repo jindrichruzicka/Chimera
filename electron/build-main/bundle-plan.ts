@@ -78,8 +78,8 @@ export const PACKAGED_BUILD_ENV = 'CHIMERA_PACKAGED_BUILD';
  * does not propagate a cross-module constant into a consuming module, so that
  * form kept the branch live and shipped the graph. The gate inlines the identical
  * expression, which folds here to `if (false)`; esbuild then prunes the two
- * dynamic-import records behind it — around 30 KB, with the debug graph's marker
- * strings gone. It does NOT minify, so the dead branch statements themselves
+ * dynamic-import records behind it, with the debug graph's marker strings
+ * gone. It does NOT minify, so the dead branch statements themselves
  * remain (rewritten to `await null`).
  *
  * Absolute byte totals are deliberately not recorded here. They move with engine

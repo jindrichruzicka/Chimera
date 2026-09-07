@@ -12,10 +12,10 @@ now keep the layer out of the artifact entirely.
 
 The main-process graph leaves the bundle. `electron/main/index.ts` gated the debug bridge on the
 imported `IS_DEBUG_MODE`, and esbuild does not propagate a cross-module constant into a consuming
-module — so the branch stayed live and `debug-bridge`, `SnapshotInspector`, `SnapshotRingBuffer`,
-`SnapshotDiff` and the `chimera:debug*` handlers were all bundled. The gate now inlines the same
+module — so the branch stayed live and `debug-bridge`, `SnapshotInspector`, `SnapshotRingBuffer`
+and the `chimera:debug*` handlers were all bundled. The gate now inlines the same
 expression, which the existing packaged `define` folds to `if (false)`, and esbuild prunes the two
-dynamic imports with it: `dist/electron/main.js` loses roughly 30 KB, with none of the graph's marker
+dynamic imports with it: `dist/electron/main.js` loses the debug graph, with none of the graph's marker
 strings left. The duplication of the expression is pinned by a drift test, because divergence would
 silently restore the shipped graph.
 

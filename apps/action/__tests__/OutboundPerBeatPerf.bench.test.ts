@@ -4,11 +4,14 @@
 // game pays on every eventful beat for every seated viewer, and the number the
 // simulation-layer standards (§7.5) quote for a game author to design against.
 //
-// The measured leg is what Stage 7 does per viewer in a shipped host:
-// `StateProjector.project()` (`StateBroadcaster.broadcast`), then one
-// `JSON.stringify` of the projection and a `crc32` over the body
-// (`WsHostTransport.sendSnapshot`). Nothing here touches a socket, so it is the
-// CPU floor of a broadcast wave, not its wall-clock cost on the wire.
+// The measured leg is `StateProjector.project()` per viewer, then one
+// `JSON.stringify` of the projection and a `crc32` over the body. Nothing here
+// touches a socket, so it is a CPU floor, not a wall-clock cost on the wire.
+//
+// It is a floor in a second sense too, and deliberately not a model of a beat:
+// `StateBroadcaster` also diffs each projection against the last one it sent
+// that recipient and serialises whichever of the two frames it chooses, and
+// none of that is timed here.
 //
 // This app's shipped visibility rules are the identity. Entities beyond the
 // app's three seeded primitives are synthesised on the primitive record's exact

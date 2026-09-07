@@ -23,6 +23,11 @@ import { GAME_SNAPSHOT_CHANNEL } from '../../preload/apis/game-api.js';
 import { playerId as toPlayerId } from '@chimera-engine/networking';
 import type { HostTransport, PlayerId } from '@chimera-engine/networking';
 import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
+import { diffSnapshots } from '@chimera-engine/simulation/foundation/snapshot-diff.js';
+import {
+    applySnapshotDelta,
+    toSnapshotDelta,
+} from '@chimera-engine/simulation/foundation/snapshot-delta.js';
 import { gamePhase } from '@chimera-engine/simulation/engine/types.js';
 import type { BaseGameSnapshot } from '@chimera-engine/simulation/engine/types.js';
 import type {
@@ -36,6 +41,7 @@ import type { E2eHooks } from './e2e-hooks.js';
 function makeTransport(): HostTransport {
     return {
         sendSnapshot: vi.fn(),
+        sendSnapshotDelta: vi.fn(),
         sendTick: vi.fn(),
         broadcastLobbyState: vi.fn(),
         sendSideChannel: vi.fn(),
@@ -417,8 +423,8 @@ describe('StateBroadcaster — spectator perspective fan-out (Invariant #114)', 
         });
         const snapshot = makeSnapshot(PLAYER_A);
 
-        // A reconnect re-sync / host-renderer seat switch targets ONE viewer
-        // and must not push snapshots to remote spectators.
+        // A point-send targets ONE viewer and must not push snapshots to
+        // remote spectators.
         broadcaster.broadcast(snapshot, PLAYER_A);
 
         expect(transport.sendSnapshot).toHaveBeenCalledOnce();
@@ -447,9 +453,13 @@ describe('StateBroadcaster — spectator perspective fan-out (Invariant #114)', 
         broadcaster.broadcastWave(makeSnapshot(PLAYER_A), PLAYER_A);
         broadcaster.broadcastWave({ ...makeSnapshot(PLAYER_A), tick: 2 }, PLAYER_A);
 
-        const spectatorSends = (
-            transport.sendSnapshot as ReturnType<typeof vi.fn>
-        ).mock.calls.filter(([target]) => target === SPEC_1);
+        // Counted across BOTH state frames: the property is that a second wave
+        // reaches the spectator again, and which frame carries it is the
+        // delta path's decision, not this test's.
+        const spectatorSends = [
+            ...vi.mocked(transport.sendSnapshot).mock.calls,
+            ...vi.mocked(transport.sendSnapshotDelta).mock.calls,
+        ].filter(([target]) => target === SPEC_1);
         expect(spectatorSends).toHaveLength(2);
     });
 
@@ -588,5 +598,501 @@ describe('StateBroadcaster — per-beat log levels', () => {
             'spectator broadcast',
             'broadcast tick',
         ]);
+    });
+});
+
+// ── Outbound snapshot deltas ───────────────────────────────────────────────────
+
+/**
+ * A projector driven by a per-viewer script, so a test can move one field of one
+ * viewer's projection and leave every other viewer's alone.
+ */
+function makeScriptedProjector(): {
+    projector: StateProjector<BaseGameSnapshot>;
+    project: ReturnType<typeof vi.fn>;
+    set: (viewerId: PlayerId, snapshot: PlayerSnapshot) => void;
+} {
+    const scripted = new Map<PlayerId, PlayerSnapshot>();
+    const project = vi.fn((_snapshot: Readonly<BaseGameSnapshot>, viewerId: PlayerId) => {
+        const next = scripted.get(viewerId);
+        if (next === undefined) throw new Error(`no projection scripted for ${viewerId}`);
+        return next;
+    });
+    return {
+        projector: { project },
+        project,
+        set: (viewerId, snapshot) => scripted.set(viewerId, snapshot),
+    };
+}
+
+/** A projected snapshot with one entity at `x`, so a beat can move exactly one path. */
+function makeMovingProjection(viewerId: PlayerId, tick: number, x: number): PlayerSnapshot {
+    return {
+        ...makeProjectedSnapshot(viewerId),
+        tick,
+        entities: { 'unit-1': { id: 'unit-1', x } } as unknown as PlayerSnapshot['entities'],
+    };
+}
+
+/** Distinct host snapshot objects, so each wave looks like a new one to the fan-out dedupe. */
+const wave = (tick: number): BaseGameSnapshot => ({ ...makeSnapshot(PLAYER_A), tick });
+
+describe('StateBroadcaster — outbound snapshot deltas', () => {
+    it('sends a full snapshot to a viewer it has no baseline for', () => {
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+
+        expect(transport.sendSnapshot).toHaveBeenCalledTimes(1);
+        expect(transport.sendSnapshotDelta).not.toHaveBeenCalled();
+    });
+
+    it('sends only the changed path on the next beat', () => {
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 2, 1));
+        broadcaster.broadcastWave(wave(2), PLAYER_A);
+
+        expect(transport.sendSnapshot).toHaveBeenCalledTimes(1);
+        expect(transport.sendSnapshotDelta).toHaveBeenCalledTimes(1);
+        expect(transport.sendSnapshotDelta).toHaveBeenCalledWith(PLAYER_A, {
+            fromTick: 1,
+            toTick: 2,
+            entries: [
+                { path: 'tick', kind: 'changed', after: 2 },
+                { path: 'entities.unit-1.x', kind: 'changed', after: 1 },
+            ],
+        });
+    });
+
+    it('chains: the second delta in a run is measured from what the first one delivered', () => {
+        // The baseline has to ADVANCE on a delta, not only on a keyframe. Left
+        // at the keyframe, every delta after the first carries a `fromTick` the
+        // receiver has already moved past — `applySnapshotDelta` refuses it, the
+        // viewer asks for a re-sync, and `engine:sync_request` broadcasts a full
+        // snapshot to EVERY viewer, once per beat. Counting the sends cannot see
+        // that: the counts are identical either way. `fromTick` is the artifact
+        // the receiver reads.
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+
+        for (const tick of [2, 3, 4]) {
+            set(PLAYER_A, makeMovingProjection(PLAYER_A, tick, tick));
+            broadcaster.broadcastWave(wave(tick), PLAYER_A);
+        }
+
+        const sent = vi.mocked(transport.sendSnapshotDelta).mock.calls.map(([, delta]) => delta);
+        expect(sent.map((delta) => [delta.fromTick, delta.toTick])).toEqual([
+            [1, 2],
+            [2, 3],
+            [3, 4],
+        ]);
+        // And they really do chain: applying them in order from the keyframe
+        // reaches the projection the host holds.
+        const keyframe = vi.mocked(transport.sendSnapshot).mock.calls[0]?.[1] as PlayerSnapshot;
+        const applied = sent.reduce<PlayerSnapshot | null>(
+            (held, delta) => (held === null ? null : applySnapshotDelta(held, delta)),
+            keyframe,
+        );
+        expect(applied).toEqual(makeMovingProjection(PLAYER_A, 4, 4));
+    });
+
+    it('sends the full snapshot when the delta is exactly the size of the keyframe', () => {
+        // The comparator is inclusive, and equal-sized is the case that decides
+        // it: a delta that saves nothing should not be preferred to the whole
+        // snapshot, which also re-baselines the receiver. The fixture is built
+        // to land ON the boundary and asserts that it did.
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        const padded = (tick: number, pad: string): PlayerSnapshot => ({
+            ...makeProjectedSnapshot(PLAYER_A),
+            tick,
+            entities: {
+                'unit-1': { id: 'unit-1', filler: 'f'.repeat(400), pad },
+            } as unknown as PlayerSnapshot['entities'],
+        });
+        const keyframe = padded(1, '');
+        const keyframeBytes = JSON.stringify(keyframe).length;
+        const deltaBytesFor = (pad: string): number =>
+            JSON.stringify(toSnapshotDelta(diffSnapshots(keyframe, padded(2, pad)))).length;
+        // Measured from a ONE-character pad, not from none: an empty pad is
+        // unchanged between the two projections, so the delta carries no entry
+        // for it at all and the first character costs a whole entry rather than
+        // a byte. From there each extra ASCII character costs exactly one.
+        const pad = 'x'.repeat(keyframeBytes - deltaBytesFor('x') + 1);
+        expect(deltaBytesFor(pad)).toBe(keyframeBytes);
+
+        set(PLAYER_A, keyframe);
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+        set(PLAYER_A, padded(2, pad));
+        broadcaster.broadcastWave(wave(2), PLAYER_A);
+
+        expect(transport.sendSnapshotDelta).not.toHaveBeenCalled();
+        expect(transport.sendSnapshot).toHaveBeenCalledTimes(2);
+        expect(broadcaster.deltaMetrics().sizeFallbacks).toBe(1);
+    });
+
+    it('sends the delta when it is one byte smaller than the keyframe', () => {
+        // The other side of the same boundary, so the comparator cannot be
+        // widened either.
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        const padded = (tick: number, pad: string): PlayerSnapshot => ({
+            ...makeProjectedSnapshot(PLAYER_A),
+            tick,
+            entities: {
+                'unit-1': { id: 'unit-1', filler: 'f'.repeat(400), pad },
+            } as unknown as PlayerSnapshot['entities'],
+        });
+        const keyframe = padded(1, '');
+        const keyframeBytes = JSON.stringify(keyframe).length;
+        const deltaBytesFor = (pad: string): number =>
+            JSON.stringify(toSnapshotDelta(diffSnapshots(keyframe, padded(2, pad)))).length;
+        const pad = 'x'.repeat(keyframeBytes - deltaBytesFor('x'));
+        expect(deltaBytesFor(pad)).toBe(keyframeBytes - 1);
+
+        set(PLAYER_A, keyframe);
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+        set(PLAYER_A, padded(2, pad));
+        broadcaster.broadcastWave(wave(2), PLAYER_A);
+
+        expect(transport.sendSnapshotDelta).toHaveBeenCalledTimes(1);
+        expect(broadcaster.deltaMetrics().sizeFallbacks).toBe(0);
+    });
+
+    it('sends a keyframe when the wave is forced, however much the projection moved', () => {
+        // The `engine:sync_request` path. A re-sync arriving after a run of
+        // clock-only beats has a projection that DID change, so an empty diff
+        // does not identify it — and the viewer that asked to be re-synced is
+        // exactly the one whose baseline cannot be trusted, so a delta against
+        // that baseline is the one thing it must not be sent.
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 51, 9));
+        broadcaster.broadcastWave(wave(51), PLAYER_A, { forceFull: true });
+
+        expect(transport.sendSnapshot).toHaveBeenCalledTimes(2);
+        expect(transport.sendSnapshotDelta).not.toHaveBeenCalled();
+    });
+
+    it('re-baselines on a forced wave, so the beat after it is a delta against THAT', () => {
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 51, 9));
+        broadcaster.broadcastWave(wave(51), PLAYER_A, { forceFull: true });
+
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 52, 10));
+        broadcaster.broadcastWave(wave(52), PLAYER_A);
+
+        expect(transport.sendSnapshotDelta).toHaveBeenCalledWith(
+            PLAYER_A,
+            expect.objectContaining({ fromTick: 51, toTick: 52 }),
+        );
+    });
+
+    it('sends a keyframe rather than an empty delta when the projection did not change', () => {
+        // Not the same case as a forced wave: an unforced wave whose projection
+        // is unchanged would otherwise put a delta with no entries on the wire.
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        const projection = makeMovingProjection(PLAYER_A, 1, 0);
+        set(PLAYER_A, projection);
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+
+        // A structurally equal but distinct object, as a re-projection produces.
+        set(PLAYER_A, { ...projection });
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+
+        expect(transport.sendSnapshot).toHaveBeenCalledTimes(2);
+        expect(transport.sendSnapshotDelta).not.toHaveBeenCalled();
+    });
+
+    it('forces the spectator fan-out too, so a re-sync wave reaches every recipient whole', () => {
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        const spectatorId = toPlayerId('spectator-1');
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger(), {
+            spectators: makeSpectatorSource([[spectatorId, PLAYER_A]]),
+        });
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 51, 9));
+        broadcaster.broadcastWave(wave(51), PLAYER_A, { forceFull: true });
+
+        expect(transport.sendSnapshotDelta).not.toHaveBeenCalled();
+        expect(
+            vi.mocked(transport.sendSnapshot).mock.calls.filter(([id]) => id === spectatorId),
+        ).toHaveLength(2);
+    });
+
+    it('sends a keyframe every keyframeIntervalBeats beats', () => {
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 0, 0));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger(), {
+            keyframeIntervalBeats: 3,
+        });
+
+        for (let tick = 0; tick < 7; tick++) {
+            set(PLAYER_A, makeMovingProjection(PLAYER_A, tick, tick));
+            broadcaster.broadcastWave(wave(tick), PLAYER_A);
+        }
+
+        // Beats 0, 3 and 6 are keyframes; the four between them are deltas.
+        expect(transport.sendSnapshot).toHaveBeenCalledTimes(3);
+        expect(transport.sendSnapshotDelta).toHaveBeenCalledTimes(4);
+    });
+
+    it('sends the full snapshot when the delta would not be smaller, and counts it', () => {
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        // A tiny projection, then one whose every entity is new: the delta has to
+        // carry the whole new payload plus its paths, so it cannot be smaller.
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+
+        const bulky = {
+            ...makeProjectedSnapshot(PLAYER_A),
+            tick: 2,
+            entities: Object.fromEntries(
+                Array.from({ length: 40 }, (_unused, index) => [
+                    `unit-${index}`,
+                    { id: `unit-${index}`, x: index },
+                ]),
+            ) as unknown as PlayerSnapshot['entities'],
+        };
+        set(PLAYER_A, bulky);
+        broadcaster.broadcastWave(wave(2), PLAYER_A);
+
+        expect(transport.sendSnapshotDelta).not.toHaveBeenCalled();
+        expect(transport.sendSnapshot).toHaveBeenCalledTimes(2);
+        expect(broadcaster.deltaMetrics().sizeFallbacks).toBe(1);
+    });
+
+    it('counts what it actually sent, so the saving is measurable', () => {
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 2, 1));
+        broadcaster.broadcastWave(wave(2), PLAYER_A);
+
+        expect(broadcaster.deltaMetrics()).toEqual({ keyframes: 1, deltas: 1, sizeFallbacks: 0 });
+    });
+
+    it('diffs per viewer AFTER projection — two viewers with different visibility differ', () => {
+        // Invariant #8: the delta is computed downstream of `project()`, per
+        // viewer. Diffing once for everyone would hand B a path B's own
+        // projection masked.
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        set(PLAYER_B, { ...makeProjectedSnapshot(PLAYER_B), tick: 1 });
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+        broadcaster.broadcastWave(wave(1), PLAYER_B);
+
+        // The same host beat: A sees the entity move, B's projection hides it.
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 2, 5));
+        set(PLAYER_B, { ...makeProjectedSnapshot(PLAYER_B), tick: 2 });
+        broadcaster.broadcastWave(wave(2), PLAYER_A);
+        broadcaster.broadcastWave(wave(2), PLAYER_B);
+
+        const deltas = vi.mocked(transport.sendSnapshotDelta).mock.calls;
+        expect(deltas.map(([viewerId]) => viewerId)).toEqual([PLAYER_A, PLAYER_B]);
+        expect(deltas.map(([, delta]) => delta.entries.map((entry) => entry.path))).toEqual([
+            ['tick', 'entities.unit-1.x'],
+            ['tick'],
+        ]);
+    });
+
+    it('drops a viewer baseline when that player leaves, so a rejoin gets a keyframe', () => {
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+
+        // The transport double records its onPlayerLeft subscriber; fire it.
+        const [onLeft] = vi.mocked(transport.onPlayerLeft).mock.calls[0] as [
+            (playerId: PlayerId, reason: 'normal') => void,
+        ];
+        onLeft(PLAYER_A, 'normal');
+
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 2, 1));
+        broadcaster.broadcastWave(wave(2), PLAYER_A);
+
+        expect(transport.sendSnapshotDelta).not.toHaveBeenCalled();
+        expect(transport.sendSnapshot).toHaveBeenCalledTimes(2);
+    });
+
+    it('unsubscribes from player-left on dispose', () => {
+        const unsubscribe = vi.fn();
+        const transport = makeTransport();
+        vi.mocked(transport.onPlayerLeft).mockReturnValue(unsubscribe);
+        const { projector, set } = makeScriptedProjector();
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+
+        new StateBroadcaster(transport, projector, createNoopLogger()).dispose();
+
+        expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a point-send a keyframe — a reconnecting viewer asked for the whole thing', () => {
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 2, 1));
+        broadcaster.broadcast(wave(2), PLAYER_A);
+
+        expect(transport.sendSnapshotDelta).not.toHaveBeenCalled();
+        expect(transport.sendSnapshot).toHaveBeenCalledTimes(2);
+    });
+
+    it('re-baselines on a point-send, so the beat after it is a delta against THAT', () => {
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 2, 1));
+        broadcaster.broadcast(wave(2), PLAYER_A);
+
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 3, 2));
+        broadcaster.broadcastWave(wave(3), PLAYER_A);
+
+        expect(transport.sendSnapshotDelta).toHaveBeenCalledWith(PLAYER_A, {
+            fromTick: 2,
+            toTick: 3,
+            entries: [
+                { path: 'tick', kind: 'changed', after: 3 },
+                { path: 'entities.unit-1.x', kind: 'changed', after: 2 },
+            ],
+        });
+    });
+
+    it('still gives renderer recipients and E2E hooks the WHOLE projection on a delta beat', () => {
+        // The renderer leg and the E2E checksum are measured on the projection,
+        // not on the frame: a delta on the wire must not change what either sees.
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        const hooks = makeE2eHooks();
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger(), {
+            hostViewerId: PLAYER_A,
+            e2eHooks: hooks,
+        });
+        const sendSnapshot = vi.fn();
+        broadcaster.registerRendererRecipient({ viewerId: PLAYER_A, sendSnapshot });
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+
+        const moved = makeMovingProjection(PLAYER_A, 2, 1);
+        set(PLAYER_A, moved);
+        broadcaster.broadcastWave(wave(2), PLAYER_A);
+
+        expect(transport.sendSnapshotDelta).toHaveBeenCalledTimes(1);
+        expect(sendSnapshot).toHaveBeenLastCalledWith(moved);
+        expect(hooks.lastHostSnapshot).toEqual(moved);
+        expect(hooks.broadcastChecksums[PLAYER_A]).toBe(crc32Json(moved));
+    });
+
+    it('re-baselines a spectator on a follow-target switch, so the next delta is against THAT', () => {
+        // `broadcastSpectator` is the spectate-target switch: it pushes the NEW
+        // seat's projection at the SAME tick the host already holds. Sending it
+        // without re-baselining leaves the host differencing the OLD seat's
+        // projection — and because the tick did not move, the delta that follows
+        // carries a `fromTick` the spectator's held snapshot matches, so
+        // `applySnapshotDelta`'s chain check PASSES and the wrong baseline is
+        // kept in silence.
+        //
+        // `hp` is the fixture that makes that visible, and it has to be built
+        // deliberately: it is EQUAL between the old seat at tick 7 and the new
+        // seat at tick 8, and DIFFERENT between the new seat's two ticks. A diff
+        // against the old seat therefore omits it altogether and the spectator
+        // keeps a stale 9. A field that merely differs between the seats would
+        // be carried by either diff and prove nothing.
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        const spectatorId = toPlayerId('spectator-1');
+        let followed = PLAYER_A;
+        const spectators: SpectatorViewSource = {
+            entries: () => [[spectatorId, followed]],
+            followedBy: () => followed,
+        };
+        const seat = (viewerId: PlayerId, tick: number, hp: number): PlayerSnapshot => ({
+            ...makeProjectedSnapshot(viewerId),
+            tick,
+            entities: { 'unit-1': { id: 'unit-1', hp } } as unknown as PlayerSnapshot['entities'],
+        });
+        const A7 = seat(PLAYER_A, 7, 5);
+        const B7 = seat(PLAYER_B, 7, 9);
+        const B8 = seat(PLAYER_B, 8, 5);
+
+        set(PLAYER_A, A7);
+        set(PLAYER_B, B7);
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger(), {
+            spectators,
+        });
+        broadcaster.broadcastWave(wave(7), PLAYER_A);
+
+        // The spectator re-points to B and is unicast B's projection at tick 7.
+        followed = PLAYER_B;
+        broadcaster.broadcastSpectator(wave(7), spectatorId);
+
+        set(PLAYER_A, seat(PLAYER_A, 8, 5));
+        set(PLAYER_B, B8);
+        broadcaster.broadcastWave(wave(8), PLAYER_A);
+
+        const spectatorDelta = vi
+            .mocked(transport.sendSnapshotDelta)
+            .mock.calls.find(([id]) => id === spectatorId)?.[1];
+        expect(spectatorDelta?.entries.map((entry) => entry.path)).toEqual([
+            'tick',
+            'entities.unit-1.hp',
+        ]);
+        // And the artifact the receiver reads: applied to what the spectator was
+        // actually SENT, the delta reproduces the projection the host holds.
+        expect(applySnapshotDelta(B7, spectatorDelta!)).toEqual(B8);
+    });
+
+    it('deltas a spectator against what that spectator last received', () => {
+        const transport = makeTransport();
+        const { projector, set } = makeScriptedProjector();
+        const spectatorId = toPlayerId('spectator-1');
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger(), {
+            spectators: makeSpectatorSource([[spectatorId, PLAYER_A]]),
+        });
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 2, 1));
+        broadcaster.broadcastWave(wave(2), PLAYER_A);
+
+        const deltas = vi.mocked(transport.sendSnapshotDelta).mock.calls;
+        expect(deltas.map(([viewerId]) => viewerId)).toEqual([PLAYER_A, spectatorId]);
     });
 });

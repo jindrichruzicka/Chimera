@@ -115,11 +115,12 @@ export function testMultiplayerProviderContract(
                 provider.dispose();
             });
 
-            it('HostTransport exposes all required subscription methods', async () => {
+            it('HostTransport exposes a sample of its members at runtime', async () => {
                 const provider = factory();
                 const session = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
                 const t = session.transport;
                 expect(typeof t.sendSnapshot).toBe('function');
+                expect(typeof t.sendSnapshotDelta).toBe('function');
                 expect(typeof t.broadcastLobbyState).toBe('function');
                 expect(typeof t.sendSideChannel).toBe('function');
                 expect(typeof t.onActionReceived).toBe('function');

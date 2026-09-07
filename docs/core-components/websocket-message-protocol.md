@@ -78,6 +78,12 @@ type ServerMessage =
           checksum: number; // CRC32 of JSON(snapshot) — integrity check
       }
     | {
+          type: 'SNAPSHOT_DELTA';
+          version: 1; // Frame shape; a client built for another version REFUSES the frame
+          delta: SnapshotDelta; // Changed paths since the receiver's last projection
+          checksum: number; // CRC32 of JSON(delta) — over what is actually sent
+      }
+    | {
           type: 'DELTA';
           fromTick: number;
           events: GameEvent[]; // Incremental update for low-bandwidth reconnects
@@ -114,7 +120,23 @@ type ServerMessage =
 
 ## CRC32 Checksums
 
-The `checksum` field in `ACTION` (client→server) and `SNAPSHOT` (server→client) is CRC32 of the JSON-serialised payload. This provides a fast integrity guard against transport corruption. It is **not** a cryptographic security control — the `CommitmentScheme` (§4.6) handles anti-cheat.
+The `checksum` field in `ACTION` (client→server) and `SNAPSHOT` / `SNAPSHOT_DELTA` (server→client) is CRC32 of the JSON-serialised payload — the `snapshot` for one, the `delta` for the other, in both cases over what the frame actually carries. This provides a fast integrity guard against transport corruption. It is **not** a cryptographic security control — the `CommitmentScheme` (§4.6) handles anti-cheat.
+
+A corrupt `SNAPSHOT_DELTA` is the more damaging of the two, which is why `ServerConnection` validates it against the pre-Zod bytes exactly as it does a `SNAPSHOT`: a snapshot REPLACES the client's state, so the next one repairs it, while a delta is APPLIED to state the client keeps.
+
+## Snapshot Deltas
+
+`StateBroadcaster` keeps the last projection it sent each recipient and sends the changed paths instead of the whole projection. Where it sends a whole `SNAPSHOT` — a **keyframe** — instead is `StateBroadcaster.sendProjection`'s to say, and `StateBroadcaster.test.ts`'s outbound-delta block to measure. Point-sends are always keyframes.
+
+`engine:sync_request` is the forced wave, and `BroadcastContext.broadcast` carries `{ forceFull }` from Stage 7 to say so. Nothing observable identifies it: a re-sync arriving after a run of clock-only beats has a projection that genuinely DID change, so an empty diff is not the signal — and the viewer that asked to be re-synced is precisely the one whose baseline the host cannot vouch for, so a delta against that baseline is the one thing it must not be sent.
+
+The baseline is per RECIPIENT, not per seat: a spectator is diffed against what that spectator received. It is dropped on `onPlayerLeft`, so the map is bounded by the connected set.
+
+The delta is computed **after** `StateProjector.project()`, per viewer (Invariants #3/#8) — never once for everyone, which would let a field reach a viewer whose own projection masked it.
+
+On the receiving side `WsClientTransport` rebuilds the whole projection and publishes THAT, so `ClientTransport.onSnapshotReceived` still hands subscribers a whole snapshot and nothing above the transport learns a delta was on the wire. A delta it cannot apply is dropped — never partially applied — and the client sends `engine:sync_request`, once per broken chain, since that request makes the host broadcast to every viewer rather than only to the asker.
+
+The checksum that reaches `onSnapshotReceived` is the one the host stamped on the frame, over that frame's own body, and is **not** recomputed on the rebuild. `ServerMessageSchema` rebuilds a parsed snapshot in the SCHEMA's key order rather than the host projector's, and `crc32Json` is order-sensitive, so a measurement of the rebuild would differ from the host's for two objects that are deeply equal. Comparing a host checksum with a client one — as `multiplayer-soak.spec.ts` does — is therefore only meaningful across a whole-snapshot frame, which is why that spec forces one with `engine:sync_request` before it compares.
 
 An `ACTION` checksum mismatch produces `REJECT { reason: 'crc_mismatch' }` for that action only. The joined session remains connected; terminal session shutdown is signaled with `CLOSE { reason: 'host_closed' }`.
 

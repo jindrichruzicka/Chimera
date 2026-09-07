@@ -11,6 +11,7 @@ import type { PlayerId } from './engine-contract.js';
 import {
     isClientMessage,
     isServerMessage,
+    SNAPSHOT_DELTA_VERSION,
     type ClientMessage,
     type ServerMessage,
 } from './messages.js';
@@ -160,6 +161,36 @@ describe('simulation/foundation/messages — ServerMessage', () => {
         expect(msg.checksum).toBe(42);
     });
 
+    it('SNAPSHOT_DELTA message carries a versioned delta and its checksum', () => {
+        const msg: ServerMessage = {
+            type: 'SNAPSHOT_DELTA',
+            version: SNAPSHOT_DELTA_VERSION,
+            delta: {
+                fromTick: 4,
+                toTick: 5,
+                entries: [
+                    { path: 'tick', kind: 'changed', after: 5 },
+                    { path: 'entities.unit-1.cell.x', kind: 'changed', after: 2 },
+                    { path: 'entities.unit-2', kind: 'removed' },
+                ],
+            },
+            checksum: 42,
+        };
+        expect(msg.type).toBe('SNAPSHOT_DELTA');
+        if (msg.type === 'SNAPSHOT_DELTA') {
+            expect(msg.delta.entries).toHaveLength(3);
+            expect(msg.checksum).toBe(42);
+        }
+    });
+
+    it('pins the delta frame version, which an older client compares against', () => {
+        // The version is what lets a future incompatible delta frame FAIL to
+        // parse on a client that predates it, instead of being applied as if it
+        // were this shape. Bumping it is a wire break, so the number is pinned
+        // here rather than read from the module it is declared in.
+        expect(SNAPSHOT_DELTA_VERSION).toBe(1);
+    });
+
     it('TICK message carries only the authoritative tick', () => {
         const msg: ServerMessage = { type: 'TICK', tick: 12 };
 
@@ -262,6 +293,10 @@ describe('simulation/foundation/messages — isClientMessage type guard', () => 
 // ─── isServerMessage ──────────────────────────────────────────────────────────
 
 describe('simulation/foundation/messages — isServerMessage type guard', () => {
+    it('accepts SNAPSHOT_DELTA', () => {
+        expect(isServerMessage({ type: 'SNAPSHOT_DELTA' })).toBe(true);
+    });
+
     it('returns true for a valid ServerMessage type', () => {
         expect(isServerMessage({ type: 'PONG', sentAt: 0 })).toBe(true);
     });

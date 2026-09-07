@@ -18,6 +18,7 @@ import type {
     ServerMessage,
 } from '@chimera-engine/simulation/foundation/messages.js';
 import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
+import { SNAPSHOT_DELTA_VERSION } from '@chimera-engine/simulation/foundation/messages.js';
 import { LobbyServer } from '../server/LobbyServer.js';
 import { MessageRouter } from '../server/MessageRouter.js';
 import { ServerConnection, JoinRejectedError } from './ServerConnection.js';
@@ -725,5 +726,74 @@ describe('ServerConnection — messages batched with WELCOME', () => {
 
         expect(received.map((msg) => msg.type)).toEqual(['SNAPSHOT']);
         await conn.close();
+    });
+
+    // ─── SNAPSHOT_DELTA checksum ──────────────────────────────────────────────
+
+    describe('SNAPSHOT_DELTA integrity', () => {
+        const deltaWelcome = {
+            type: 'WELCOME',
+            playerId: 'player-1',
+            lobbyState: {
+                info: { sessionId: 'session-1', hostId: 'host-1', gameId: 'test' },
+                players: [{ playerId: 'player-1', displayName: 'TestClient', ready: false }],
+            },
+        };
+
+        const delta = {
+            fromTick: 41,
+            toTick: 42,
+            entries: [{ path: 'tick', kind: 'changed', after: 42 }],
+        };
+
+        const deltaFrame = (checksum: number): Record<string, unknown> => ({
+            type: 'SNAPSHOT_DELTA',
+            version: SNAPSHOT_DELTA_VERSION,
+            delta,
+            checksum,
+        });
+
+        /** A connected client with its delivered frames collected. */
+        const connected = async (): Promise<{
+            socket: FakeSocket;
+            conn: ServerConnection;
+            received: ServerMessage[];
+        }> => {
+            const socket = new FakeSocket();
+            const conn = new ServerConnection({ maxRetries: 0, socketFactory: () => socket });
+            const connecting = conn.connect('ws://fake', 'token', defaultProfile);
+            await socketWired();
+            socket.emitOpen();
+            socket.emitMessage(deltaWelcome);
+            await connecting;
+            const received: ServerMessage[] = [];
+            conn.onMessage((msg) => received.push(msg));
+            return { socket, conn, received };
+        };
+
+        it('delivers a delta frame whose checksum matches its body', async () => {
+            const { socket, conn, received } = await connected();
+            socket.emitMessage(deltaFrame(crc32Json(delta)));
+            expect(received.map((msg) => msg.type)).toEqual(['SNAPSHOT_DELTA']);
+            await conn.close();
+        });
+
+        it('discards a delta frame whose checksum does not match, rather than applying it', async () => {
+            // A corrupted delta is worse than a corrupted snapshot: a snapshot
+            // replaces state and the next one repairs it, while a delta is APPLIED
+            // to state the client keeps, so one bad frame poisons every later one.
+            const { socket, conn, received } = await connected();
+            socket.emitMessage(deltaFrame(crc32Json(delta) + 1));
+            expect(received).toEqual([]);
+            await conn.close();
+        });
+
+        it('keeps the session connected after discarding a corrupted delta', async () => {
+            const { socket, conn, received } = await connected();
+            socket.emitMessage(deltaFrame(crc32Json(delta) + 1));
+            socket.emitMessage(deltaFrame(crc32Json(delta)));
+            expect(received.map((msg) => msg.type)).toEqual(['SNAPSHOT_DELTA']);
+            await conn.close();
+        });
     });
 });

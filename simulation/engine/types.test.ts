@@ -472,7 +472,7 @@ describe('BroadcastContext', () => {
             timers: {},
             gameResult: null,
         };
-        ctx.broadcast?.(snap, toPlayerId('p1'));
+        ctx.broadcast?.(snap, toPlayerId('p1'), { forceFull: false });
         expect(calls).toHaveLength(1);
         expect(calls[0]![1]).toBe('p1');
     });
@@ -502,7 +502,7 @@ describe('BroadcastContext', () => {
             timers: {},
             gameResult: null,
         };
-        ctx.broadcast?.(snap, toPlayerId('p2'));
+        ctx.broadcast?.(snap, toPlayerId('p2'), { forceFull: false });
         expect(capturedSnapshot).toBe(snap);
         expect(capturedTo).toBe('p2');
     });
@@ -675,7 +675,7 @@ describe('PipelineContext', () => {
             },
         };
         const broadCtx: BroadcastContext = pipelineCtx;
-        broadCtx.broadcast?.(snap, toPlayerId('p1'));
+        broadCtx.broadcast?.(snap, toPlayerId('p1'), { forceFull: false });
         expect(called).toBe(true);
     });
 

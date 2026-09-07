@@ -346,11 +346,11 @@ export class ServerConnection {
                         let m: ServerMessage;
                         try {
                             const p: unknown = JSON.parse(rawToString(r));
-                            // Validate SNAPSHOT CRC against pre-Zod bytes.
+                            // Validate the state-frame CRC against pre-Zod bytes.
                             // Zod may reorder object keys, so computing the CRC from the
-                            // Zod-parsed snapshot would diverge from the host's CRC.
+                            // Zod-parsed body would diverge from the host's CRC.
                             // Validate here — at the wire boundary — before safeParse runs.
-                            if (!this.validateSnapshotCrc(p)) return;
+                            if (!this.validateStateFrameCrc(p)) return;
                             const res = ServerMessageSchema.safeParse(p);
                             if (!res.success) {
                                 this.logger?.warn('malformed server message', {
@@ -444,24 +444,32 @@ export class ServerConnection {
     }
 
     /**
-     * Validates the CRC32 checksum of an inbound SNAPSHOT message against the
-     * raw pre-Zod bytes.
+     * Validates the CRC32 checksum of an inbound state frame against the raw
+     * pre-Zod bytes.
      *
      * Must be called before `ServerMessageSchema.safeParse()` to avoid comparing
-     * against Zod's potentially key-reordered snapshot object.
+     * against Zod's potentially key-reordered object.
      *
-     * Returns `true` if the message is not a SNAPSHOT, or if it is a SNAPSHOT and
-     * its checksum is valid. Returns `false` (and logs a warning) if the checksum
-     * does not match.
+     * Covers both state frames, each against the field it actually carries:
+     * SNAPSHOT's checksum is over its `snapshot`, SNAPSHOT_DELTA's over its
+     * `delta`. A corrupt delta is the worse of the two — a snapshot REPLACES
+     * state, so the next one repairs it, while a delta is APPLIED to state the
+     * client keeps, and one bad frame poisons every frame after it.
+     *
+     * Returns `true` for any other message, and for a state frame whose checksum
+     * is valid. Returns `false` (and logs a warning) on a mismatch.
      */
-    private validateSnapshotCrc(p: unknown): boolean {
+    private validateStateFrameCrc(p: unknown): boolean {
         if (typeof p !== 'object' || p === null) return true;
         const raw = p as Record<string, unknown>;
-        if (raw['type'] !== 'SNAPSHOT') return true;
+        const type = raw['type'];
+        const bodyKey =
+            type === 'SNAPSHOT' ? 'snapshot' : type === 'SNAPSHOT_DELTA' ? 'delta' : null;
+        if (bodyKey === null) return true;
 
-        const expected = crc32Json(raw['snapshot']);
+        const expected = crc32Json(raw[bodyKey]);
         if (expected !== raw['checksum']) {
-            this.logger?.warn('SNAPSHOT checksum mismatch — discarding frame', {
+            this.logger?.warn(`${String(type)} checksum mismatch — discarding frame`, {
                 expected,
                 received: raw['checksum'],
             });

@@ -83,6 +83,7 @@ function makeTestSnapshot(): TestGameSnapshot {
 function makeTransport(): HostTransport {
     return {
         sendSnapshot: vi.fn(),
+        sendSnapshotDelta: vi.fn(),
         sendTick: vi.fn(),
         broadcastLobbyState: vi.fn(),
         sendSideChannel: vi.fn(),

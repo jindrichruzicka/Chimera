@@ -15,8 +15,10 @@ import type {
     LobbyState,
     SideChannelMessage,
     DisconnectReason,
+    SnapshotDelta,
     Unsubscribe,
 } from '../../MultiplayerProvider.js';
+import { applySnapshotDelta } from '@chimera-engine/simulation/foundation/snapshot-delta.js';
 import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
 import type {
     ServerMessage,
@@ -52,6 +54,25 @@ export class WsClientTransport implements ClientTransport {
      * are authoritative whole-state, not deltas.
      */
     private latchedSnapshot: { snapshot: PlayerSnapshot; checksum: number } | null = null;
+    /**
+     * The newest whole projection this client holds, and the baseline every
+     * `SNAPSHOT_DELTA` is applied to.
+     *
+     * Separate from {@link latchedSnapshot}, which exists only to replay one
+     * frame to a late subscriber and is cleared once it has: the delta chain has
+     * to be tracked whether or not anyone is listening, or a subscriber arriving
+     * mid-match would find the next delta unappliable.
+     */
+    private deltaBaseline: PlayerSnapshot | null = null;
+    /**
+     * Whether a full re-sync has been asked for and not yet answered.
+     *
+     * A broken chain would otherwise ask on EVERY beat, and `engine:sync_request`
+     * makes the host broadcast a full snapshot to every viewer rather than only
+     * to the asker — so an unlatched request turns one client's desync into a
+     * cost the whole session pays. Cleared by the SNAPSHOT that answers it.
+     */
+    private resyncPending = false;
 
     constructor(
         private readonly connection: ServerConnection,
@@ -189,6 +210,63 @@ export class WsClientTransport implements ClientTransport {
         this.lobbyStateCbs.clear();
         this.latencyUpdateCbs.clear();
         this.latchedSnapshot = null;
+        this.deltaBaseline = null;
+        this.resyncPending = false;
+    }
+
+    /**
+     * Rebuild the whole projection a delta describes and publish THAT.
+     *
+     * `ClientTransport.onSnapshotReceived` promises subscribers a whole
+     * projection, so nothing above this transport ever learns a delta was on the
+     * wire. A delta that will not apply is DROPPED rather than partially
+     * applied, and the host is asked for a keyframe: half a snapshot is a
+     * divergence no later frame corrects.
+     *
+     * The frame's own checksum is passed through rather than measured on the
+     * rebuild. Measuring would not give the host's number for two objects that
+     * are deeply equal: `ServerMessageSchema` rebuilds a parsed snapshot in the
+     * SCHEMA's key order, so every baseline here — and therefore every rebuild
+     * from it — is keyed in that order rather than the host projector's, and
+     * `crc32Json` is order-sensitive. It would also cost a full serialisation
+     * per beat for a number only the E2E hook reads.
+     */
+    private applyDelta(delta: SnapshotDelta, checksum: number): void {
+        const baseline = this.deltaBaseline;
+        const applied = baseline === null ? null : applySnapshotDelta(baseline, delta);
+        if (applied === null) {
+            this.requestFullResync();
+            return;
+        }
+        this.deltaBaseline = applied;
+        this.publishSnapshot(applied, checksum);
+    }
+
+    /**
+     * Ask the host to broadcast a full snapshot, once per broken chain.
+     *
+     * `engine:sync_request` is the existing forced-full-broadcast hook; the tick
+     * is the last one this client is sure of, and 0 before any snapshot has
+     * arrived at all.
+     */
+    private requestFullResync(): void {
+        if (this.resyncPending) return;
+        this.resyncPending = true;
+        this.sendAction({
+            type: 'engine:sync_request',
+            playerId: this.playerId,
+            tick: this.deltaBaseline?.tick ?? 0,
+            payload: {},
+        });
+    }
+
+    /** Deliver to subscribers, or latch for the first one to arrive. */
+    private publishSnapshot(snapshot: PlayerSnapshot, checksum: number): void {
+        if (this.snapshotCbs.size === 0) {
+            this.latchedSnapshot = { snapshot, checksum };
+            return;
+        }
+        for (const cb of this.snapshotCbs) cb(snapshot, checksum);
     }
 
     // ─── Internal routing ─────────────────────────────────────────────────────
@@ -196,11 +274,16 @@ export class WsClientTransport implements ClientTransport {
     private route(msg: ServerMessage): void {
         switch (msg.type) {
             case 'SNAPSHOT': {
-                if (this.snapshotCbs.size === 0) {
-                    this.latchedSnapshot = { snapshot: msg.snapshot, checksum: msg.checksum };
-                    break;
-                }
-                for (const cb of this.snapshotCbs) cb(msg.snapshot, msg.checksum);
+                // A keyframe: it re-establishes the delta chain whatever state
+                // it was in, and answers any outstanding re-sync request.
+                this.deltaBaseline = msg.snapshot;
+                this.resyncPending = false;
+                this.publishSnapshot(msg.snapshot, msg.checksum);
+                break;
+            }
+
+            case 'SNAPSHOT_DELTA': {
+                this.applyDelta(msg.delta, msg.checksum);
                 break;
             }
 

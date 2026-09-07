@@ -455,8 +455,27 @@ export interface UndoMeta {
  * Context narrowing: each pipeline stage receives only the context it needs.
  */
 export interface BroadcastContext {
-    readonly broadcast?: (snapshot: Readonly<BaseGameSnapshot>, to: PlayerId) => void;
+    readonly broadcast?: (
+        snapshot: Readonly<BaseGameSnapshot>,
+        to: PlayerId,
+        options: BroadcastOptions,
+    ) => void;
     readonly broadcastTick?: (tick: number, to: PlayerId) => void;
+}
+
+/** What Stage 7 knows about a wave that the callback cannot work out for itself. */
+export interface BroadcastOptions {
+    /**
+     * Whether this wave was forced by `engine:sync_request` rather than by a
+     * state change.
+     *
+     * A callback that sends incremental updates has to be told: a re-sync
+     * arriving after a run of clock-only beats has a projection that genuinely
+     * DID change, so "nothing changed" does not identify it, and the viewer
+     * asking to be re-synced is precisely the viewer whose incremental baseline
+     * cannot be trusted. Only the pipeline knows it asked.
+     */
+    readonly forceFull: boolean;
 }
 
 /**

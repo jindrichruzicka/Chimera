@@ -19,6 +19,7 @@ import {
     WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH,
     WIRE_MAX_PROFILE_REJECT_REASON_LENGTH,
 } from './messages-schemas.js';
+import { SNAPSHOT_DELTA_VERSION } from './messages.js';
 
 // simulation/foundation/ is the foundation leaf, so its tests construct branded ids locally
 // rather than importing the `playerId` factory from simulation/engine/types.ts.
@@ -1409,5 +1410,106 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
         if (round.success && round.data.type === 'SNAPSHOT') {
             expect(round.data.snapshot.setup).toStrictEqual(msg.snapshot.setup);
         }
+    });
+});
+
+// ─── SNAPSHOT_DELTA ───────────────────────────────────────────────────────────
+
+describe('ServerMessageSchema — SNAPSHOT_DELTA', () => {
+    const validDelta = {
+        type: 'SNAPSHOT_DELTA',
+        version: SNAPSHOT_DELTA_VERSION,
+        delta: {
+            fromTick: 4,
+            toTick: 5,
+            entries: [
+                { path: 'tick', kind: 'changed', after: 5 },
+                { path: 'entities.unit-1', kind: 'added', after: { id: 'unit-1' } },
+                { path: 'entities.unit-2', kind: 'removed' },
+            ],
+        },
+        checksum: 1234,
+    };
+
+    it('parses a well-formed frame', () => {
+        const result = ServerMessageSchema.safeParse(validDelta);
+        expect(result.success).toBe(true);
+    });
+
+    it('leaves a removed entry without an after key, so applying it stays unambiguous', () => {
+        const result = ServerMessageSchema.safeParse(validDelta);
+        expect(result.success).toBe(true);
+        if (!result.success || result.data.type !== 'SNAPSHOT_DELTA') return;
+        const removed = result.data.delta.entries[2];
+        expect(removed).toEqual({ path: 'entities.unit-2', kind: 'removed' });
+        expect(Object.hasOwn(removed as object, 'after')).toBe(false);
+    });
+
+    it('round-trips every entry unchanged, including a null after', () => {
+        // The parsed frame is what gets APPLIED, so a schema that dropped or
+        // re-shaped an entry would diverge the receiver silently. `null` is a
+        // real value the differ emits and must survive as one.
+        const withNull = {
+            ...validDelta,
+            delta: {
+                ...validDelta.delta,
+                entries: [{ path: 'gameResult', kind: 'changed', after: null }],
+            },
+        };
+        const result = ServerMessageSchema.safeParse(withNull);
+        expect(result.success).toBe(true);
+        if (!result.success || result.data.type !== 'SNAPSHOT_DELTA') return;
+        expect(result.data.delta).toEqual(withNull.delta);
+    });
+
+    it('rejects a frame carrying a version this client was not built for', () => {
+        // The whole point of the field: a future shape must FAIL here, loudly,
+        // rather than be applied as though it were this one.
+        const result = ServerMessageSchema.safeParse({
+            ...validDelta,
+            version: SNAPSHOT_DELTA_VERSION + 1,
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects a frame with no version at all — an older host cannot be trusted to mean v1', () => {
+        const { version: _version, ...withoutVersion } = validDelta;
+        expect(ServerMessageSchema.safeParse(withoutVersion).success).toBe(false);
+    });
+
+    it('rejects an entry whose kind is not one the receiver knows how to apply', () => {
+        const result = ServerMessageSchema.safeParse({
+            ...validDelta,
+            delta: { ...validDelta.delta, entries: [{ path: 'tick', kind: 'replaced', after: 5 }] },
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects an entry with no path, and a non-integer tick', () => {
+        expect(
+            ServerMessageSchema.safeParse({
+                ...validDelta,
+                delta: { ...validDelta.delta, entries: [{ kind: 'changed', after: 5 }] },
+            }).success,
+        ).toBe(false);
+        expect(
+            ServerMessageSchema.safeParse({
+                ...validDelta,
+                delta: { ...validDelta.delta, toTick: 5.5 },
+            }).success,
+        ).toBe(false);
+    });
+
+    it('rejects an undeclared key on the frame and on an entry', () => {
+        expect(ServerMessageSchema.safeParse({ ...validDelta, extra: 1 }).success).toBe(false);
+        expect(
+            ServerMessageSchema.safeParse({
+                ...validDelta,
+                delta: {
+                    ...validDelta.delta,
+                    entries: [{ path: 'tick', kind: 'changed', after: 5, before: 4 }],
+                },
+            }).success,
+        ).toBe(false);
     });
 });

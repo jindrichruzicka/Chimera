@@ -491,7 +491,7 @@ describe('ActionPipeline — post-reduce game-result resolution', () => {
 
         expect(next).toBe(resolvedSnapshot);
         expect(broadcast).toHaveBeenCalledOnce();
-        expect(broadcast).toHaveBeenCalledWith(resolvedSnapshot, PID);
+        expect(broadcast).toHaveBeenCalledWith(resolvedSnapshot, PID, { forceFull: true });
     });
 
     it('allows engine:return_to_lobby after a resolved match so the host can abandon to the lobby', () => {
@@ -1096,7 +1096,9 @@ describe('ActionPipeline — Stage 7: PipelineContext broadcast wiring', () => {
 
         expect(broadcastTick).not.toHaveBeenCalled();
         expect(broadcast).toHaveBeenCalledTimes(1);
-        expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ tick: 1 }), PID);
+        expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ tick: 1 }), PID, {
+            forceFull: false,
+        });
     });
 
     it('uses full broadcast for engine:sync_request even when state reference is unchanged', () => {
@@ -1110,7 +1112,23 @@ describe('ActionPipeline — Stage 7: PipelineContext broadcast wiring', () => {
         p.process(snapshot, makeEnvelope(9, 'engine:sync_request', {}));
 
         expect(broadcast).toHaveBeenCalledTimes(1);
-        expect(broadcast).toHaveBeenCalledWith(snapshot, PID);
+        expect(broadcast).toHaveBeenCalledWith(snapshot, PID, { forceFull: true });
+    });
+
+    it('tells the broadcast callback that engine:sync_request forces a FULL send', () => {
+        // The callback cannot infer it: a re-sync after a run of clock-only
+        // beats has a projection that DID change, so "nothing changed" is not
+        // the signal. A viewer that asked to be re-synced is asking for the
+        // whole thing, and only the pipeline knows it asked.
+        const syncRegistry = new ActionRegistry();
+        syncRegistry.registerEngineAction(engineSyncRequestDefinition);
+        const broadcast = vi.fn();
+        const p = new ActionPipeline(syncRegistry, { context: { broadcast } });
+        const snapshot = makeSnapshotWithPlayers(9, [PID]);
+
+        p.process(snapshot, makeEnvelope(9, 'engine:sync_request', {}));
+
+        expect(broadcast).toHaveBeenCalledWith(snapshot, PID, { forceFull: true });
     });
 
     it('calls broadcast once per player when one player is in nextState.players', () => {
@@ -1123,7 +1141,7 @@ describe('ActionPipeline — Stage 7: PipelineContext broadcast wiring', () => {
         p.process(snapshot, action);
 
         expect(broadcast).toHaveBeenCalledTimes(1);
-        expect(broadcast).toHaveBeenCalledWith(expect.any(Object), PID);
+        expect(broadcast).toHaveBeenCalledWith(expect.any(Object), PID, { forceFull: false });
     });
 
     it('calls broadcast once per player when multiple players are in nextState.players', () => {
@@ -1336,7 +1354,9 @@ describe('ActionPipeline — Stage 3: engine:undo interception via UndoManager',
         p.process(snapshot, action);
 
         expect(broadcastSpy).toHaveBeenCalledTimes(1);
-        expect(broadcastSpy).toHaveBeenCalledWith(expect.any(Object), PID);
+        expect(broadcastSpy).toHaveBeenCalledWith(expect.any(Object), PID, {
+            forceFull: false,
+        });
     });
 
     it('does NOT broadcast when reconstructed snapshot is the same reference as input', () => {

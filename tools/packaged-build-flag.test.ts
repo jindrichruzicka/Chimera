@@ -659,8 +659,8 @@ describe('debug-gate shape (what lets the graph leave the bundle)', () => {
     // `electron/main/index.ts` gates the debug bridge on the INLINED expression
     // instead of the imported `IS_DEBUG_MODE`, because esbuild does not
     // propagate a cross-module constant into a consuming module: written as
-    // `if (IS_DEBUG_MODE)` the branch stayed live and the ~30 KB debug graph
-    // shipped in every distributable. Inlined, the define folds it to
+    // `if (IS_DEBUG_MODE)` the branch stayed live and the debug graph shipped
+    // in every distributable. Inlined, the define folds it to
     // `if (false)` and the dynamic-import records are pruned with it.
     //
     // The cost of that inlining is a second copy of the expression, and drift

@@ -65,13 +65,14 @@ describe('LocalWebSocketProvider — hostLobby', () => {
         expect(parts[2]?.length).toBeGreaterThan(0);
     });
 
-    it('provides a HostTransport with the expected methods', async () => {
+    it('provides a HostTransport exposing a sample of its members at runtime', async () => {
         provider = new LocalWebSocketProvider();
         const session = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
         sessions.push(session);
 
         const t = session.transport;
         expect(typeof t.sendSnapshot).toBe('function');
+        expect(typeof t.sendSnapshotDelta).toBe('function');
         expect(typeof t.broadcastLobbyState).toBe('function');
         expect(typeof t.sendSideChannel).toBe('function');
         expect(typeof t.onActionReceived).toBe('function');

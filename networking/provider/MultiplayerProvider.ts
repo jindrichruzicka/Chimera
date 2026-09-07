@@ -31,6 +31,7 @@ import type { ChatScope, ChatRejectReason } from '@chimera-engine/simulation/fou
 // name `PlayerSnapshot` and re-exported so this module's public import path is
 // unchanged for every transport caller.
 import type { WirePlayerSnapshot as PlayerSnapshot } from '@chimera-engine/simulation/foundation/snapshot-contract.js';
+import type { SnapshotDelta } from '@chimera-engine/simulation/foundation/snapshot-delta.js';
 import type {
     LobbyAgentKind,
     LobbyAgentSlot,
@@ -46,6 +47,7 @@ export type { PlayerId };
 export type { GameResult };
 
 export type { PlayerSnapshot };
+export type { SnapshotDelta };
 
 export type { LobbyAgentKind, LobbyAgentSlot, LobbyInfo, LobbyPlayerEntry, LobbyState };
 
@@ -326,6 +328,28 @@ export interface HostedSession {
 export interface HostTransport {
     /** Push a projected PlayerSnapshot to one connected client. */
     sendSnapshot(playerId: PlayerId, snapshot: PlayerSnapshot): void;
+    /**
+     * Push the changed paths between the client's last projection and its new
+     * one, instead of the whole projection.
+     *
+     * The caller owns the decision — it is the only party that knows what this
+     * client last received — and must have sent that baseline through
+     * {@link sendSnapshot} first.
+     *
+     * A provider that cannot apply the delta on the receiving side must DROP the
+     * frame: half a projection is a divergence no later frame corrects, while a
+     * dropped one leaves the viewer merely stale until the next whole snapshot.
+     * Recovery is the caller's — the periodic keyframe reaches every recipient
+     * whatever happened, and a provider with a channel back to the host may also
+     * ask for one.
+     *
+     * Invariants #3/#8: a `PlayerSnapshot` is the only state that crosses this
+     * boundary and `StateProjector.project()` is the gate it crosses through.
+     * The delta is computed from two projections, per viewer, downstream of that
+     * gate — never from a `GameSnapshot` — so it can carry no field the
+     * corresponding {@link sendSnapshot} could not have carried.
+     */
+    sendSnapshotDelta(playerId: PlayerId, delta: SnapshotDelta): void;
     /** Push an authoritative tick-only clock update to one connected client. */
     sendTick(playerId: PlayerId, tick: number): void;
     /** Push updated lobby state to all connected clients. */
@@ -460,7 +484,20 @@ export interface ClientTransport {
      * ActionHistory, never replayed.
      */
     sendSideChannel(msg: SideChannelMessage): void;
-    /** Subscribe to projected PlayerSnapshot pushes from the host. */
+    /**
+     * Subscribe to projected PlayerSnapshot pushes from the host.
+     *
+     * `snapshot` is always a WHOLE projection, whether the host sent one or sent
+     * the changed paths for the transport to rebuild.
+     *
+     * `checksum` is the CRC32 the host stamped on the frame that delivered it,
+     * over that frame's own body: the snapshot for a whole one, the delta for an
+     * incremental one. It is NOT recomputed here, and deliberately so — a
+     * rebuilt snapshot's keys are in the WIRE SCHEMA's order, not the host
+     * projector's, so its CRC would differ from the host's for two objects that
+     * are deeply equal. Comparing a host checksum with a client one is therefore
+     * only meaningful across a whole-snapshot frame.
+     */
     onSnapshotReceived(cb: (snapshot: PlayerSnapshot, checksum: number) => void): Unsubscribe;
     /** Subscribe to authoritative tick-only clock updates from the host. */
     onTickReceived(cb: (tick: number) => void): Unsubscribe;
