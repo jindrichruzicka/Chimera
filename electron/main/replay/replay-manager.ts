@@ -85,6 +85,19 @@ export class ReplayManager {
     }
 
     /**
+     * Actions held by the in-progress recording, or `null` when none is
+     * running.
+     *
+     * The number a growth metric wants: this recorder retains EVERY action,
+     * because a deterministic replay cannot reproduce a match without them, so
+     * it is bounded by match length alone. `null` rather than `0` when nothing
+     * is recording — a metric that does not exist is not a metric reading zero.
+     */
+    recordedActionCount(): number | null {
+        return this.recording?.actions.length ?? null;
+    }
+
+    /**
      * Begin recording a new match. Must be called before `recordAction`.
      * @throws {Error} if a recording is already in progress.
      */

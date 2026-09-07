@@ -548,3 +548,39 @@ describe('ReplayManager — logging', () => {
         expect(debugFromManager.map((e) => e.message)).toContain('startRecording');
     });
 });
+
+// ── recordedActionCount (live retention metric) ─────────────────────────────
+
+describe('ReplayManager — recordedActionCount', () => {
+    it('is null when no recording is in progress', () => {
+        // A missing metric and a zero metric are different states: no recording
+        // means the number does not exist, not that nothing has been recorded.
+        const { manager } = makeManager();
+        expect(manager.recordedActionCount()).toBeNull();
+    });
+
+    it('is 0 for a started recording that has taken no action yet', () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        expect(manager.recordedActionCount()).toBe(0);
+    });
+
+    it('counts every appended action, uncapped', () => {
+        // The count this reports is the REAL recorder's, which retains every
+        // action because a replay cannot reproduce a match without them.
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        for (let i = 0; i < 7_500; i += 1) manager.recordAction(recordAction(i));
+
+        expect(manager.recordedActionCount()).toBe(7_500);
+    });
+
+    it('is null again once the recording is aborted', () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+        manager.abortRecording();
+
+        expect(manager.recordedActionCount()).toBeNull();
+    });
+});

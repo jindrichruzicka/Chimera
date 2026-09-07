@@ -43,3 +43,5 @@ The §13.1 and §13.4 budgets live in [`simulation/foundation/perf-budget.ts`](.
 - **Renderer heap** — [`apps/tactics/e2e/tests/perf-renderer-heap.spec.ts`](../../apps/tactics/e2e/tests/perf-renderer-heap.spec.ts) (live match) and the replay-playback assertion in [`apps/tactics/e2e/tests/replay.spec.ts`](../../apps/tactics/e2e/tests/replay.spec.ts), both reading `performance.memory.usedJSHeapSize` the same way `perfStore.readHeapMb()` does.
 
 Gating policy: assertions are **strict locally / under `CHIMERA_PERF_STRICT=1`**; on CI each gate is a soft assertion (`expect.soft`), so a breach still fails the case, but only after the case has run to the end and logged its numbers. The measured numbers are always logged so the baseline is visible on every run.
+
+What actually executes where: the bench files live under `apps/*/__tests__/`, so `pnpm -r test` collects them and CI runs the **timing** gates above. The main-process **heap** case runs there too and logs its numbers, but its assertion does not: the `gate()` call sits behind an `if (gc !== undefined)` guard, and `globalThis.gc` exists only under `--expose-gc`, which `npm run test:perf` passes and CI does not.

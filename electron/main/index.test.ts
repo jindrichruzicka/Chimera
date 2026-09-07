@@ -700,8 +700,13 @@ const {
     SYSTEM_DEVICE_INFO_CHANNEL,
     SYSTEM_DEVICE_INFO_CHANGE_CHANNEL,
 } = await import('../preload/apis/system-api.js');
-const { GAME_GET_CURRENT_SNAPSHOT_CHANNEL, GAME_REVEAL_CHANNEL, GAME_SNAPSHOT_CHANNEL } =
-    await import('../preload/apis/game-api.js');
+const {
+    GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
+    GAME_HOST_METRICS_CHANNEL,
+    GAME_REVEAL_CHANNEL,
+    GAME_SNAPSHOT_CHANNEL,
+} = await import('../preload/apis/game-api.js');
+const { HOST_METRICS_PUSH_INTERVAL_MS } = await import('./runtime/host-metrics-push.js');
 const { SAVES_LOAD_CHANNEL, SAVES_RESTORE_STATUS_CHANNEL, SAVES_CANCEL_RESTORE_CHANNEL } =
     await import('../preload/apis/saves-api.js');
 const { LOBBY_CLOSE_SESSION_CHANNEL, LOBBY_QUICK_START_CHANNEL } =
@@ -8164,5 +8169,164 @@ describe('main() — session restore wiring', () => {
             expect(restoreStatusSends(deadContentsWin)).toEqual([]);
             expect(restoreStatusSends(liveWin)).toHaveLength(1);
         });
+    });
+});
+
+// ─── host-metrics push wiring (§4.16) ────────────────────────────────────────
+
+describe('main — host metrics push', () => {
+    /** The window `main()` opened for itself — the one the push targets. */
+    function hostWindow(): FakeBrowserWindow {
+        const win = browserWindowInstances.at(-1);
+        if (win === undefined) throw new Error('main() opened no window');
+        return win;
+    }
+
+    /**
+     * Grab the interval `startHostMetricsPush` arms inside `main()`. Returns
+     * the handler so a test can fire one push, and the period so the rate is
+     * pinned here too. Only intervals at the push's own period are kept; every
+     * `setInterval` call during `main()` is stubbed out either way, so none of
+     * them keeps running past the test.
+     */
+    function captureMetricsInterval(): {
+        readonly fire: () => void;
+        readonly periods: number[];
+    } {
+        const periods: number[] = [];
+        const handlers: (() => void)[] = [];
+        const spy = vi.spyOn(globalThis, 'setInterval');
+        spy.mockImplementation((handler: () => void, ms?: number) => {
+            if (ms === HOST_METRICS_PUSH_INTERVAL_MS) {
+                periods.push(ms);
+                handlers.push(handler);
+            }
+            return 0 as unknown as ReturnType<typeof globalThis.setInterval>;
+        });
+        return {
+            fire: () => {
+                for (const handler of handlers) handler();
+            },
+            periods,
+        };
+    }
+
+    it('pushes the replay manager’s own count on the host-metrics channel', async () => {
+        // The composition root is where the two metrics are SOURCED. A wiring
+        // that answered `null` regardless would leave the row at "—" forever
+        // with every module-level test still green, so the distinctive count
+        // has to arrive through the real `main()` and land on the real channel.
+        browserWindowInstances.length = 0;
+        const recordedActionCount = vi
+            .spyOn(ReplayManager.prototype, 'recordedActionCount')
+            .mockReturnValue(4_321);
+        const interval = captureMetricsInterval();
+        try {
+            await main(makeTestContributions());
+            const win = hostWindow();
+            interval.fire();
+
+            expect(interval.periods).toEqual([HOST_METRICS_PUSH_INTERVAL_MS]);
+            const sends = win.webContents.send.mock.calls.filter(
+                ([channel]) => channel === GAME_HOST_METRICS_CHANNEL,
+            );
+            expect(sends).toHaveLength(1);
+            expect(sends[0]?.[1]).toEqual({
+                hostHeapMb: expect.any(Number),
+                recordedActionCount: 4_321,
+            });
+        } finally {
+            recordedActionCount.mockRestore();
+            vi.restoreAllMocks();
+        }
+    });
+
+    it('pushes heapUsed, not another memoryUsage field', async () => {
+        // `expect.any(Number)` on the heap row is satisfied by a constant, by
+        // heapTotal, and by rss alike — so the field the docs name has to be
+        // separated from its neighbours by giving each a different value.
+        browserWindowInstances.length = 0;
+        const interval = captureMetricsInterval();
+        const memoryUsage = vi.spyOn(process, 'memoryUsage').mockReturnValue({
+            heapUsed: 12 * 1024 * 1024,
+            heapTotal: 99 * 1024 * 1024,
+            rss: 77 * 1024 * 1024,
+            external: 5 * 1024 * 1024,
+            arrayBuffers: 1 * 1024 * 1024,
+        });
+        try {
+            await main(makeTestContributions());
+            const win = hostWindow();
+            interval.fire();
+
+            const sends = win.webContents.send.mock.calls.filter(
+                ([channel]) => channel === GAME_HOST_METRICS_CHANNEL,
+            );
+            expect(sends[0]?.[1]).toMatchObject({ hostHeapMb: 12 });
+        } finally {
+            memoryUsage.mockRestore();
+            vi.restoreAllMocks();
+        }
+    });
+
+    it('pushes a null count when no recording is in progress', async () => {
+        // Unavailable is a state the host reports, not one the renderer infers
+        // from a missing push.
+        browserWindowInstances.length = 0;
+        const interval = captureMetricsInterval();
+        try {
+            await main(makeTestContributions());
+            const win = hostWindow();
+            interval.fire();
+
+            const sends = win.webContents.send.mock.calls.filter(
+                ([channel]) => channel === GAME_HOST_METRICS_CHANNEL,
+            );
+            expect(sends[0]?.[1]).toMatchObject({ recordedActionCount: null });
+        } finally {
+            vi.restoreAllMocks();
+        }
+    });
+
+    it('sends nothing once the webContents is destroyed, with the window still live', async () => {
+        // The other half of the guard. `webContents.send` on a disposed
+        // webContents throws, and this fires from a timer with no caller to
+        // catch it — so a live window is not on its own enough to send.
+        browserWindowInstances.length = 0;
+        const interval = captureMetricsInterval();
+        try {
+            await main(makeTestContributions());
+            const win = hostWindow();
+            win.isDestroyed.mockReturnValue(false);
+            win.webContents.isDestroyed.mockReturnValue(true);
+            interval.fire();
+
+            expect(
+                win.webContents.send.mock.calls.filter(
+                    ([channel]) => channel === GAME_HOST_METRICS_CHANNEL,
+                ),
+            ).toHaveLength(0);
+        } finally {
+            vi.restoreAllMocks();
+        }
+    });
+
+    it('sends nothing once the window is destroyed', async () => {
+        browserWindowInstances.length = 0;
+        const interval = captureMetricsInterval();
+        try {
+            await main(makeTestContributions());
+            const win = hostWindow();
+            win.isDestroyed.mockReturnValue(true);
+            interval.fire();
+
+            expect(
+                win.webContents.send.mock.calls.filter(
+                    ([channel]) => channel === GAME_HOST_METRICS_CHANNEL,
+                ),
+            ).toHaveLength(0);
+        } finally {
+            vi.restoreAllMocks();
+        }
     });
 });

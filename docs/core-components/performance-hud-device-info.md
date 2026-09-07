@@ -1,6 +1,6 @@
 ---
 title: 'Performance HUD & Device Info'
-description: 'PerfHud 9-metric overlay (FPS/frame-time/sim-tick/ping/heap/draw-calls/triangles), PerfProbe R3F collector, perfStore, DeviceInfo interface, SizeClass breakpoints, and useDeviceInfo/usePrimaryInput/useWindowSizeClass hooks.'
+description: 'PerfHud metrics overlay, PerfProbe R3F collector, perfStore, DeviceInfo interface, SizeClass breakpoints, and useDeviceInfo/usePrimaryInput/useWindowSizeClass hooks.'
 tags: [performance, hud, device-info, monitoring, renderer]
 ---
 
@@ -28,10 +28,16 @@ A lightweight floating overlay showing key performance numbers at a glance. Togg
 | Action round-trip  | `sendAction()` stamp → matching `onSnapshot()` tick advance                 | Per own-action |
 | Network ping (ms)  | `gameStore.latencyMs`, via `perfStoreBootstrap` — no producer today, see §6 | On change      |
 | Renderer heap (MB) | `performance.memory.usedJSHeapSize` (Chromium)                              | Every 1 s      |
+| Host heap (MB)     | main's `process.memoryUsage().heapUsed`, over `chimera:game:host-metrics`   | Every 1 s      |
+| Recorded actions   | `ReplayManager.recordedActionCount()`, over the same push                   | Every 1 s      |
 | R3F draw calls     | `gl.info.render.calls`                                                      | 500 ms         |
 | R3F triangles      | `gl.info.render.triangles`                                                  | 500 ms         |
 
-Numbers display with colour markers — green / amber / red — against configurable thresholds (e.g. FPS < 30 = red).
+`Host heap` and `Recorded actions` are the HOST's, and are the reason the renderer's own heap reading is not enough: a main-process buffer can grow to any size while `heapMb` sits still. They arrive on main's own timer (`startHostMetricsPush`, `HOST_METRICS_PUSH_INTERVAL_MS`) rather than per beat, and both are `number | null`, where `null` means UNAVAILABLE (no push yet, or no recording running) and renders as `—`. A recording holding no action reads `0`. The timer runs for the process lifetime rather than while the HUD is open: the overlay is off by default, so gating on its visibility would mean a metric that only exists once someone looks for it.
+
+`recordedActionCount` is the RECORDER's count. The similar-looking `PerfStats.totalActionCount` is the debug bridge's own array length, capped by `DEBUG_ACTION_LOG_CAPACITY` and constant once saturated, and the whole debug panel exists only under `CHIMERA_DEBUG=1` outside production — so it is not a growth metric and not present in a shipped game.
+
+The FPS row carries a `data-status` marker — `good` / `warn` / `bad` against the cut-offs in `fpsStatus`.
 
 **Which frames FPS and frame time count.** The frames **its canvas advanced** — a property of the canvas, not of the setting. `useFrame` subscribers run from R3F's `update()`, so the reported rate follows whatever drives that canvas.
 
@@ -58,6 +64,8 @@ interface PerfSample {
     actionRoundTripMs: number | null;
     pingMs: number | null;
     heapMb: number | null;
+    hostHeapMb: number | null;
+    recordedActionCount: number | null;
     drawCalls: number;
     triangles: number;
 }

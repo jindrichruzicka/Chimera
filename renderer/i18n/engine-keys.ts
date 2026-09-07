@@ -347,6 +347,8 @@ export const PERF_HUD_KEYS = {
     actionRtt: translationKey('engine.perfHud.actionRtt'),
     ping: translationKey('engine.perfHud.ping'),
     heap: translationKey('engine.perfHud.heap'),
+    hostHeap: translationKey('engine.perfHud.hostHeap'),
+    recordedActions: translationKey('engine.perfHud.recordedActions'),
     drawCalls: translationKey('engine.perfHud.drawCalls'),
     triangles: translationKey('engine.perfHud.triangles'),
 } as const;

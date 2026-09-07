@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
     GAME_ACTION_REJECTED_CHANNEL,
+    GAME_HOST_METRICS_CHANNEL,
     GAME_REVEAL_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
@@ -15,6 +16,7 @@ import type {
     ActionRejection,
     CommitmentReveal,
     EngineAction,
+    HostPerfMetrics,
     PlayerSnapshot,
 } from '../api-types.js';
 import { playerId, gamePhase } from '../api-types.js';
@@ -355,6 +357,75 @@ describe('createGameApi', () => {
             expect(stub.listeners.get(GAME_REVEAL_CHANNEL)?.size).toBe(1);
             unsubscribe();
             expect(stub.listeners.get(GAME_REVEAL_CHANNEL)?.size).toBe(0);
+        });
+    });
+
+    describe('onHostMetrics()', () => {
+        it('registers a listener on chimera:game:host-metrics and forwards the validated payload', () => {
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+            const callback = vi.fn<(metrics: HostPerfMetrics) => void>();
+
+            api.onHostMetrics(callback);
+
+            const registered = stub.listeners.get(GAME_HOST_METRICS_CHANNEL);
+            expect(registered?.size).toBe(1);
+
+            const metrics: HostPerfMetrics = { hostHeapMb: 61.5, recordedActionCount: 12_345 };
+            const listener = [...(registered ?? [])][0];
+            listener?.({ sender: 'fake-webcontents' }, metrics);
+
+            expect(callback).toHaveBeenCalledOnce();
+            expect(callback).toHaveBeenCalledWith(metrics);
+        });
+
+        it('forwards an explicit null on either field — unavailable is a legal reading', () => {
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+            const callback = vi.fn<(metrics: HostPerfMetrics) => void>();
+
+            api.onHostMetrics(callback);
+            const listener = [...(stub.listeners.get(GAME_HOST_METRICS_CHANNEL) ?? [])][0];
+            listener?.({}, { hostHeapMb: null, recordedActionCount: null });
+
+            expect(callback).toHaveBeenCalledWith({
+                hostHeapMb: null,
+                recordedActionCount: null,
+            });
+        });
+
+        it('throws PreloadIpcValidationError on a malformed host-metrics payload', () => {
+            // An ABSENT key is refused rather than treated as null: the HUD
+            // renders null as unavailable, and a key main forgot to send is a
+            // drift the boundary must name, not a third display state reached
+            // through `undefined`.
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+            const callback = vi.fn<(metrics: HostPerfMetrics) => void>();
+
+            api.onHostMetrics(callback);
+            const listener = [...(stub.listeners.get(GAME_HOST_METRICS_CHANNEL) ?? [])][0];
+
+            expect(() => listener?.({}, { hostHeapMb: 1 })).toThrow(PreloadIpcValidationError);
+            expect(() => listener?.({}, { recordedActionCount: 1 })).toThrow(
+                PreloadIpcValidationError,
+            );
+            expect(() => listener?.({}, { hostHeapMb: 1, recordedActionCount: 1.5 })).toThrow(
+                PreloadIpcValidationError,
+            );
+            expect(() => listener?.({}, null)).toThrow(PreloadIpcValidationError);
+            expect(callback).not.toHaveBeenCalled();
+        });
+
+        it('returns an Unsubscribe that removes only the wrapped listener', () => {
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+            const callback = vi.fn<(metrics: HostPerfMetrics) => void>();
+
+            const unsubscribe = api.onHostMetrics(callback);
+            expect(stub.listeners.get(GAME_HOST_METRICS_CHANNEL)?.size).toBe(1);
+            unsubscribe();
+            expect(stub.listeners.get(GAME_HOST_METRICS_CHANNEL)?.size).toBe(0);
         });
     });
 

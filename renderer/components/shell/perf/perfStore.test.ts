@@ -411,7 +411,7 @@ describe('perfStore — heapMb sampling', () => {
 // ── PerfSample type shape ─────────────────────────────────────────────────────
 
 describe('PerfSample type shape', () => {
-    it('sample has all ten required fields', () => {
+    it('sample declares every field the HUD reads', () => {
         const store = createPerfStore();
         const sample: PerfSample = store.getState().sample;
         expect('fps' in sample).toBe(true);
@@ -422,6 +422,8 @@ describe('PerfSample type shape', () => {
         expect('actionRoundTripMs' in sample).toBe(true);
         expect('pingMs' in sample).toBe(true);
         expect('heapMb' in sample).toBe(true);
+        expect('hostHeapMb' in sample).toBe(true);
+        expect('recordedActionCount' in sample).toBe(true);
         expect('drawCalls' in sample).toBe(true);
         expect('triangles' in sample).toBe(true);
     });
@@ -446,5 +448,68 @@ describe('usePerfStore singleton', () => {
         const state = usePerfStore.getState();
         expect(state.sample).toBeDefined();
         expect(state.visible).toBe(false);
+    });
+});
+
+// ── host metrics ──────────────────────────────────────────────────────────────
+
+describe('perfStore — host metrics', () => {
+    it('initialises both host fields as null, not 0', () => {
+        // A metric that has never arrived is UNAVAILABLE. Zero is a real
+        // reading — an empty recording, an unmeasurably small heap — and the
+        // HUD renders the two differently.
+        const store = createPerfStore();
+
+        expect(store.getState().sample.hostHeapMb).toBeNull();
+        expect(store.getState().sample.recordedActionCount).toBeNull();
+    });
+
+    it('writes both fields from one push', () => {
+        const store = createPerfStore();
+
+        store.getState().setHostMetrics({ hostHeapMb: 61.5, recordedActionCount: 12_345 });
+
+        expect(store.getState().sample.hostHeapMb).toBe(61.5);
+        expect(store.getState().sample.recordedActionCount).toBe(12_345);
+    });
+
+    it('carries a count far past any capped diagnostic array', () => {
+        // `PerfStats.totalActionCount` reports the debug bridge's own array,
+        // which saturates at its capacity and is thereafter constant. This
+        // field is the recorder's, so growth stays visible past that ceiling.
+        const store = createPerfStore();
+
+        store.getState().setHostMetrics({ hostHeapMb: 0, recordedActionCount: 50_000 });
+
+        expect(store.getState().sample.recordedActionCount).toBe(50_000);
+    });
+
+    it('passes null back through rather than latching the last reading', () => {
+        // A recording that ends must return the count to unavailable — leaving
+        // the last number on screen would report a recording that no longer
+        // exists.
+        const store = createPerfStore();
+        store.getState().setHostMetrics({ hostHeapMb: 40, recordedActionCount: 900 });
+
+        store.getState().setHostMetrics({ hostHeapMb: 41, recordedActionCount: null });
+
+        expect(store.getState().sample.recordedActionCount).toBeNull();
+        expect(store.getState().sample.hostHeapMb).toBe(41);
+
+        // The heap field carries the same contract — `number | null` on the
+        // wire — so it is pinned here too rather than left to the one producer
+        // that happens never to send null today.
+        store.getState().setHostMetrics({ hostHeapMb: null, recordedActionCount: 3 });
+
+        expect(store.getState().sample.hostHeapMb).toBeNull();
+        expect(store.getState().sample.recordedActionCount).toBe(3);
+    });
+
+    it('leaves the renderer heap alone — the two are different processes', () => {
+        const store = createPerfStore();
+        store.getState().setHostMetrics({ hostHeapMb: 77, recordedActionCount: 1 });
+
+        expect(store.getState().sample.heapMb).toBeNull();
+        expect(store.getState().sample.hostHeapMb).toBe(77);
     });
 });

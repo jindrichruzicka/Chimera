@@ -33,6 +33,7 @@ import type {
     ChatMessage,
     CommitmentReveal,
     DeviceInfo,
+    HostPerfMetrics,
     LocalProfileSlot,
     LobbyInfo,
     LobbyState,
@@ -286,6 +287,19 @@ export const ActionRejectionSchema: z.ZodType<ActionRejection> = z.object({
     tick: z.number().int(),
     actionType: z.string().optional(),
 }) as z.ZodType<ActionRejection>;
+
+/**
+ * Schema for {@link HostPerfMetrics} pushed on `chimera:game:host-metrics`.
+ *
+ * `null` is a first-class value on both fields, not a stand-in for a missing
+ * one: it means UNAVAILABLE, and the HUD renders it differently from zero. So
+ * `.nullable()` rather than `.optional()` — an absent key would be a malformed
+ * push, and this refuses it.
+ */
+export const HostPerfMetricsSchema = z.object({
+    hostHeapMb: z.number().nullable(),
+    recordedActionCount: z.number().int().nullable(),
+}) satisfies z.ZodType<HostPerfMetrics>;
 
 /** Schema for {@link CommitmentReveal} pushed on `chimera:game:reveal`. */
 export const CommitmentRevealSchema = z.object({

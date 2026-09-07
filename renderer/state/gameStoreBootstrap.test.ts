@@ -73,6 +73,9 @@ function makeApi(
         sendAction: sendActionSpy,
         onSnapshot: onSnapshotSpy,
         onTick: onTickSpy,
+        // Not this bootstrap's channel — the perf HUD subscribes to it in
+        // `perfStoreBootstrap`. Present so the double stays a whole `GameAPI`.
+        onHostMetrics: vi.fn(() => vi.fn()),
         onActionRejected: onActionRejectedSpy,
         onReveal: onRevealSpy,
         getCurrentSnapshot: vi.fn<() => Promise<PlayerSnapshot | null>>(() =>
