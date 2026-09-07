@@ -41,6 +41,42 @@ type GameStore = SnapshotStore & MatchStatusStore & RevealStore;
 
 ---
 
+## Snapshot Deltas at the Bridge
+
+The store still only ever receives a WHOLE `PlayerSnapshot`. What changed with
+§4.3's `SNAPSHOT_DELTA` is what crosses IPC to reach it: on a beat the host
+decided is a delta, main sends the changed paths and `ipcClient` rebuilds the
+snapshot from the one it holds.
+
+What makes that safe is pinned in `ipcClient.test.ts` and, for the bootstrap
+catch-up, `gameStoreBootstrap.test.ts`:
+
+- **The bridge holds its own snapshot.** The store's is the last one PAINTED;
+  the bridge's is the last one RECEIVED, which is what the host measures the
+  next delta against. It is dropped on unsubscribe, so a client re-bootstrapped
+  onto the next match differences nothing from the last one's projection.
+- **Deltas are applied on arrival; only the store WRITE is paced.** Newest-wins
+  is right for a whole snapshot, which is measured against nothing, and wrong
+  for a delta, which is measured against what the one before it produced. So a
+  frame carries one write with everything that accumulated in it, and no delta
+  is ever dropped. Applying is cheap where writing is not: it copies the
+  containers along a changed path and shares the rest, while a store write
+  drives React.
+- **An inapplicable delta is refused, never partly applied.** `ipcClient` asks
+  the host for a whole snapshot with `engine:sync_request`, once per broken
+  chain — that request broadcasts to every viewer rather than only to the
+  asker. Before any snapshot has arrived there is no `viewerId` to name on the
+  action, so the delta is dropped in silence and the host's periodic keyframe is
+  what recovers it.
+- **A snapshot obtained any other way is ADOPTED, not written around the
+  bridge.** `bootstrapGameStore`'s catch-up reads the host's current snapshot
+  over a round trip, and that snapshot is exactly the one the host will measure
+  its next delta against — so it goes through `ipcClient.adopt`. Writing the
+  store directly leaves the bridge with no baseline and every delta after it
+  refused, which on a turn-based game is every beat until the periodic keyframe.
+
+---
+
 ## Store Catalogue
 
 The renderer composes several small Zustand stores rather than one god-store (ISP).

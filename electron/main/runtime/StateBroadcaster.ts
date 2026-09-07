@@ -22,7 +22,10 @@
 import type { HostTransport, PlayerId, Unsubscribe } from '@chimera-engine/networking';
 import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
 import { diffSnapshots } from '@chimera-engine/simulation/foundation/snapshot-diff.js';
-import { toSnapshotDelta } from '@chimera-engine/simulation/foundation/snapshot-delta.js';
+import {
+    toSnapshotDelta,
+    type SnapshotDelta,
+} from '@chimera-engine/simulation/foundation/snapshot-delta.js';
 import type {
     BaseGameSnapshot,
     BroadcastOptions,
@@ -36,7 +39,18 @@ import type { E2eHooks } from './e2e-hooks.js';
 
 export interface RendererSnapshotRecipient {
     readonly viewerId: PlayerId;
-    readonly sendSnapshot: (snapshot: PlayerSnapshot) => void;
+    /**
+     * The wave's whole projection, and the changed paths that reach it from the
+     * last whole one this recipient was given — `null` when the broadcaster
+     * decided this frame is a keyframe.
+     *
+     * BOTH, because the two have different consumers. Main keeps the whole
+     * projection for what needs it in-process — `getCurrentSnapshot`, the
+     * perspective recorder — and forwards the delta over IPC when there is one,
+     * which is where the saving is: a structured clone of a whole projection per
+     * beat is what the renderer leg costs, and a delta is what it costs instead.
+     */
+    readonly sendSnapshot: (snapshot: PlayerSnapshot, delta: SnapshotDelta | null) => void;
     readonly sendTick?: (tick: number) => void;
 }
 
@@ -210,7 +224,9 @@ export class StateBroadcaster {
         // the whole thing by definition — a viewer whose baseline the host
         // cannot vouch for, or one whose projection was just replaced wholesale.
         this.sendKeyframe(viewerId, playerSnapshot);
-        this.sendToRendererRecipients(viewerId, playerSnapshot);
+        // A point-send is a keyframe for the renderer leg too: whatever made the
+        // caller ask for a whole projection applies on both sides of it.
+        this.sendToRendererRecipients(viewerId, playerSnapshot, null);
         this.notifyE2eHooks(viewerId, playerSnapshot);
     }
 
@@ -233,8 +249,8 @@ export class StateBroadcaster {
         if (this.disposed) return;
         const playerSnapshot = this.projector.project(snapshot, viewerId);
         this.log.trace('broadcast', { viewerId, tick: playerSnapshot.tick });
-        this.sendProjection(viewerId, playerSnapshot, options.forceFull);
-        this.sendToRendererRecipients(viewerId, playerSnapshot);
+        const delta = this.sendProjection(viewerId, playerSnapshot, options.forceFull);
+        this.sendToRendererRecipients(viewerId, playerSnapshot, delta);
         this.notifyE2eHooks(viewerId, playerSnapshot);
         this.fanOutToSpectators(snapshot, options.forceFull);
     }
@@ -332,7 +348,7 @@ export class StateBroadcaster {
         recipientId: PlayerId,
         projection: PlayerSnapshot,
         forceFull: boolean,
-    ): void {
+    ): SnapshotDelta | null {
         const state = this.deltaState.get(recipientId);
         if (
             forceFull ||
@@ -340,13 +356,13 @@ export class StateBroadcaster {
             state.beatsSinceKeyframe + 1 >= this.keyframeIntervalBeats
         ) {
             this.sendKeyframe(recipientId, projection);
-            return;
+            return null;
         }
 
         const delta = toSnapshotDelta(diffSnapshots(state.lastProjection, projection));
         if (delta.entries.length === 0) {
             this.sendKeyframe(recipientId, projection);
-            return;
+            return null;
         }
 
         const deltaBytes = JSON.stringify(delta).length;
@@ -358,13 +374,14 @@ export class StateBroadcaster {
             });
             this.metrics.sizeFallbacks += 1;
             this.sendKeyframe(recipientId, projection);
-            return;
+            return null;
         }
 
         this.metrics.deltas += 1;
         state.lastProjection = projection;
         state.beatsSinceKeyframe += 1;
         this.transport.sendSnapshotDelta(recipientId, delta);
+        return delta;
     }
 
     /** Send the whole projection and make it this recipient's new baseline. */
@@ -386,14 +403,18 @@ export class StateBroadcaster {
         this.options.e2eHooks.onTick(snapshot.tick, checksum, snapshot);
     }
 
-    private sendToRendererRecipients(viewerId: PlayerId, snapshot: PlayerSnapshot): void {
+    private sendToRendererRecipients(
+        viewerId: PlayerId,
+        snapshot: PlayerSnapshot,
+        delta: SnapshotDelta | null,
+    ): void {
         const recipients = this.rendererRecipients.get(viewerId);
         if (recipients === undefined) {
             return;
         }
 
         for (const recipient of recipients) {
-            recipient.sendSnapshot(snapshot);
+            recipient.sendSnapshot(snapshot, delta);
         }
     }
 

@@ -51,3 +51,16 @@ What a realtime host pays per eventful beat is `O(entities × viewers)`: `StateP
 | 2000 × 8                  | 12.508 ms   | 13.072 ms | 226,667 B       |
 
 Measured on the development machine (Node v25.9.0; `CHIMERA_PERF_STRICT=1 vitest run` on that file; median and p95 of 200 waves after a 100-wave warm-up). The 500 × 4 grid is gated against `TICK_BUDGET_MS` (§13.1); the 2000 × 8 grid is logged only and compared against nothing.
+
+The same file measures the DELTA arm beside it — project per viewer, diff against what that viewer was last sent, then serialise and `crc32` the delta instead of the projection — at both ends of the axis it lives on, how much of the arena moved:
+
+| Grid     | Entities moved | Body per viewer    | Wave p95 |
+| -------- | -------------- | ------------------ | -------- |
+| 500 × 4  | 25             | 2,988 B (5.3%)     | 0.89 ms  |
+| 500 × 4  | 496            | 58,849 B (104.7%)  | 2.33 ms  |
+| 2000 × 8 | 100            | 11,753 B (5.2%)    | 7.07 ms  |
+| 2000 × 8 | 1996           | 239,232 B (105.5%) | 18.93 ms |
+
+The moved counts are what each run measured: `measureDeltaWave` counts the entities that differ. The byte percentages are of the whole-snapshot row at the same grid, and reproduce exactly. The p95 column is not given as a percentage — the bench measures its own baseline in the same run, and the ratio moves with the machine.
+
+Read the two rows per grid as the two ends they are: at a realtime beat's motion the payload is about a twentieth, and when nearly everything moves the delta is LARGER than the snapshot it would replace — which is why `StateBroadcaster` measures each delta against the last keyframe and sends the snapshot when the delta does not beat it. Neither delta row is gated: they are the recorded measurement, and a ratio asserted here would gate the runner rather than the code.

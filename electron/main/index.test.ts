@@ -294,7 +294,7 @@ vi.mock('../../networking/provider/local/LocalWebSocketProvider.js', () => ({
 const { mockStateBroadcasterCtor, mockStateBroadcasterInstance } = vi.hoisted(() => {
     interface MockRendererRecipient {
         readonly viewerId: string;
-        readonly sendSnapshot: (snapshot: unknown) => void;
+        readonly sendSnapshot: (snapshot: unknown, delta: unknown) => void;
         readonly sendTick?: (tick: number) => void;
     }
     const instance = {
@@ -705,6 +705,7 @@ const {
     GAME_HOST_METRICS_CHANNEL,
     GAME_REVEAL_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
+    GAME_SNAPSHOT_DELTA_CHANNEL,
 } = await import('../preload/apis/game-api.js');
 const { HOST_METRICS_PUSH_INTERVAL_MS } = await import('./runtime/host-metrics-push.js');
 const { SAVES_LOAD_CHANNEL, SAVES_RESTORE_STATUS_CHANNEL, SAVES_CANCEL_RESTORE_CHANNEL } =
@@ -2950,7 +2951,7 @@ describe('main', () => {
         expect(recipient?.viewerId).toBe(hostId);
 
         const projectedSnapshot = { tick: 7, viewerId: hostId };
-        recipient?.sendSnapshot(projectedSnapshot);
+        recipient?.sendSnapshot(projectedSnapshot, null);
 
         expect(mainWindow.webContents.send).toHaveBeenCalledWith(
             GAME_SNAPSHOT_CHANNEL,
@@ -3009,7 +3010,7 @@ describe('main', () => {
 
         const recipient = mockStateBroadcasterInstance.registerRendererRecipient.mock.calls[0]?.[0];
         const projectedSnapshot = { tick: 42, viewerId: hostId };
-        recipient?.sendSnapshot(projectedSnapshot);
+        recipient?.sendSnapshot(projectedSnapshot, null);
 
         // The main window receives the snapshot
         expect(mainWindow.webContents.send).toHaveBeenCalledWith(
@@ -3021,6 +3022,93 @@ describe('main', () => {
             GAME_SNAPSHOT_CHANNEL,
             expect.anything(),
         );
+    });
+
+    it('forwards the DELTA over IPC when the broadcaster produced one, and not the projection', async () => {
+        // Where the renderer leg's saving is: a structured clone of a whole
+        // projection per beat is what this channel cost, and the changed paths
+        // are what it costs instead. Main still keeps the whole projection —
+        // `getCurrentSnapshot` answers with it — which the case below pins.
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterInstance.registerRendererRecipient.mockClear();
+        browserWindowInstances.length = 0;
+        await main(makeTestContributions());
+        const mainWindow = browserWindowInstances[0]!;
+
+        const onSessionHosted = (
+            mockLobbyManagerCtor.mock.calls[0]?.[2] as
+                | { onSessionHosted?: (transport: unknown, metadata: unknown) => void }
+                | undefined
+        )?.onSessionHosted;
+        const hostId = playerId('host-delta');
+        onSessionHosted?.(
+            {
+                onPlayerJoined: vi.fn(() => () => {}),
+                onPlayerLeft: vi.fn(() => () => {}),
+                onActionReceived: vi.fn(() => () => {}),
+                setJoinClassifier: vi.fn(),
+                onSpectateTargetUpdate: vi.fn(() => () => {}),
+            },
+            { hostId, maxPlayers: 1 },
+        );
+
+        const recipient = mockStateBroadcasterInstance.registerRendererRecipient.mock.calls[0]?.[0];
+        const projectedSnapshot = { tick: 43, viewerId: hostId };
+        const delta = {
+            fromTick: 42,
+            toTick: 43,
+            entries: [{ path: 'tick', kind: 'changed', after: 43 }],
+        };
+        recipient?.sendSnapshot(projectedSnapshot, delta);
+
+        expect(mainWindow.webContents.send).toHaveBeenCalledWith(
+            GAME_SNAPSHOT_DELTA_CHANNEL,
+            delta,
+        );
+        expect(mainWindow.webContents.send).not.toHaveBeenCalledWith(
+            GAME_SNAPSHOT_CHANNEL,
+            projectedSnapshot,
+        );
+    });
+
+    it('answers getCurrentSnapshot with the whole projection after a delta beat', async () => {
+        // The delta is what CROSSES; the projection is what main keeps. A
+        // renderer that reloads mid-match catches up through this channel, and
+        // it would catch up on nothing if the delta had replaced main's record.
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterInstance.registerRendererRecipient.mockClear();
+        browserWindowInstances.length = 0;
+        await main(makeTestContributions());
+
+        const onSessionHosted = (
+            mockLobbyManagerCtor.mock.calls[0]?.[2] as
+                | { onSessionHosted?: (transport: unknown, metadata: unknown) => void }
+                | undefined
+        )?.onSessionHosted;
+        const hostId = playerId('host-delta-current');
+        onSessionHosted?.(
+            {
+                onPlayerJoined: vi.fn(() => () => {}),
+                onPlayerLeft: vi.fn(() => () => {}),
+                onActionReceived: vi.fn(() => () => {}),
+                setJoinClassifier: vi.fn(),
+                onSpectateTargetUpdate: vi.fn(() => () => {}),
+            },
+            { hostId, maxPlayers: 1 },
+        );
+
+        const recipient = mockStateBroadcasterInstance.registerRendererRecipient.mock.calls[0]?.[0];
+        const projectedSnapshot = { tick: 44, viewerId: hostId };
+        recipient?.sendSnapshot(projectedSnapshot, {
+            fromTick: 43,
+            toTick: 44,
+            entries: [{ path: 'tick', kind: 'changed', after: 44 }],
+        });
+
+        const getCurrentSnapshot = ipcMainHandle.mock.calls.find(
+            ([channel]) => channel === GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
+        )?.[1] as (() => unknown) | undefined;
+        expect(getCurrentSnapshot?.()).toBe(projectedSnapshot);
     });
 
     it('rebroadcasts the current in-match snapshot to a rejoined player', async () => {
@@ -6367,7 +6455,7 @@ describe('main() — perspective replay recording (F44b T5)', () => {
     }
     interface HostRecipient {
         readonly viewerId: unknown;
-        readonly sendSnapshot: (snapshot: unknown) => void;
+        readonly sendSnapshot: (snapshot: unknown, delta: unknown) => void;
     }
     interface HostTransport {
         readonly onPlayerJoined: ReturnType<typeof vi.fn>;
@@ -6489,9 +6577,9 @@ describe('main() — perspective replay recording (F44b T5)', () => {
 
         const recipient = mockStateBroadcasterInstance.registerRendererRecipient.mock
             .calls[0]?.[0] as HostRecipient | undefined;
-        recipient?.sendSnapshot(makeSnapshot(hostId, 0));
-        recipient?.sendSnapshot(makeSnapshot(hostId, 1));
-        recipient?.sendSnapshot(makeSnapshot(hostId, 2, { winnerIds: [hostId] }));
+        recipient?.sendSnapshot(makeSnapshot(hostId, 0), null);
+        recipient?.sendSnapshot(makeSnapshot(hostId, 1), null);
+        recipient?.sendSnapshot(makeSnapshot(hostId, 2, { winnerIds: [hostId] }), null);
 
         await flush();
 
@@ -6561,9 +6649,9 @@ describe('main() — perspective replay recording (F44b T5)', () => {
             const recipient = mockStateBroadcasterInstance.registerRendererRecipient.mock.calls.at(
                 -1,
             )?.[0] as HostRecipient | undefined;
-            recipient?.sendSnapshot(makeSnapshot(hostId, 0));
-            recipient?.sendSnapshot(makeSnapshot(hostId, 1));
-            recipient?.sendSnapshot(makeSnapshot(hostId, 2, { winnerIds: [hostId] }));
+            recipient?.sendSnapshot(makeSnapshot(hostId, 0), null);
+            recipient?.sendSnapshot(makeSnapshot(hostId, 1), null);
+            recipient?.sendSnapshot(makeSnapshot(hostId, 2, { winnerIds: [hostId] }), null);
 
             await flush();
 
@@ -6655,11 +6743,11 @@ describe('main() — perspective replay recording (F44b T5)', () => {
 
         const recipient = mockStateBroadcasterInstance.registerRendererRecipient.mock
             .calls[0]?.[0] as HostRecipient | undefined;
-        recipient?.sendSnapshot(makeSnapshot(hostId, 0));
+        recipient?.sendSnapshot(makeSnapshot(hostId, 0), null);
         // After a pass-and-play handoff the renderer is bound to another seat;
         // those frames must NOT enter the host's locked recording.
-        recipient?.sendSnapshot(makeSnapshot(otherSeat, 1));
-        recipient?.sendSnapshot(makeSnapshot(hostId, 2, { winnerIds: [hostId] }));
+        recipient?.sendSnapshot(makeSnapshot(otherSeat, 1), null);
+        recipient?.sendSnapshot(makeSnapshot(hostId, 2, { winnerIds: [hostId] }), null);
 
         await flush();
         // Persist the retained recording explicitly to inspect its captured frames.
@@ -6682,7 +6770,7 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         });
         const recipient = mockStateBroadcasterInstance.registerRendererRecipient.mock
             .calls[0]?.[0] as HostRecipient | undefined;
-        recipient?.sendSnapshot(makeSnapshot(hostId, 0)); // mid-match, no gameResult
+        recipient?.sendSnapshot(makeSnapshot(hostId, 0), null); // mid-match, no gameResult
 
         cleanup?.();
         await flush();
@@ -6762,7 +6850,7 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         options.onSessionHosted?.(makeHostTransport(), { hostId, maxPlayers: 2 });
         const recipient = mockStateBroadcasterInstance.registerRendererRecipient.mock
             .calls[0]?.[0] as HostRecipient | undefined;
-        recipient?.sendSnapshot(makeSnapshot(hostId, 0));
+        recipient?.sendSnapshot(makeSnapshot(hostId, 0), null);
 
         // A client snapshot now arrives (a contrived overlap the process should
         // never produce). The guard must refuse to start a second recording over
@@ -6772,7 +6860,7 @@ describe('main() — perspective replay recording (F44b T5)', () => {
 
         // The host recording is unaffected; on an explicit save it persists cleanly
         // to the host seat.
-        recipient?.sendSnapshot(makeSnapshot(hostId, 2, { winnerIds: [hostId] }));
+        recipient?.sendSnapshot(makeSnapshot(hostId, 2, { winnerIds: [hostId] }), null);
         await flush();
         expect(perspectiveSaves.value).toHaveLength(0);
         await saveCurrentPerspective();
@@ -8073,7 +8161,7 @@ describe('main() — session restore wiring', () => {
             const recipient =
                 mockStateBroadcasterInstance.registerRendererRecipient.mock.calls.at(-1)?.[0];
             const restoredSnapshot = { tick: 42, viewerId: 'host-restored' };
-            recipient?.sendSnapshot(restoredSnapshot);
+            recipient?.sendSnapshot(restoredSnapshot, null);
 
             const getCurrentSnapshot = ipcMainHandle.mock.calls.find(
                 ([channel]) => channel === GAME_GET_CURRENT_SNAPSHOT_CHANNEL,

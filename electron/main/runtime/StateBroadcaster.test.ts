@@ -35,6 +35,7 @@ import type {
     StateProjector,
 } from '@chimera-engine/simulation/projection/StateProjector.js';
 import type { E2eHooks } from './e2e-hooks.js';
+import type { SnapshotDelta } from '@chimera-engine/simulation/foundation/snapshot-delta.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -634,6 +635,23 @@ function makeMovingProjection(viewerId: PlayerId, tick: number, x: number): Play
     };
 }
 
+/**
+ * Registers a renderer recipient for `viewerId` and collects the delta argument
+ * of every send — `null` on a keyframe. What main forwards over IPC is decided
+ * by that argument, so it is the artifact these cases read.
+ */
+function collectRendererDeltas(
+    broadcaster: StateBroadcaster,
+    viewerId: PlayerId,
+): (SnapshotDelta | null)[] {
+    const deltas: (SnapshotDelta | null)[] = [];
+    broadcaster.registerRendererRecipient({
+        viewerId,
+        sendSnapshot: (_snapshot, delta) => deltas.push(delta),
+    });
+    return deltas;
+}
+
 /** Distinct host snapshot objects, so each wave looks like a new one to the fan-out dedupe. */
 const wave = (tick: number): BaseGameSnapshot => ({ ...makeSnapshot(PLAYER_A), tick });
 
@@ -734,6 +752,7 @@ describe('StateBroadcaster — outbound snapshot deltas', () => {
 
         set(PLAYER_A, keyframe);
         const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        const rendererSends = collectRendererDeltas(broadcaster, PLAYER_A);
         broadcaster.broadcastWave(wave(1), PLAYER_A);
         set(PLAYER_A, padded(2, pad));
         broadcaster.broadcastWave(wave(2), PLAYER_A);
@@ -741,6 +760,11 @@ describe('StateBroadcaster — outbound snapshot deltas', () => {
         expect(transport.sendSnapshotDelta).not.toHaveBeenCalled();
         expect(transport.sendSnapshot).toHaveBeenCalledTimes(2);
         expect(broadcaster.deltaMetrics().sizeFallbacks).toBe(1);
+        // And the renderer leg is told there is no delta. Handing it the
+        // oversized one would push over IPC exactly the frame the transport
+        // just decided not to send — on the leg this whole path exists to make
+        // cheaper.
+        expect(rendererSends).toEqual([null, null]);
     });
 
     it('sends the delta when it is one byte smaller than the keyframe', () => {
@@ -817,6 +841,7 @@ describe('StateBroadcaster — outbound snapshot deltas', () => {
         const projection = makeMovingProjection(PLAYER_A, 1, 0);
         set(PLAYER_A, projection);
         const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        const rendererSends = collectRendererDeltas(broadcaster, PLAYER_A);
         broadcaster.broadcastWave(wave(1), PLAYER_A);
 
         // A structurally equal but distinct object, as a re-projection produces.
@@ -825,6 +850,9 @@ describe('StateBroadcaster — outbound snapshot deltas', () => {
 
         expect(transport.sendSnapshot).toHaveBeenCalledTimes(2);
         expect(transport.sendSnapshotDelta).not.toHaveBeenCalled();
+        // A delta with no entries would tell a renderer with a broken chain
+        // nothing, and it is the recovery frame that beat exists to deliver.
+        expect(rendererSends).toEqual([null, null]);
     });
 
     it('forces the spectator fan-out too, so a re-sync wave reaches every recipient whole', () => {
@@ -1015,8 +1043,12 @@ describe('StateBroadcaster — outbound snapshot deltas', () => {
         set(PLAYER_A, moved);
         broadcaster.broadcastWave(wave(2), PLAYER_A);
 
-        expect(transport.sendSnapshotDelta).toHaveBeenCalledTimes(1);
-        expect(sendSnapshot).toHaveBeenLastCalledWith(moved);
+        const delta = vi.mocked(transport.sendSnapshotDelta).mock.calls[0]?.[1];
+        expect(delta).toBeDefined();
+        // The recipient is handed the WHOLE projection AND the delta: main keeps
+        // the projection for what needs it in-process and forwards the delta over
+        // IPC, so both have to arrive.
+        expect(sendSnapshot).toHaveBeenLastCalledWith(moved, delta);
         expect(hooks.lastHostSnapshot).toEqual(moved);
         expect(hooks.broadcastChecksums[PLAYER_A]).toBe(crc32Json(moved));
     });

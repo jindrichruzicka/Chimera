@@ -72,6 +72,9 @@ function makeApi(
     const api: GameAPI = {
         sendAction: sendActionSpy,
         onSnapshot: onSnapshotSpy,
+        // Not this bootstrap's channel either — `ipcClient` owns delta
+        // application; the double carries it so it stays a whole `GameAPI`.
+        onSnapshotDelta: vi.fn(() => vi.fn()),
         onTick: onTickSpy,
         // Not this bootstrap's channel — the perf HUD subscribes to it in
         // `perfStoreBootstrap`. Present so the double stays a whole `GameAPI`.
@@ -166,6 +169,60 @@ describe('bootstrapGameStore()', () => {
         expect(store.getState().canRedo).toBe(false);
     });
 
+    it('routes the catch-up snapshot THROUGH the client, so the bridge holds it as a baseline', async () => {
+        // The regression this pins cost eight tactics specs: the catch-up wrote
+        // the store directly, the bridge never learned the snapshot, and every
+        // delta after it — each measured by the host against exactly that
+        // snapshot — was refused. On a turn-based game that is every beat until
+        // the host's periodic keyframe.
+        //
+        // Asserted on the CLIENT, not on the store: writing the store is what
+        // both the correct and the broken version do, so a store assertion
+        // cannot tell them apart.
+        const replaySnap = makeSnapshot(99);
+        const { api } = makeApi();
+        (api.getCurrentSnapshot as ReturnType<typeof vi.fn>).mockResolvedValueOnce(replaySnap);
+        const adopt = vi.fn();
+        const store = createGameStore();
+
+        await bootstrapGameStore(api, store.getState(), (_port, snapshotStore) => ({
+            sendAction: vi.fn(),
+            bootstrap: () => vi.fn(),
+            flush: vi.fn(),
+            adopt: (snapshot) => {
+                adopt(snapshot);
+                snapshotStore.applySnapshot(snapshot);
+            },
+        }));
+
+        expect(adopt).toHaveBeenCalledWith(replaySnap);
+        // And it still reaches the store, through the client rather than around it.
+        expect(store.getState().snapshot).toBe(replaySnap);
+    });
+
+    it('does not adopt a catch-up snapshot older than one already applied', async () => {
+        // The newest-wins guard the catch-up already had. Adopting here would
+        // rewind the bridge's baseline as well as the store's.
+        let captured: SnapshotListener | undefined;
+        const { api } = makeApi({ captureSnapshotListener: (cb) => (captured = cb) });
+        (api.getCurrentSnapshot as ReturnType<typeof vi.fn>).mockResolvedValueOnce(makeSnapshot(3));
+        const adopt = vi.fn();
+        const store = createGameStore();
+
+        await bootstrapGameStore(api, store.getState(), (_port, snapshotStore) => ({
+            sendAction: vi.fn(),
+            bootstrap: () => {
+                captured?.(makeSnapshot(50));
+                snapshotStore.applySnapshot(makeSnapshot(50));
+                return vi.fn();
+            },
+            flush: vi.fn(),
+            adopt,
+        }));
+
+        expect(adopt).not.toHaveBeenCalled();
+    });
+
     it('applies a snapshot from getCurrentSnapshot() when it returns non-null', async () => {
         const replaySnap = makeSnapshot(99);
         const { api } = makeApi();
@@ -255,9 +312,8 @@ describe('bootstrapGameStore()', () => {
         // The window the flush's position exists for: the snapshot arrives
         // while `getCurrentSnapshot()` is still in flight, so a flush placed
         // ahead of that await has already run and cannot see it. The catch-up
-        // would then find nothing newer than what it has APPLIED, write the
-        // older tick, and the pending frame would put the newer one back —
-        // ordering reversed, with the store ending on the older.
+        // would then find nothing newer than what it has APPLIED and adopt the
+        // older tick over the newer one that had already arrived.
         let captured: SnapshotListener | undefined;
         const liveSnapshot = makeSnapshot(11);
         const { api } = makeApi({ captureSnapshotListener: (cb) => (captured = cb) });

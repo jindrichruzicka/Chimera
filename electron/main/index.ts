@@ -169,6 +169,7 @@ import {
     GAME_HOST_METRICS_CHANNEL,
     GAME_REVEAL_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
+    GAME_SNAPSHOT_DELTA_CHANNEL,
     GAME_TICK_CHANNEL,
 } from '../preload/apis/game-api.js';
 import {
@@ -204,6 +205,7 @@ import {
     type CommitmentReveal,
     type PlayerSnapshot,
 } from '@chimera-engine/simulation/projection/index.js';
+import type { SnapshotDelta } from '@chimera-engine/simulation/foundation/snapshot-delta.js';
 import { AgentManager, HumanPlayerAgent } from '@chimera-engine/ai/engine';
 import { SimulationHost } from '@chimera-engine/simulation/host';
 import {
@@ -2419,15 +2421,28 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                           logger: logger.child({ module: 'realtime-ticker' }),
                       });
 
-            const sendHostedRendererSnapshot = (snapshot: PlayerSnapshot): void => {
+            const sendHostedRendererSnapshot = (
+                snapshot: PlayerSnapshot,
+                delta: SnapshotDelta | null,
+            ): void => {
+                // The WHOLE projection is what main keeps, whichever frame goes
+                // over IPC: `getCurrentSnapshot` answers with it and the
+                // perspective recorder appends it.
                 lastSentPlayerSnapshot = snapshot;
                 // Live egress first: recording must never break the renderer IPC
-                // path, so the snapshot is sent before any recorder work runs
+                // path, so the frame is sent before any recorder work runs
                 // (symmetric with the joined-client path in
                 // `onClientSnapshotReceived`).
+                //
+                // A structured clone of a whole projection per beat is what
+                // this leg cost; the changed paths are what it costs instead.
                 const win = mainWindow;
                 if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
-                    win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
+                    if (delta === null) {
+                        win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
+                    } else {
+                        win.webContents.send(GAME_SNAPSHOT_DELTA_CHANNEL, delta);
+                    }
                 }
                 // Perspective recording: append this projected frame while
                 // the match is live. At game-over, stop appending (lock the frame

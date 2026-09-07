@@ -96,14 +96,18 @@ export async function bootstrapGameStore(
     // The flush is what makes the comparison below mean anything, and it goes
     // AFTER the last await rather than before it. The client paces snapshot
     // application against the frame clock, so an arrival during those awaits
-    // may still be waiting on a frame — leaving `latestSnapshot` behind what
-    // has actually arrived, and letting that frame land an OLDER snapshot on
-    // top of the catch-up a moment later. Nothing awaits between here and the
-    // comparison, so there is no window left for a second arrival to reopen.
+    // may still be waiting on a frame — leaving `latestSnapshot` behind what has
+    // actually arrived, and letting the catch-up adopt a snapshot older than one
+    // already received. Nothing awaits between here and the comparison, so there
+    // is no window left for a second arrival to reopen.
     client.flush();
     if (currentSnapshot !== null && isNewerThanLatest(currentSnapshot, latestSnapshot)) {
-        latestSnapshot = currentSnapshot;
-        resolvedStore.applySnapshot(currentSnapshot);
+        // Through the client, not around it. This snapshot is exactly the one
+        // the host will measure its next delta against, so the client has to
+        // hold it — a direct store write would leave the client with no
+        // baseline and every delta after it refused. `latestSnapshot` still
+        // tracks, because `adopt` writes through `trackedStore`.
+        client.adopt(currentSnapshot);
     }
 
     return unsubscribe;

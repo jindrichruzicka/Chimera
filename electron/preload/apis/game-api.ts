@@ -21,6 +21,7 @@ import type {
     GameAPI,
     HostPerfMetrics,
     PlayerSnapshot,
+    SnapshotDelta,
     Unsubscribe,
 } from '../api-types.js';
 import type { IpcListener, PushListenerPort } from '../shared/listener.js';
@@ -40,6 +41,14 @@ export const GAME_SEND_ACTION_CHANNEL = 'chimera:game:send-action';
  * `webContents.send` on this channel.
  */
 export const GAME_SNAPSHOT_CHANNEL = 'chimera:game:snapshot';
+
+/**
+ * `ipcRenderer.on` target for {@link GameAPI.onSnapshotDelta}. Main pushes the
+ * changed paths between the last whole projection this window was sent and the
+ * new one, rather than the whole projection, whenever the host decided this
+ * viewer's frame is a delta (§4.3).
+ */
+export const GAME_SNAPSHOT_DELTA_CHANNEL = 'chimera:game:snapshot-delta';
 
 /** `ipcRenderer.on` target for authoritative tick-only clock updates. */
 export const GAME_TICK_CHANNEL = 'chimera:game:tick';
@@ -108,6 +117,12 @@ export function createGameApi(ipc: GameApiIpcPort): GameAPI {
         // declared before the shared helper existed.
         onSnapshot: (cb: (snapshot: PlayerSnapshot) => void): Unsubscribe =>
             subscribePush<PlayerSnapshot>(ipc, GAME_SNAPSHOT_CHANNEL, cb),
+        // Cast rather than schema-validated, matching `onSnapshot` on the same
+        // trust boundary: both carry projected state from main, and what the
+        // receiver does with a delta it cannot use is refuse it and ask for a
+        // whole snapshot rather than apply half of one.
+        onSnapshotDelta: (cb: (delta: SnapshotDelta) => void): Unsubscribe =>
+            subscribePush<SnapshotDelta>(ipc, GAME_SNAPSHOT_DELTA_CHANNEL, cb),
         onTick: (cb: (tick: number) => void): Unsubscribe =>
             subscribePush<number>(ipc, GAME_TICK_CHANNEL, cb),
         // Schema-validated: the HUD renders `null` as "unavailable" and a number

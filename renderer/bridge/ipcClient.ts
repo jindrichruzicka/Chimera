@@ -13,6 +13,18 @@
  * if the host outpaced the renderer. The clock (`onTick`) is never paced, and
  * it writes the store on every beat.
  *
+ * A DELTA cannot be dropped that way. It is measured against the snapshot the
+ * one before it produced, so a delta superseded inside a frame is one the next
+ * delta needs. Deltas are therefore applied ON ARRIVAL, to a snapshot this
+ * module holds, and only the STORE WRITE is paced — one write per frame,
+ * carrying everything that accumulated in it. Applying is cheap where writing
+ * is not: it copies the containers along a changed path and shares the rest,
+ * while a store write drives React.
+ *
+ * The held snapshot is this module's, not the store's. The store's is the last
+ * one PAINTED; the held one is the last one RECEIVED, which is what the host
+ * measures the next delta against.
+ *
  * Architecture reference: §4.4 — Renderer State Stores
  *
  * Module boundary rules (hard constraints):
@@ -33,6 +45,10 @@ import type {
     PlayerSnapshot,
     Unsubscribe,
 } from '@chimera-engine/simulation/bridge/api-types.js';
+import {
+    applySnapshotDelta,
+    type SnapshotDelta,
+} from '@chimera-engine/simulation/foundation/snapshot-delta.js';
 
 // ── Port interface ────────────────────────────────────────────────────────────
 
@@ -46,6 +62,11 @@ export interface IpcGamePort {
     sendAction(action: EngineAction): void;
     /** Subscribe to projected `PlayerSnapshot` pushes. */
     onSnapshot(cb: (snapshot: PlayerSnapshot) => void): Unsubscribe;
+    /**
+     * Subscribe to changed-path pushes measured against the last whole snapshot
+     * the host believes this renderer holds.
+     */
+    onSnapshotDelta(cb: (delta: SnapshotDelta) => void): Unsubscribe;
     /** Subscribe to tick-only clock updates. */
     onTick(cb: (tick: number) => void): Unsubscribe;
 }
@@ -77,13 +98,27 @@ export interface IpcClient {
      * Apply a snapshot waiting on the frame clock NOW, and take that frame off
      * the clock.
      *
-     * For a caller that is about to write the store from outside this client
-     * and needs the two writes ordered — `bootstrapGameStore`'s catch-up, which
-     * compares against the newest snapshot it has seen APPLIED. A pending
-     * arrival flushing after that comparison would land an older snapshot on
-     * top of a newer one.
+     * For a caller that compares against the newest snapshot it has seen
+     * APPLIED — `bootstrapGameStore`'s catch-up. An arrival still waiting on a
+     * frame is one that comparison has not seen, so without this the catch-up
+     * measures against a stale answer.
      */
     flush(): void;
+    /**
+     * Adopt `snapshot` as the baseline every later delta is measured against,
+     * and write it to the store now.
+     *
+     * For a caller that obtained a snapshot other than off the push channel —
+     * `bootstrapGameStore`'s catch-up reads the host's current one over a round
+     * trip. A snapshot that reaches the store without passing through here
+     * leaves this client with no baseline, and the very next delta, measured by
+     * the host against exactly that snapshot, is refused: on a turn-based game
+     * that is every beat until the host's periodic keyframe.
+     *
+     * A frame already on the clock finds nothing owed and writes nothing, so
+     * an arrival that was waiting on it cannot land on top of what was adopted.
+     */
+    adopt(snapshot: PlayerSnapshot): void;
 }
 
 // ── Frame clock ───────────────────────────────────────────────────────────────
@@ -183,13 +218,21 @@ export function createIpcClient(
     store: IpcSnapshotStore,
     scheduler: FrameScheduler = immediateFrameScheduler,
 ): IpcClient {
-    // NEWEST-WINS, never a queue. A snapshot superseded inside one frame is
-    // dropped where it stands: draining it on a later frame would put the
-    // renderer a whole frame behind the host for no gain, and a backlog the
-    // host can outpace has no bound.
-    let pending: PlayerSnapshot | null = null;
-    // The newest clock-only beat that landed WHILE a snapshot was waiting on a
-    // frame, and nothing else. Deliberately not a running high-water mark of
+    // The newest snapshot RECEIVED — the delta baseline, and what the next
+    // frame writes. Held past the write, unlike the `pending` it replaced,
+    // because the host measures the next delta against it whether or not the
+    // renderer has painted it yet.
+    let held: PlayerSnapshot | null = null;
+    // Whether a store write is owed. NEWEST-WINS survives for whole snapshots —
+    // one write per frame, carrying the newest state — while no delta is ever
+    // dropped, because each is applied to `held` as it arrives.
+    let dirty = false;
+    // Whether a full re-sync has been asked for and not yet answered. A broken
+    // chain would otherwise ask on EVERY beat, and `engine:sync_request` makes
+    // the host broadcast to every viewer rather than only to the asker.
+    let resyncPending = false;
+    // The newest clock-only beat that landed WHILE a store write was owed,
+    // and nothing else. Deliberately not a running high-water mark of
     // every beat: a snapshot may legitimately carry a LOWER tick than the clock
     // — a restore rewinds the match to a checkpoint — and only a beat that
     // arrived inside the pending window is evidence that the host's clock has
@@ -203,11 +246,12 @@ export function createIpcClient(
     let frameHandle: number | null = null;
 
     function applyPending(): void {
-        const snapshot = pending;
+        const snapshot = held;
         const beat = beatWhilePending;
-        pending = null;
+        const owed = dirty;
+        dirty = false;
         beatWhilePending = null;
-        if (snapshot === null) {
+        if (snapshot === null || !owed) {
             return;
         }
         store.applySnapshot(snapshot);
@@ -237,6 +281,43 @@ export function createIpcClient(
         frameHandle = null;
     }
 
+    function scheduleWrite(): void {
+        dirty = true;
+        if (scheduled) {
+            return;
+        }
+        scheduled = true;
+        const handle = scheduler.request(onFrame);
+        // Only record the handle if the frame has not already run: a
+        // synchronous scheduler has lowered the flag by now, and storing its
+        // handle would leave a cancel to fire against nothing.
+        if (scheduled) {
+            frameHandle = handle;
+        }
+    }
+
+    /**
+     * Ask the host to broadcast a whole snapshot, once per broken chain.
+     *
+     * Silent when nothing has been received yet: the action needs a
+     * `playerId`, and an action carrying a guessed seat is worse than no
+     * action. The host's periodic keyframe recovers that case — see
+     * `drops a delta it has no baseline for without asking, since it cannot
+     * name a viewer`.
+     */
+    function requestFullResync(): void {
+        if (resyncPending || held === null) {
+            return;
+        }
+        resyncPending = true;
+        port.sendAction({
+            type: 'engine:sync_request',
+            playerId: held.viewerId,
+            tick: held.tick,
+            payload: {},
+        });
+    }
+
     return {
         sendAction(action: EngineAction): void {
             port.sendAction(action);
@@ -247,43 +328,66 @@ export function createIpcClient(
             applyPending();
         },
 
+        adopt(snapshot: PlayerSnapshot): void {
+            const beat = beatWhilePending;
+            held = snapshot;
+            dirty = false;
+            beatWhilePending = null;
+            resyncPending = false;
+            store.applySnapshot(snapshot);
+            // The same re-assert `applyPending` makes, for the same reason:
+            // `applySnapshot` writes `currentTick`, and the store clock is what
+            // stamps every dispatched action, so a snapshot older than a beat
+            // that already arrived would send the host an envelope from its own
+            // past. Only when the beat is genuinely ahead.
+            if (beat !== null && beat > snapshot.tick) {
+                store.applyTick(beat);
+            }
+        },
+
         bootstrap(): Unsubscribe {
             const unsubscribeSnapshot = port.onSnapshot((snapshot: PlayerSnapshot) => {
-                pending = snapshot;
-                if (scheduled) {
+                // A whole snapshot REPLACES: it is measured against nothing, so
+                // newest-wins is still right, and it answers any outstanding
+                // re-sync request.
+                held = snapshot;
+                resyncPending = false;
+                scheduleWrite();
+            });
+            const unsubscribeDelta = port.onSnapshotDelta((delta: SnapshotDelta) => {
+                const applied = held === null ? null : applySnapshotDelta(held, delta);
+                if (applied === null) {
+                    // Never partially applied: half a projection is a divergence
+                    // no later frame corrects.
+                    requestFullResync();
                     return;
                 }
-                scheduled = true;
-                const handle = scheduler.request(onFrame);
-                // Only record the handle if the frame has not already run: a
-                // synchronous scheduler has lowered the flag by now, and
-                // storing its handle would leave a cancel to fire against
-                // nothing.
-                if (scheduled) {
-                    frameHandle = handle;
-                }
+                held = applied;
+                scheduleWrite();
             });
             const unsubscribeTick = port.onTick((tick: number) => {
                 // NOT coalesced: a clock-only beat carries one scalar, and
                 // holding it for a frame would delay the cheapest update the
                 // bridge has for the sake of the most expensive one.
                 store.applyTick(tick);
-                if (pending !== null) {
+                if (dirty) {
                     beatWhilePending = tick;
                 }
             });
 
             return (): void => {
                 unsubscribeSnapshot();
+                unsubscribeDelta();
                 unsubscribeTick();
                 cancelFrame();
                 // Dropped as well as cancelled: a scheduler that fires a
                 // cancelled frame anyway must find nothing to write, because
-                // the store this would write to is being torn down. The beat
-                // window needs no matching line — it is only ever spent
-                // alongside a snapshot, and a frame that finds none clears it
-                // on the way out.
-                pending = null;
+                // the store this would write to is being torn down. The held
+                // snapshot goes with it, so a client re-bootstrapped onto a new
+                // match never differences against the old one's projection.
+                held = null;
+                dirty = false;
+                resyncPending = false;
             };
         },
     };

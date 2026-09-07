@@ -615,6 +615,10 @@ const SHARED_PACKAGE_BOUNDARIES = [
     '@chimera-engine/simulation/foundation/game-lobby-contract.js',
     '@chimera-engine/simulation/foundation/game-manifest-contract.js',
     '@chimera-engine/simulation/foundation/save-slots.js',
+    // Reached at RUNTIME by `ipcClient`, which applies a delta rather than
+    // replacing the snapshot. A leaf of the contract leaf: its only import is
+    // `import type` from its sibling, so it can carry no WebGL runtime.
+    '@chimera-engine/simulation/foundation/snapshot-delta.js',
     'next/navigation',
     'react',
     'zustand',

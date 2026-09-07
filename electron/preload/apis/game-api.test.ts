@@ -5,6 +5,7 @@ import {
     GAME_REVEAL_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
+    GAME_SNAPSHOT_DELTA_CHANNEL,
     GAME_TICK_CHANNEL,
     GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
     createGameApi,
@@ -18,6 +19,7 @@ import type {
     EngineAction,
     HostPerfMetrics,
     PlayerSnapshot,
+    SnapshotDelta,
 } from '../api-types.js';
 import { playerId, gamePhase } from '../api-types.js';
 import { toCommitmentId } from '@chimera-engine/simulation/projection/index.js';
@@ -177,6 +179,64 @@ describe('createGameApi', () => {
             }
             expect(cbA).not.toHaveBeenCalled();
             expect(cbB).toHaveBeenCalledOnce();
+        });
+    });
+
+    describe('onSnapshotDelta()', () => {
+        const delta = {
+            fromTick: 41,
+            toTick: 42,
+            entries: [{ path: 'entities.unit-1.x', kind: 'changed' as const, after: 3 }],
+        };
+
+        it('registers a listener on the delta channel and forwards only the delta payload', () => {
+            // The channel STRING, spelled out. Main and this file both import
+            // the constant, so a wrong value is symmetric and invisible on both
+            // sides of it.
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+            const callback = vi.fn<(value: SnapshotDelta) => void>();
+
+            api.onSnapshotDelta(callback);
+
+            expect(GAME_SNAPSHOT_DELTA_CHANNEL).toBe('chimera:game:snapshot-delta');
+            const registered = stub.listeners.get(GAME_SNAPSHOT_DELTA_CHANNEL);
+            expect(registered?.size).toBe(1);
+
+            const listener = [...(registered ?? [])][0];
+            listener?.({ sender: 'fake-webcontents' }, delta);
+
+            expect(callback).toHaveBeenCalledOnce();
+            expect(callback).toHaveBeenCalledWith(delta);
+        });
+
+        it('returns an Unsubscribe that removes only the wrapped listener', () => {
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+
+            const unsubscribe = api.onSnapshotDelta(vi.fn());
+            const beforeUnsub = stub.listeners.get(GAME_SNAPSHOT_DELTA_CHANNEL)?.size;
+            unsubscribe();
+
+            expect(beforeUnsub).toBe(1);
+            expect(stub.listeners.get(GAME_SNAPSHOT_DELTA_CHANNEL)?.size).toBe(0);
+        });
+
+        it('does not share a channel with the whole-snapshot stream', () => {
+            // The two carry different shapes and `ipcClient` treats them
+            // differently — one replaces, the other is applied — so a shared
+            // channel would hand a delta to the snapshot listener.
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+            const onSnapshot = vi.fn<(snapshot: PlayerSnapshot) => void>();
+
+            api.onSnapshot(onSnapshot);
+            api.onSnapshotDelta(vi.fn());
+
+            for (const listener of stub.listeners.get(GAME_SNAPSHOT_DELTA_CHANNEL) ?? []) {
+                listener({}, delta);
+            }
+            expect(onSnapshot).not.toHaveBeenCalled();
         });
     });
 

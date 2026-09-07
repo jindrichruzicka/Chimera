@@ -21,6 +21,9 @@
 // the Debug Inspector preload lives elsewhere.
 
 import type { LogEntry } from '../foundation/logging.js';
+import type { SnapshotDelta } from '../foundation/snapshot-delta.js';
+
+export type { SnapshotDelta };
 import type { ChatMessage, ChatScope, RelayResult } from '../foundation/chat.js';
 import type { LobbyInfo, LobbyPlayerEntry, LobbyState } from '../foundation/messages-schemas.js';
 import type { GameContent, GameContentItem } from '../foundation/game-content-contract.js';
@@ -999,6 +1002,16 @@ export interface GameAPI {
     sendAction(action: EngineAction): void;
     /** Stream of projected PlayerSnapshot for the active viewer. */
     onSnapshot(cb: (snapshot: PlayerSnapshot) => void): Unsubscribe;
+    /**
+     * Stream of changed paths between the last whole projection this window was
+     * sent and the new one, for the beats the host decided this viewer's frame
+     * is a delta (§4.3).
+     *
+     * A subscriber has to hold the last whole snapshot and apply each delta to
+     * it, in arrival order, refusing any it cannot apply rather than applying
+     * part of one. `applySnapshotDelta` is that rule.
+     */
+    onSnapshotDelta(cb: (delta: SnapshotDelta) => void): Unsubscribe;
     /** Stream of authoritative tick-only clock updates for the active viewer. */
     onTick(cb: (tick: number) => void): Unsubscribe;
     /**

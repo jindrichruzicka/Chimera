@@ -24,6 +24,11 @@ import {
     type IpcSnapshotStore,
 } from './ipcClient.js';
 import type { EngineAction, PlayerSnapshot } from '@chimera-engine/simulation/bridge/api-types.js';
+import {
+    toSnapshotDelta,
+    type SnapshotDelta,
+} from '@chimera-engine/simulation/foundation/snapshot-delta.js';
+import { diffSnapshots } from '@chimera-engine/simulation/foundation/snapshot-diff.js';
 import { playerId, gamePhase } from '@chimera-engine/simulation/bridge/api-types.js';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -54,9 +59,11 @@ function makePort(): {
     onTickSpy: ReturnType<typeof vi.fn>;
     capturedListener: ((snapshot: PlayerSnapshot) => void) | null;
     capturedTickListener: ((tick: number) => void) | null;
+    capturedDeltaListener: ((delta: SnapshotDelta) => void) | null;
 } {
     let capturedListener: ((snapshot: PlayerSnapshot) => void) | null = null;
     let capturedTickListener: ((tick: number) => void) | null = null;
+    let capturedDeltaListener: ((delta: SnapshotDelta) => void) | null = null;
     const sendActionSpy = vi.fn<(action: EngineAction) => void>();
     const onSnapshotSpy = vi.fn<(cb: (snapshot: PlayerSnapshot) => void) => () => void>((cb) => {
         capturedListener = cb;
@@ -66,8 +73,17 @@ function makePort(): {
         capturedTickListener = cb;
         return vi.fn();
     });
+    const onSnapshotDeltaSpy = vi.fn<(cb: (delta: SnapshotDelta) => void) => () => void>((cb) => {
+        capturedDeltaListener = cb;
+        return vi.fn();
+    });
     return {
-        port: { sendAction: sendActionSpy, onSnapshot: onSnapshotSpy, onTick: onTickSpy },
+        port: {
+            sendAction: sendActionSpy,
+            onSnapshot: onSnapshotSpy,
+            onSnapshotDelta: onSnapshotDeltaSpy,
+            onTick: onTickSpy,
+        },
         sendActionSpy,
         onSnapshotSpy,
         onTickSpy,
@@ -76,6 +92,9 @@ function makePort(): {
         },
         get capturedTickListener() {
             return capturedTickListener;
+        },
+        get capturedDeltaListener() {
+            return capturedDeltaListener;
         },
     };
 }
@@ -163,12 +182,19 @@ describe('createIpcClient.bootstrap()', () => {
         expect(applyTickSpy).toHaveBeenCalledWith(88);
     });
 
-    it('returns an unsubscribe function from the port', () => {
-        const unsubSpy = vi.fn();
+    it('releases every push listener it registered', () => {
+        // One per CHANNEL, read back individually. A shared or anonymous stub
+        // lets any one of the three releases disappear unnoticed, and what is
+        // left behind is a live `ipcRenderer.on` listener per teardown — per
+        // match, per route change — for the rest of the session.
+        const unsubSnapshot = vi.fn();
+        const unsubDelta = vi.fn();
+        const unsubTick = vi.fn();
         const port: IpcGamePort = {
             sendAction: vi.fn(),
-            onSnapshot: vi.fn(() => unsubSpy),
-            onTick: vi.fn(() => vi.fn()),
+            onSnapshot: vi.fn(() => unsubSnapshot),
+            onSnapshotDelta: vi.fn(() => unsubDelta),
+            onTick: vi.fn(() => unsubTick),
         };
         const { store } = makeStore();
         const client = createIpcClient(port, store);
@@ -176,7 +202,9 @@ describe('createIpcClient.bootstrap()', () => {
         const unsub = client.bootstrap();
         unsub();
 
-        expect(unsubSpy).toHaveBeenCalledOnce();
+        expect(unsubSnapshot).toHaveBeenCalledOnce();
+        expect(unsubDelta).toHaveBeenCalledOnce();
+        expect(unsubTick).toHaveBeenCalledOnce();
     });
 });
 
@@ -698,5 +726,450 @@ describe('createConditionalFrameScheduler', () => {
         expect(frames.cancelled).toBe(1);
         frames.runFrame();
         expect(ran).not.toHaveBeenCalled();
+    });
+});
+
+// ── Snapshot deltas ───────────────────────────────────────────────────────────
+
+/** A snapshot with one entity, so a delta can move exactly one path. */
+function makeEntitySnapshot(tick: number, x: number, hp = 10): PlayerSnapshot {
+    return {
+        ...makeSnapshot(tick),
+        entities: {
+            'unit-1': { id: 'unit-1', x, hp },
+            'unit-2': { id: 'unit-2', x: 99, hp: 1 },
+        } as unknown as PlayerSnapshot['entities'],
+    };
+}
+
+/**
+ * Reads a branded-keyed entity record by its raw id — the read side of the cast
+ * the fixtures above are built with.
+ */
+const entityAt = (snapshot: PlayerSnapshot, id: string): unknown =>
+    (snapshot.entities as Record<string, unknown>)[id];
+
+const deltaBetween = (from: PlayerSnapshot, to: PlayerSnapshot): SnapshotDelta =>
+    toSnapshotDelta(diffSnapshots(from, to));
+
+describe('createIpcClient — snapshot deltas', () => {
+    it('applies a delta onto the held snapshot and writes the result', () => {
+        const portFixture = makePort();
+        const { store, applySnapshotSpy } = makeStore();
+        createIpcClient(portFixture.port, store).bootstrap();
+
+        const baseline = makeEntitySnapshot(1, 0);
+        const next = makeEntitySnapshot(2, 5);
+        portFixture.capturedListener?.(baseline);
+        portFixture.capturedDeltaListener?.(deltaBetween(baseline, next));
+
+        expect(applySnapshotSpy).toHaveBeenCalledTimes(2);
+        expect(applySnapshotSpy).toHaveBeenLastCalledWith(next);
+    });
+
+    it('produces a NEW snapshot object with the untouched subtrees shared by reference', () => {
+        // Structural sharing is the whole reason a delta is worth applying in
+        // the renderer rather than replacing the snapshot: a memoised selector
+        // over an untouched subtree must see the same object it saw last frame.
+        const portFixture = makePort();
+        const { store, applySnapshotSpy } = makeStore();
+        createIpcClient(portFixture.port, store).bootstrap();
+
+        const baseline = makeEntitySnapshot(1, 0);
+        portFixture.capturedListener?.(baseline);
+        portFixture.capturedDeltaListener?.(deltaBetween(baseline, makeEntitySnapshot(2, 5)));
+
+        const applied = applySnapshotSpy.mock.calls[1]?.[0] as PlayerSnapshot;
+        expect(applied).not.toBe(baseline);
+        expect(applied.entities).not.toBe(baseline.entities);
+        expect(entityAt(applied, 'unit-1')).not.toBe(entityAt(baseline, 'unit-1'));
+        // Untouched: the same object, not a structural copy.
+        expect(entityAt(applied, 'unit-2')).toBe(entityAt(baseline, 'unit-2'));
+        expect(applied.players).toBe(baseline.players);
+        expect(applied.undoMeta).toBe(baseline.undoMeta);
+    });
+
+    it('never mutates the snapshot it was holding', () => {
+        const portFixture = makePort();
+        const { store } = makeStore();
+        createIpcClient(portFixture.port, store).bootstrap();
+
+        const baseline = makeEntitySnapshot(1, 0);
+        const before = structuredClone(baseline);
+        portFixture.capturedListener?.(baseline);
+        portFixture.capturedDeltaListener?.(deltaBetween(baseline, makeEntitySnapshot(2, 5)));
+
+        expect(baseline).toEqual(before);
+    });
+
+    it('applies an entity removal, so a viewer stops seeing what left its projection', () => {
+        // A fog-hidden entity is ABSENT from a projection, never null: the
+        // renderer has to lose the key, not hold a null under it.
+        const portFixture = makePort();
+        const { store, applySnapshotSpy } = makeStore();
+        createIpcClient(portFixture.port, store).bootstrap();
+
+        const baseline = makeEntitySnapshot(1, 0);
+        const withoutUnit2: PlayerSnapshot = {
+            ...makeSnapshot(2),
+            entities: {
+                'unit-1': entityAt(baseline, 'unit-1'),
+            } as unknown as PlayerSnapshot['entities'],
+        };
+        portFixture.capturedListener?.(baseline);
+        portFixture.capturedDeltaListener?.(deltaBetween(baseline, withoutUnit2));
+
+        const applied = applySnapshotSpy.mock.calls[1]?.[0] as PlayerSnapshot;
+        expect(Object.keys(applied.entities)).toEqual(['unit-1']);
+        expect(applied.entities).not.toHaveProperty('unit-2');
+    });
+
+    it('asks the host for a full snapshot when a delta will not apply, and writes nothing', () => {
+        const portFixture = makePort();
+        const { store, applySnapshotSpy } = makeStore();
+        createIpcClient(portFixture.port, store).bootstrap();
+
+        portFixture.capturedListener?.(makeEntitySnapshot(1, 0));
+        applySnapshotSpy.mockClear();
+        // A baseline tick that is not the held one — the common desync.
+        portFixture.capturedDeltaListener?.({
+            fromTick: 99,
+            toTick: 100,
+            entries: [{ path: 'tick', kind: 'changed', after: 100 }],
+        });
+
+        expect(applySnapshotSpy).not.toHaveBeenCalled();
+        expect(portFixture.sendActionSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ type: 'engine:sync_request', playerId: playerId('p1') }),
+        );
+    });
+
+    it('asks once per broken chain, not once per beat', () => {
+        // `engine:sync_request` makes the host broadcast to every viewer, not
+        // only to the asker, so an unlatched request turns one renderer's desync
+        // into a cost the whole session pays.
+        const portFixture = makePort();
+        const { store } = makeStore();
+        createIpcClient(portFixture.port, store).bootstrap();
+
+        portFixture.capturedListener?.(makeEntitySnapshot(1, 0));
+        const stale = (tick: number): SnapshotDelta => ({
+            fromTick: 99,
+            toTick: tick,
+            entries: [{ path: 'tick', kind: 'changed', after: tick }],
+        });
+        portFixture.capturedDeltaListener?.(stale(100));
+        portFixture.capturedDeltaListener?.(stale(101));
+        portFixture.capturedDeltaListener?.(stale(102));
+
+        expect(portFixture.sendActionSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('asks again once a full snapshot has answered the previous request', () => {
+        const portFixture = makePort();
+        const { store } = makeStore();
+        createIpcClient(portFixture.port, store).bootstrap();
+
+        portFixture.capturedListener?.(makeEntitySnapshot(1, 0));
+        const stale: SnapshotDelta = {
+            fromTick: 99,
+            toTick: 100,
+            entries: [{ path: 'tick', kind: 'changed', after: 100 }],
+        };
+        portFixture.capturedDeltaListener?.(stale);
+        portFixture.capturedListener?.(makeEntitySnapshot(50, 0));
+        portFixture.capturedDeltaListener?.(stale);
+
+        expect(portFixture.sendActionSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('drops a delta it has no baseline for without asking, since it cannot name a viewer', () => {
+        // Before any snapshot there is no `viewerId` to put on the action, and
+        // an action with a guessed one is worse than none. The host's periodic
+        // keyframe is what recovers this.
+        const portFixture = makePort();
+        const { store, applySnapshotSpy } = makeStore();
+        createIpcClient(portFixture.port, store).bootstrap();
+
+        portFixture.capturedDeltaListener?.({
+            fromTick: 1,
+            toTick: 2,
+            entries: [{ path: 'tick', kind: 'changed', after: 2 }],
+        });
+
+        expect(applySnapshotSpy).not.toHaveBeenCalled();
+        expect(portFixture.sendActionSpy).not.toHaveBeenCalled();
+    });
+});
+
+describe('createIpcClient — deltas under frame coalescing', () => {
+    it('applies every delta in order, and writes the store once per frame', () => {
+        // Newest-wins is safe for whole snapshots and WRONG for deltas: a delta
+        // dropped inside a frame is one the next delta was measured against. The
+        // deltas are therefore applied ON ARRIVAL, and only the STORE WRITE is
+        // paced — one write per frame carrying the accumulated result.
+        const portFixture = makePort();
+        const { store, applySnapshotSpy } = makeStore();
+        const frames = makeManualScheduler();
+        createIpcClient(portFixture.port, store, frames.scheduler).bootstrap();
+
+        const s1 = makeEntitySnapshot(1, 0);
+        const s2 = makeEntitySnapshot(2, 1);
+        const s3 = makeEntitySnapshot(3, 2);
+        const s4 = makeEntitySnapshot(4, 3);
+        portFixture.capturedListener?.(s1);
+        frames.runFrame();
+        applySnapshotSpy.mockClear();
+
+        portFixture.capturedDeltaListener?.(deltaBetween(s1, s2));
+        portFixture.capturedDeltaListener?.(deltaBetween(s2, s3));
+        portFixture.capturedDeltaListener?.(deltaBetween(s3, s4));
+        expect(applySnapshotSpy).not.toHaveBeenCalled();
+
+        frames.runFrame();
+        expect(applySnapshotSpy).toHaveBeenCalledTimes(1);
+        expect(applySnapshotSpy).toHaveBeenCalledWith(s4);
+    });
+
+    it('keeps applying deltas measured against ones it coalesced away', () => {
+        // The mid-frame deltas never reached the store, but the LAST one was
+        // measured against what they produced — so if any had been dropped
+        // rather than applied, this one would not fit.
+        const portFixture = makePort();
+        const { store, applySnapshotSpy } = makeStore();
+        const frames = makeManualScheduler();
+        createIpcClient(portFixture.port, store, frames.scheduler).bootstrap();
+
+        const beats = [1, 2, 3, 4, 5].map((tick) => makeEntitySnapshot(tick, tick));
+        portFixture.capturedListener?.(beats[0]!);
+        frames.runFrame();
+        for (let index = 1; index < beats.length; index++) {
+            portFixture.capturedDeltaListener?.(deltaBetween(beats[index - 1]!, beats[index]!));
+        }
+        frames.runFrame();
+
+        expect(applySnapshotSpy).toHaveBeenLastCalledWith(beats[4]);
+    });
+
+    it('writes a snapshot that arrives after a delta, superseding it', () => {
+        // A keyframe REPLACES: newest-wins is still right between a delta and a
+        // whole snapshot, because the snapshot is not measured against anything.
+        const portFixture = makePort();
+        const { store, applySnapshotSpy } = makeStore();
+        const frames = makeManualScheduler();
+        createIpcClient(portFixture.port, store, frames.scheduler).bootstrap();
+
+        const s1 = makeEntitySnapshot(1, 0);
+        portFixture.capturedListener?.(s1);
+        frames.runFrame();
+        portFixture.capturedDeltaListener?.(deltaBetween(s1, makeEntitySnapshot(2, 1)));
+        const keyframe = makeEntitySnapshot(9, 9);
+        portFixture.capturedListener?.(keyframe);
+        frames.runFrame();
+
+        expect(applySnapshotSpy).toHaveBeenLastCalledWith(keyframe);
+    });
+
+    it('adopt() seeds the baseline, so the delta measured against it applies', () => {
+        // The bootstrap catch-up reads the host's current snapshot over a ROUND
+        // TRIP rather than off the push channel. A snapshot that reaches the
+        // store without passing through here leaves the bridge with no baseline,
+        // and the very next delta — measured by the host against exactly that
+        // snapshot — is refused. On a turn-based game that is every beat until
+        // the periodic keyframe.
+        const portFixture = makePort();
+        const { store, applySnapshotSpy } = makeStore();
+        const client = createIpcClient(portFixture.port, store);
+        client.bootstrap();
+
+        const caughtUp = makeEntitySnapshot(7, 3);
+        client.adopt(caughtUp);
+        expect(applySnapshotSpy).toHaveBeenCalledWith(caughtUp);
+
+        const next = makeEntitySnapshot(8, 4);
+        portFixture.capturedDeltaListener?.(deltaBetween(caughtUp, next));
+
+        expect(applySnapshotSpy).toHaveBeenLastCalledWith(next);
+    });
+
+    it('adopt() supersedes a snapshot still waiting on a frame, and that frame then writes nothing', () => {
+        // The frame is left ON the clock deliberately — the next arrival reuses
+        // it. What makes that safe is that `adopt` leaves nothing owed, so the
+        // frame finds no write to make. Asserting the last call alone cannot see
+        // that: the frame would write the adopted snapshot a second time and the
+        // last call would look identical.
+        const portFixture = makePort();
+        const { store, applySnapshotSpy } = makeStore();
+        const frames = makeManualScheduler();
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
+        client.bootstrap();
+
+        portFixture.capturedListener?.(makeEntitySnapshot(1, 0));
+        const caughtUp = makeEntitySnapshot(7, 3);
+        client.adopt(caughtUp);
+        expect(applySnapshotSpy).toHaveBeenCalledTimes(1);
+        expect(applySnapshotSpy).toHaveBeenCalledWith(caughtUp);
+
+        frames.runFrame();
+        expect(applySnapshotSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('adopt() re-asserts a clock beat its snapshot would have rewound', () => {
+        // `applySnapshot` writes `currentTick`, and the store clock is what
+        // stamps every dispatched action — so adopting a snapshot older than a
+        // beat that already arrived would send the host an envelope from its own
+        // past. The paced write guards this; `adopt` writes the same surface.
+        const portFixture = makePort();
+        const { store, applyTickSpy } = makeStore();
+        const frames = makeManualScheduler();
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
+        client.bootstrap();
+
+        portFixture.capturedListener?.(makeEntitySnapshot(1, 0));
+        portFixture.capturedTickListener?.(40);
+        applyTickSpy.mockClear();
+        client.adopt(makeEntitySnapshot(7, 3));
+
+        expect(applyTickSpy).toHaveBeenCalledWith(40);
+    });
+
+    it('adopt() leaves the clock alone when the beat is exactly its own tick', () => {
+        // ON the boundary. `>` and `>=` differ only here, and re-asserting a
+        // beat the snapshot already carries is a redundant store write on a
+        // surface every dispatched action is stamped from.
+        const portFixture = makePort();
+        const { store, applyTickSpy } = makeStore();
+        const frames = makeManualScheduler();
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
+        client.bootstrap();
+
+        portFixture.capturedListener?.(makeEntitySnapshot(1, 0));
+        portFixture.capturedTickListener?.(7);
+        applyTickSpy.mockClear();
+        client.adopt(makeEntitySnapshot(7, 3));
+
+        expect(applyTickSpy).not.toHaveBeenCalled();
+    });
+
+    it('adopt() spends the beat it re-asserted, so a later frame cannot re-assert it again', () => {
+        // The beat belongs to the write that consumed it. Left behind, it is
+        // re-asserted by the NEXT write — after a newer snapshot has arrived —
+        // and the store clock jumps back to a beat older than the snapshot the
+        // renderer is holding.
+        const portFixture = makePort();
+        const { store, applyTickSpy } = makeStore();
+        const frames = makeManualScheduler();
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
+        client.bootstrap();
+
+        portFixture.capturedListener?.(makeEntitySnapshot(1, 0));
+        portFixture.capturedTickListener?.(40);
+        client.adopt(makeEntitySnapshot(7, 3));
+        applyTickSpy.mockClear();
+
+        portFixture.capturedListener?.(makeEntitySnapshot(8, 4));
+        frames.runFrame();
+
+        expect(applyTickSpy).not.toHaveBeenCalled();
+    });
+
+    it('adopt() leaves the clock alone when its snapshot is the newer of the two', () => {
+        const portFixture = makePort();
+        const { store, applyTickSpy } = makeStore();
+        const frames = makeManualScheduler();
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
+        client.bootstrap();
+
+        portFixture.capturedListener?.(makeEntitySnapshot(1, 0));
+        portFixture.capturedTickListener?.(4);
+        applyTickSpy.mockClear();
+        client.adopt(makeEntitySnapshot(7, 3));
+
+        expect(applyTickSpy).not.toHaveBeenCalled();
+    });
+
+    it('adopt() answers an outstanding re-sync request, as a pushed snapshot does', () => {
+        // A fresh baseline is a fresh baseline however it arrived. Leaving the
+        // latch raised would mean the NEXT broken chain never asks.
+        const portFixture = makePort();
+        const { store } = makeStore();
+        const client = createIpcClient(portFixture.port, store);
+        client.bootstrap();
+
+        const stale: SnapshotDelta = {
+            fromTick: 99,
+            toTick: 100,
+            entries: [{ path: 'tick', kind: 'changed', after: 100 }],
+        };
+        portFixture.capturedListener?.(makeEntitySnapshot(1, 0));
+        portFixture.capturedDeltaListener?.(stale);
+        expect(portFixture.sendActionSpy).toHaveBeenCalledTimes(1);
+
+        client.adopt(makeEntitySnapshot(7, 3));
+        portFixture.capturedDeltaListener?.(stale);
+
+        expect(portFixture.sendActionSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('flush() with nothing owed writes nothing, so a caller may flush freely', () => {
+        // `bootstrapGameStore` flushes to order its own write against this
+        // one's. A flush that re-wrote the held snapshot every time would put an
+        // identical snapshot back through the store — and through React — for
+        // every caller that flushed defensively.
+        const portFixture = makePort();
+        const { store, applySnapshotSpy } = makeStore();
+        const frames = makeManualScheduler();
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
+        client.bootstrap();
+
+        portFixture.capturedListener?.(makeEntitySnapshot(1, 0));
+        client.flush();
+        expect(applySnapshotSpy).toHaveBeenCalledTimes(1);
+
+        client.flush();
+        client.flush();
+        expect(applySnapshotSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('forgets the held snapshot on unsubscribe, so a re-bootstrap differences nothing', () => {
+        // The held snapshot is a match's. A client re-bootstrapped onto the next
+        // one must not accept a delta measured against the last one's
+        // projection — the tick check alone would let it through whenever the
+        // ticks happen to line up.
+        const portFixture = makePort();
+        const { store, applySnapshotSpy } = makeStore();
+        const client = createIpcClient(portFixture.port, store);
+
+        const unsubscribe = client.bootstrap();
+        const stale = makeEntitySnapshot(1, 0);
+        portFixture.capturedListener?.(stale);
+        unsubscribe();
+
+        client.bootstrap();
+        applySnapshotSpy.mockClear();
+        portFixture.capturedDeltaListener?.(deltaBetween(stale, makeEntitySnapshot(2, 5)));
+
+        expect(applySnapshotSpy).not.toHaveBeenCalled();
+    });
+
+    it('flush() writes the accumulated result immediately', () => {
+        const portFixture = makePort();
+        const { store, applySnapshotSpy } = makeStore();
+        const frames = makeManualScheduler();
+        const client = createIpcClient(portFixture.port, store, frames.scheduler);
+        client.bootstrap();
+
+        const s1 = makeEntitySnapshot(1, 0);
+        const s2 = makeEntitySnapshot(2, 1);
+        portFixture.capturedListener?.(s1);
+        frames.runFrame();
+        portFixture.capturedDeltaListener?.(deltaBetween(s1, s2));
+        client.flush();
+
+        expect(applySnapshotSpy).toHaveBeenLastCalledWith(s2);
+        // And the frame it took off the clock writes nothing more.
+        applySnapshotSpy.mockClear();
+        frames.runFrame();
+        expect(applySnapshotSpy).not.toHaveBeenCalled();
     });
 });
