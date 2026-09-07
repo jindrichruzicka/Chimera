@@ -573,3 +573,74 @@ describe('PerfHud — i18n row labels', () => {
         expect(screen.getByTestId('perf-sim-tick').textContent).toBe('Takt simulace: 42');
     });
 });
+
+// ── host metrics rows ─────────────────────────────────────────────────────────
+
+describe('PerfHud — host metrics', () => {
+    it('renders both host rows', async () => {
+        const { PerfHud } = await importPerfHud();
+        perfStore.getState().setVisible(true);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByTestId('perf-host-heap')).toBeTruthy();
+        expect(screen.getByTestId('perf-recorded-actions')).toBeTruthy();
+    });
+
+    it('displays "—" for both when no push has arrived, never 0', async () => {
+        // The distinction the whole nullability exists for: unavailable is not
+        // a reading. A host row showing "0" would claim a measured empty heap
+        // and an empty recording.
+        const { PerfHud } = await importPerfHud();
+        perfStore.getState().setVisible(true);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
+
+        const hostHeap = screen.getByTestId('perf-host-heap').textContent ?? '';
+        const recorded = screen.getByTestId('perf-recorded-actions').textContent ?? '';
+        expect(hostHeap).toContain('—');
+        expect(recorded).toContain('—');
+        expect(hostHeap).not.toContain('0');
+        expect(recorded).not.toContain('0');
+    });
+
+    it('displays a real 0 count as 0, distinguishing it from unavailable', async () => {
+        // The other half: a started recording holding no action yet reads 0,
+        // and that must not render as "—".
+        const { PerfHud } = await importPerfHud();
+        perfStore.getState().setVisible(true);
+        perfStore.getState().setHostMetrics({ hostHeapMb: 0, recordedActionCount: 0 });
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByTestId('perf-recorded-actions').textContent).toBe('Recorded actions: 0');
+        expect(screen.getByTestId('perf-host-heap').textContent).toBe('Host heap: 0.0 MB');
+    });
+
+    it('renders a pushed reading, and the two heaps are separate rows', async () => {
+        const { PerfHud } = await importPerfHud();
+        perfStore.getState().setVisible(true);
+        perfStore.getState().setHostMetrics({ hostHeapMb: 61.5, recordedActionCount: 12_345 });
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByTestId('perf-host-heap').textContent).toBe('Host heap: 61.5 MB');
+        expect(screen.getByTestId('perf-recorded-actions').textContent).toBe(
+            'Recorded actions: 12345',
+        );
+        // The renderer's own heap row is untouched — different process.
+        expect(screen.getByTestId('perf-heap').textContent).toContain('—');
+    });
+});

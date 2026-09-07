@@ -972,6 +972,28 @@ export interface ContentAPI {
 // ─── game namespace ───────────────────────────────────────────────────────────
 
 /** Action dispatch + snapshot stream (§4.1). */
+/**
+ * Host-process performance metrics, pushed to the renderer at a low rate for
+ * the Performance HUD (§4.16).
+ *
+ * Only scalars cross (Invariant #3). Both fields are nullable and `null` means
+ * UNAVAILABLE rather than zero — no live recording is a different state from a
+ * recording holding no actions, and the HUD renders the two differently.
+ */
+export interface HostPerfMetrics {
+    /**
+     * Main-process heap usage in megabytes. The HUD's other heap reading is the
+     * RENDERER's, so a host-side buffer could grow without moving it.
+     */
+    readonly hostHeapMb: number | null;
+    /**
+     * Actions held by the live deterministic recording, or `null` when none is
+     * running. The recorder's own count — not a capped diagnostic array's
+     * length, which saturates and is thereafter constant.
+     */
+    readonly recordedActionCount: number | null;
+}
+
 export interface GameAPI {
     /** Dispatch a validated EngineAction built via ActionRegistry.build(). */
     sendAction(action: EngineAction): void;
@@ -979,6 +1001,12 @@ export interface GameAPI {
     onSnapshot(cb: (snapshot: PlayerSnapshot) => void): Unsubscribe;
     /** Stream of authoritative tick-only clock updates for the active viewer. */
     onTick(cb: (tick: number) => void): Unsubscribe;
+    /**
+     * Stream of {@link HostPerfMetrics} for the Performance HUD, pushed on the
+     * host's own low-rate timer rather than per beat — at a beat rate the push
+     * would be the cost it measures.
+     */
+    onHostMetrics(cb: (metrics: HostPerfMetrics) => void): Unsubscribe;
     /**
      * Stream of {@link ActionRejection}s for actions dispatched from this
      * renderer that main refused to apply. Mirror of the §4.3 WebSocket

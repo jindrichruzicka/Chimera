@@ -60,6 +60,8 @@ export function PerfHud(): React.ReactElement | null {
     const actionRoundTripMs = usePerfStore((s) => s.sample.actionRoundTripMs);
     const pingMs = usePerfStore((s) => s.sample.pingMs);
     const heapMb = usePerfStore((s) => s.sample.heapMb);
+    const hostHeapMb = usePerfStore((s) => s.sample.hostHeapMb);
+    const recordedActionCount = usePerfStore((s) => s.sample.recordedActionCount);
     const drawCalls = usePerfStore((s) => s.sample.drawCalls);
     const triangles = usePerfStore((s) => s.sample.triangles);
     const visible = usePerfStore((s) => s.visible);
@@ -131,6 +133,12 @@ export function PerfHud(): React.ReactElement | null {
             </div>
             <div data-testid="perf-heap">
                 {t(PERF_HUD_KEYS.heap, { value: fmt(heapMb, ' MB') })}
+            </div>
+            <div data-testid="perf-host-heap">
+                {t(PERF_HUD_KEYS.hostHeap, { value: fmt(hostHeapMb, ' MB') })}
+            </div>
+            <div data-testid="perf-recorded-actions">
+                {t(PERF_HUD_KEYS.recordedActions, { value: fmtInt(recordedActionCount) })}
             </div>
             <div data-testid="perf-draw-calls">
                 {t(PERF_HUD_KEYS.drawCalls, { value: drawCalls })}

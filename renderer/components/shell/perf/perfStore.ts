@@ -23,10 +23,7 @@ import type { StoreApi } from 'zustand';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-/**
- * The live performance snapshot displayed by PerfHud.
- * All ten fields defined in §4.16.
- */
+/** The live performance snapshot displayed by PerfHud (§4.16). */
 export interface PerfSample {
     /** Frames per second; rolling 1 s window computed by PerfProbe. */
     readonly fps: number;
@@ -44,6 +41,18 @@ export interface PerfSample {
     readonly pingMs: number | null;
     /** Renderer heap usage in MB; null outside Chromium / when unavailable. */
     readonly heapMb: number | null;
+    /**
+     * MAIN-process heap usage in MB, pushed from the host; null until a push
+     * arrives. Distinct from {@link heapMb}, which is this renderer's own — a
+     * host-side buffer can grow to any size without moving that one.
+     */
+    readonly hostHeapMb: number | null;
+    /**
+     * Actions held by the host's live deterministic recording; null when no
+     * recording is running or no push has arrived. The recorder's own count,
+     * not a capped diagnostic array's length.
+     */
+    readonly recordedActionCount: number | null;
     /** R3F draw calls from gl.info.render.calls. */
     readonly drawCalls: number;
     /** R3F triangle count from gl.info.render.triangles. */
@@ -123,6 +132,18 @@ export interface PerfStoreState {
     sampleHeap(): void;
 
     /**
+     * Write the host-process metrics carried by one `game.onHostMetrics` push.
+     * Both fields pass through as received: `null` means UNAVAILABLE and must
+     * not be coerced to 0, which the HUD renders as a real reading.
+     * Called by bootstrapPerfStore (not by components).
+     * @internal
+     */
+    setHostMetrics(metrics: {
+        readonly hostHeapMb: number | null;
+        readonly recordedActionCount: number | null;
+    }): void;
+
+    /**
      * Re-prune the rolling actionsPerSec window against the current time so the
      * count decays to 0 between snapshot arrivals (turn-based games receive
      * snapshots sporadically, so arrival-driven recomputes alone leave the last
@@ -170,6 +191,8 @@ const INITIAL_SAMPLE: PerfSample = {
     actionRoundTripMs: null,
     pingMs: null,
     heapMb: null,
+    hostHeapMb: null,
+    recordedActionCount: null,
     drawCalls: 0,
     triangles: 0,
 };
@@ -254,6 +277,16 @@ export function createPerfStore(): StoreApi<PerfStoreState> {
             const heapMb = readHeapMb();
             set((state) => ({
                 sample: { ...state.sample, heapMb },
+            }));
+        },
+
+        setHostMetrics(metrics): void {
+            set((state) => ({
+                sample: {
+                    ...state.sample,
+                    hostHeapMb: metrics.hostHeapMb,
+                    recordedActionCount: metrics.recordedActionCount,
+                },
             }));
         },
 

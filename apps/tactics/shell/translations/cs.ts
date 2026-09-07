@@ -284,6 +284,8 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
     'engine.perfHud.actionRtt': 'RTT akce: {value}',
     'engine.perfHud.ping': 'Ping: {value}',
     'engine.perfHud.heap': 'Paměť: {value}',
+    'engine.perfHud.hostHeap': 'Paměť hostitele: {value}',
+    'engine.perfHud.recordedActions': 'Zaznamenané akce: {value}',
     'engine.perfHud.drawCalls': 'Draw calls: {value}',
     'engine.perfHud.triangles': 'Trojúhelníky: {value}',
 

@@ -110,6 +110,7 @@ import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { RealtimeTicker } from './runtime/RealtimeTicker.js';
 import { resolveE2eForcedTickerHz } from './runtime/e2e-realtime-seam.js';
 import { restampForHeartbeatHost } from './runtime/realtime-input.js';
+import { startHostMetricsPush } from './runtime/host-metrics-push.js';
 import {
     buildHostSessionPipeline,
     undoPolicyForMatchHistory,
@@ -165,6 +166,7 @@ import type {
     PlayerSnapshot as WirePlayerSnapshot,
 } from '@chimera-engine/networking';
 import {
+    GAME_HOST_METRICS_CHANNEL,
     GAME_REVEAL_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
     GAME_TICK_CHANNEL,
@@ -1899,6 +1901,26 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // Typed as `unknown` since the IPC boundary serialises to JSON and the
     // simulation-layer branded types are incompatible with the preload types.
     let lastSentPlayerSnapshot: unknown = null;
+
+    // Host-side Performance HUD metrics (§4.16). The HUD's other heap reading is
+    // the RENDERER's, so a host-side buffer could grow without moving it. Runs
+    // for the process lifetime rather than per session: the heap is process-wide,
+    // and `recordedActionCount()` already answers `null` when no recording is in
+    // progress, which the HUD renders as unavailable rather than as zero. Only
+    // scalars cross (Invariant #3).
+    const stopHostMetricsPush = startHostMetricsPush(
+        {
+            heapUsedBytes: () => process.memoryUsage().heapUsed,
+            recordedActionCount: () => replayManager.recordedActionCount(),
+        },
+        (metrics) => {
+            const win = mainWindow;
+            if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+                win.webContents.send(GAME_HOST_METRICS_CHANNEL, metrics);
+            }
+        },
+    );
+    app.on('before-quit', stopHostMetricsPush);
 
     // The single game the host runs (single-game lifecycle), sourced from the
     // game registry rather than named here.  Stamped on captured save files and

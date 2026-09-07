@@ -28,8 +28,14 @@ A lightweight floating overlay showing key performance numbers at a glance. Togg
 | Action round-trip  | `sendAction()` stamp → matching `onSnapshot()` tick advance                 | Per own-action |
 | Network ping (ms)  | `gameStore.latencyMs`, via `perfStoreBootstrap` — no producer today, see §6 | On change      |
 | Renderer heap (MB) | `performance.memory.usedJSHeapSize` (Chromium)                              | Every 1 s      |
+| Host heap (MB)     | main's `process.memoryUsage().heapUsed`, over `chimera:game:host-metrics`   | Every 1 s      |
+| Recorded actions   | `ReplayManager.recordedActionCount()`, over the same push                   | Every 1 s      |
 | R3F draw calls     | `gl.info.render.calls`                                                      | 500 ms         |
 | R3F triangles      | `gl.info.render.triangles`                                                  | 500 ms         |
+
+The last two are the HOST's, and are the reason the renderer's own heap reading is not enough: a main-process buffer can grow to any size while `heapMb` sits still. They arrive on main's own 1 Hz timer (`startHostMetricsPush`) rather than per beat — at a beat rate the push would be the cost it measures — and both are `number | null`, where `null` means UNAVAILABLE (no push yet, or no recording running) and renders as `—`. A recording holding no action reads `0`, which is a different row.
+
+`recordedActionCount` is the RECORDER's count. The similar-looking `PerfStats.totalActionCount` is the debug bridge's own array length, capped by `DEBUG_ACTION_LOG_CAPACITY` and constant once saturated, and the whole debug panel exists only under `CHIMERA_DEBUG=1` outside production — so it is not a growth metric and not present in a shipped game.
 
 Numbers display with colour markers — green / amber / red — against configurable thresholds (e.g. FPS < 30 = red).
 
@@ -58,6 +64,8 @@ interface PerfSample {
     actionRoundTripMs: number | null;
     pingMs: number | null;
     heapMb: number | null;
+    hostHeapMb: number | null;
+    recordedActionCount: number | null;
     drawCalls: number;
     triangles: number;
 }

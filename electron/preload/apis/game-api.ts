@@ -19,12 +19,17 @@ import type {
     CommitmentReveal,
     EngineAction,
     GameAPI,
+    HostPerfMetrics,
     PlayerSnapshot,
     Unsubscribe,
 } from '../api-types.js';
 import type { IpcListener, PushListenerPort } from '../shared/listener.js';
 import { subscribePush, subscribeValidatedPush } from '../shared/listener.js';
-import { ActionRejectionSchema, CommitmentRevealSchema } from '../shared/schemas.js';
+import {
+    ActionRejectionSchema,
+    CommitmentRevealSchema,
+    HostPerfMetricsSchema,
+} from '../shared/schemas.js';
 
 /** `ipcRenderer.send` target for {@link GameAPI.sendAction}. */
 export const GAME_SEND_ACTION_CHANNEL = 'chimera:game:send-action';
@@ -38,6 +43,13 @@ export const GAME_SNAPSHOT_CHANNEL = 'chimera:game:snapshot';
 
 /** `ipcRenderer.on` target for authoritative tick-only clock updates. */
 export const GAME_TICK_CHANNEL = 'chimera:game:tick';
+
+/**
+ * `ipcRenderer.on` target for {@link GameAPI.onHostMetrics}. Main pushes
+ * {@link HostPerfMetrics} on its own low-rate timer — deliberately not on the
+ * beat, where the push would be the cost it measures.
+ */
+export const GAME_HOST_METRICS_CHANNEL = 'chimera:game:host-metrics';
 
 /**
  * `ipcRenderer.on` target for {@link GameAPI.onActionRejected}. Main pushes
@@ -98,6 +110,17 @@ export function createGameApi(ipc: GameApiIpcPort): GameAPI {
             subscribePush<PlayerSnapshot>(ipc, GAME_SNAPSHOT_CHANNEL, cb),
         onTick: (cb: (tick: number) => void): Unsubscribe =>
             subscribePush<number>(ipc, GAME_TICK_CHANNEL, cb),
+        // Schema-validated: the HUD renders `null` as "unavailable" and a number
+        // as a reading, so a malformed push must be refused at the boundary
+        // rather than reaching a formatter as `undefined` and displaying as a
+        // third, unintended state.
+        onHostMetrics: (cb: (metrics: HostPerfMetrics) => void): Unsubscribe =>
+            subscribeValidatedPush<HostPerfMetrics>(
+                ipc,
+                GAME_HOST_METRICS_CHANNEL,
+                HostPerfMetricsSchema,
+                cb,
+            ),
         // Schema-validated because a malformed REJECT would otherwise
         // propagate as garbage into the renderer error boundary — the
         // channel-name-aware `PreloadIpcValidationError` thrown by

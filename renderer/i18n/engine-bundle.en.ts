@@ -298,6 +298,8 @@ export const engineBundleEn: TranslationBundle = {
     'engine.perfHud.actionRtt': 'Action RTT: {value}',
     'engine.perfHud.ping': 'Ping: {value}',
     'engine.perfHud.heap': 'Heap: {value}',
+    'engine.perfHud.hostHeap': 'Host heap: {value}',
+    'engine.perfHud.recordedActions': 'Recorded actions: {value}',
     'engine.perfHud.drawCalls': 'Draw calls: {value}',
     'engine.perfHud.triangles': 'Triangles: {value}',
 
