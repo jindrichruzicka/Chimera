@@ -158,6 +158,8 @@ chimera/
 │   │   ├── game-manifest-contract.ts # GameManifest + resolvers; see §4.2.1
 │   │   ├── game-screen-contract.ts  # GameScreenRegistry, GameHudProps, GameEventAudioBinding
 │   │   ├── engine-contract.ts       # EngineAction envelope + TypedAction<T,P>; the reduce-time contract
+│   │   ├── snapshot-diff.ts         # Structural diff of two snapshots (added/changed/removed paths)
+│   │   ├── snapshot-delta.ts        # After-only form of that diff, plus applySnapshotDelta() for the receiver
 │   │   └── …                        # The remaining shared contracts (messages, chat, lobby, logging, snapshot, …)
 │   ├── persistence/                 # Save/load — pure serialisation logic, zero FS/IPC deps
 │   │   ├── SaveFile.ts              # SaveFile schema: checkpoint snapshot + delta action log + metadata
@@ -179,7 +181,6 @@ chimera/
 │   ├── debug/                       # Debug-mode only — gate folds to false in packaged builds; graph pruned, not shipped
 │   │   ├── SnapshotRingBuffer.ts    # Observer: records last N full GameSnapshots after each ActionPipeline step
 │   │   ├── SnapshotInspector.ts     # Facade: query API — get/reconstruct/diff snapshots; project to a PlayerId
-│   │   ├── SnapshotDiff.ts          # Structural diff of two GameSnapshots (added/changed/removed fields)
 │   │   └── DebugProtocol.ts         # Typed request/response message shapes for debug IPC channel
 │   └── index.ts                     # Public API of simulation engine
 │

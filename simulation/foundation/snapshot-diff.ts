@@ -1,13 +1,18 @@
 /**
- * simulation/debug/SnapshotDiff.ts
+ * simulation/foundation/snapshot-diff.ts
  *
- * Pure structural differ over two GameSnapshots backing the Debug Inspector
- * Diff View (§4.12 — Runtime Debug Layer).
+ * Pure structural differ over two snapshots, in the contract leaf
+ * `simulation/foundation/` — pure helpers with no imports above them.
  *
- * Invariant #31: lives in the debug-only module graph, loaded exclusively
- * under `IS_DEBUG_MODE` via the `@chimera-engine/simulation/debug` subpath barrel.
- * Pure and deterministic — no I/O, no clock, no randomness, no imports
- * outside `simulation/`.
+ * `TState` is constrained to `{ tick: number }` and nothing more — the single
+ * field the header needs — so it takes an authoritative `GameSnapshot` and a
+ * projected `PlayerSnapshot` alike. The latter carries no `seed` and no
+ * `timers` by design (Invariant #3), so a `BaseGameSnapshot` constraint would
+ * admit it only through a cast, and the cast would erase exactly the
+ * distinction the invariant rests on.
+ *
+ * Pure and deterministic — no I/O, no clock, no randomness, and no imports at
+ * all: this module is a leaf of the contract leaf.
  *
  * Diff semantics:
  * - Snapshots are assumed JSON-plain (no Map/Date/class instances) — the
@@ -35,8 +40,6 @@
  * Values in entries are shared by reference (never cloned): snapshots are
  * immutable, so sharing is safe and the differ never copies state.
  */
-
-import type { BaseGameSnapshot } from '../engine/types.js';
 
 /** One structural difference at a dot-delimited JSON path. */
 export interface DiffEntry {
@@ -145,7 +148,7 @@ const walkArray = (
  * summary counts. `fromTick`/`toTick` come from the snapshots themselves —
  * the snapshot's own `tick` field is the single source of truth.
  */
-export function diffSnapshots<TState extends BaseGameSnapshot>(
+export function diffSnapshots<TState extends { readonly tick: number }>(
     from: Readonly<TState>,
     to: Readonly<TState>,
 ): SnapshotDiff {

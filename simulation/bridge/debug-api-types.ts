@@ -27,7 +27,7 @@ import type {
     TickDurationSample,
     TickEntry,
 } from '../debug/DebugProtocol.js';
-import type { DiffEntry, SnapshotDiff } from '../debug/SnapshotDiff.js';
+import type { DiffEntry, SnapshotDiff } from '../foundation/snapshot-diff.js';
 import type { ActionHistoryEntry } from '../engine/UndoManager.js';
 import type { PlayerId } from '../engine/types.js';
 import type { PlayerSnapshot } from '../projection/StateProjector.js';

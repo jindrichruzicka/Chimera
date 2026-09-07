@@ -1,38 +1,59 @@
 /**
- * simulation/debug/SnapshotDiff.test.ts
+ * simulation/foundation/snapshot-diff.test.ts
  *
- * TDD tests for diffSnapshots — pure structural differ over two
- * GameSnapshots backing the Debug Inspector Diff View.
+ * Tests for `diffSnapshots` — the pure structural differ behind the Debug
+ * Inspector Diff View.
  *
  * Architecture reference: §4.12 (runtime-debug-layer.md)
- * Task: F47 / T2
  *
- * Tests are written FIRST (red) before SnapshotDiff.ts exists.
- * They express the acceptance criteria from and the §10.1 test
- * scenario: "Identical → empty; added entity → one `added` entry; changed
- * HP → one `changed` entry with before/after."
+ * Fixtures are declared HERE rather than imported from `simulation/engine`,
+ * for two reasons that are the point of this module rather than style:
+ * `simulation/foundation` is the contract leaf and imports nothing above it,
+ * and the differ's contract is `{ tick: number }` — a suite that could only
+ * build authoritative-shaped state would stay green if the constraint were
+ * tightened back to `BaseGameSnapshot`.
  */
 
 import { describe, it, expect } from 'vitest';
-import { diffSnapshots } from './SnapshotDiff.js';
-import type { DiffEntry } from './SnapshotDiff.js';
-import { entityId, gamePhase, playerId } from '../engine/types.js';
-import type { BaseEntityState, BaseGameSnapshot, EntityId, GameEvent } from '../engine/types.js';
+import { diffSnapshots } from './snapshot-diff.js';
+import type { DiffEntry } from './snapshot-diff.js';
+import type { EntityId, GamePhase, GameResult, PlayerId } from './engine-contract.js';
+import type { ObservedEntityState, PlayerSnapshot } from './snapshot-contract.js';
 
 // ─── Test fixtures ─────────────────────────────────────────────────────
 
-interface TestEntity extends BaseEntityState {
+const entityId = (raw: string): EntityId => raw as EntityId;
+const playerId = (raw: string): PlayerId => raw as PlayerId;
+const gamePhase = (raw: string): GamePhase => raw as GamePhase;
+
+interface TestEntity {
+    readonly id: EntityId;
     readonly hp?: number;
     readonly shield?: number;
 }
 
-interface TestEvent extends GameEvent {
+interface TestEvent {
+    readonly type: string;
     readonly payload?: { readonly x: number };
 }
 
-interface TestSnapshot extends BaseGameSnapshot {
-    readonly entities: Record<EntityId, TestEntity>;
+/**
+ * Authoritative-shaped state — what the Inspector diffs. Mirrors
+ * `BaseGameSnapshot`'s fields (`seed` and `timers` included) without importing
+ * it, so this suite stays inside the contract leaf.
+ */
+interface TestSnapshot {
+    readonly tick: number;
+    readonly seed: number;
+    readonly players: Readonly<Record<string, { readonly id: PlayerId }>>;
+    readonly entities: Readonly<Record<string, TestEntity>>;
+    readonly phase: GamePhase;
     readonly events: readonly TestEvent[];
+    readonly turnClock?: { readonly activePlayerId: PlayerId; readonly deadlineMs: number };
+    readonly turnNumber: number;
+    readonly hostPlayerId?: PlayerId;
+    readonly timers: Readonly<Record<string, unknown>>;
+    readonly gameResult: GameResult | null;
 }
 
 const u1 = entityId('unit-1');
@@ -49,6 +70,33 @@ const makeSnapshot = (overrides: Partial<TestSnapshot> = {}): TestSnapshot => ({
     turnNumber: 0,
     timers: {},
     gameResult: null,
+    ...overrides,
+});
+
+/** A game's own projected entity — `ObservedEntityState` plus gameplay fields. */
+interface TestObservedEntity extends ObservedEntityState {
+    readonly x: number;
+}
+
+/**
+ * Projected, viewer-facing state. It is NOT a `BaseGameSnapshot`: no `seed`,
+ * no `timers` (Invariant #3).
+ */
+interface TestPlayerSnapshot extends PlayerSnapshot {
+    readonly entities: Readonly<Record<EntityId, TestObservedEntity>>;
+}
+
+const makePlayerSnapshot = (overrides: Partial<TestPlayerSnapshot> = {}): TestPlayerSnapshot => ({
+    tick: 0,
+    viewerId: p1,
+    players: { [p1]: { id: p1 } },
+    entities: {},
+    phase: gamePhase('test'),
+    events: [],
+    gameResult: null,
+    commitments: {},
+    undoMeta: { canUndo: false, canRedo: false },
+    isMyTurn: true,
     ...overrides,
 });
 
@@ -307,5 +355,58 @@ describe('diffSnapshots — purity and determinism', () => {
             turnNumber: 1,
         });
         expect(diffSnapshots(from, to)).toEqual(diffSnapshots(from, to));
+    });
+});
+
+// ─── Projected player snapshots ───────────────────────────────────────────────
+
+describe('diffSnapshots — projected player snapshots', () => {
+    // A `PlayerSnapshot` carries no `seed` and no `timers` (Invariant #3), so
+    // every case here fails to COMPILE under a `BaseGameSnapshot` constraint —
+    // no cast is used, deliberately, because a cast is exactly what would hide
+    // that.
+    it('reports no entries for two structurally equal projections', () => {
+        const diff = diffSnapshots(
+            makePlayerSnapshot({ tick: 3 }),
+            makePlayerSnapshot({ tick: 3 }),
+        );
+        expect(diff.entries).toEqual([]);
+        expect(diff.summary).toEqual({ added: 0, removed: 0, changed: 0 });
+    });
+
+    it('reports an entity that entered the projection as one added entry', () => {
+        const from = makePlayerSnapshot();
+        const to = makePlayerSnapshot({ entities: { [u1]: { id: u1, x: 1 } } });
+        expect(diffSnapshots(from, to).entries).toEqual([
+            { path: 'entities.unit-1', kind: 'added', after: { id: u1, x: 1 } },
+        ]);
+    });
+
+    it('reports an entity that left the projection as one removed entry', () => {
+        // A fog-hidden entity is ABSENT from a projection, never null — so
+        // "gone" has to be a `removed` entry rather than a `changed` one to
+        // `null`, or the viewer could never be told to drop it.
+        const from = makePlayerSnapshot({ entities: { [u1]: { id: u1, x: 1 } } });
+        const to = makePlayerSnapshot();
+        expect(diffSnapshots(from, to).entries).toEqual([
+            { path: 'entities.unit-1', kind: 'removed', before: { id: u1, x: 1 } },
+        ]);
+    });
+
+    it('reports a changed entity field at its full path', () => {
+        const from = makePlayerSnapshot({ entities: { [u1]: { id: u1, x: 1 } } });
+        const to = makePlayerSnapshot({ entities: { [u1]: { id: u1, x: 2 } } });
+        expect(diffSnapshots(from, to).entries).toEqual([
+            { path: 'entities.unit-1.x', kind: 'changed', before: 1, after: 2 },
+        ]);
+    });
+
+    it('derives fromTick/toTick from the projections themselves', () => {
+        const diff = diffSnapshots(
+            makePlayerSnapshot({ tick: 4 }),
+            makePlayerSnapshot({ tick: 5 }),
+        );
+        expect(diff.fromTick).toBe(4);
+        expect(diff.toTick).toBe(5);
     });
 });

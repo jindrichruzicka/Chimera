@@ -95,7 +95,7 @@ The last column matters. The first two rows are asserted against a real esbuild 
 
 Two further things this deliberately does **not** do:
 
-- It does not remove `simulation/debug/*` from the source tree. That module is a public `./debug` subpath, and `DebugProtocol` / `SnapshotDiff` have type-only importers reaching the renderer — type-only, so they cost zero runtime bytes. Absence from the _bundle_ is the goal, not deletion.
+- It does not remove `simulation/debug/*` from the source tree. That module is a public `./debug` subpath, and `DebugProtocol` has type-only importers reaching the renderer — type-only, so they cost zero runtime bytes. Absence from the _bundle_ is the goal, not deletion.
 - It does not minify, so the dead `if (false) { … }` statements survive in the packaged main bundle with their imports rewritten to `await null`. They reference `startDebugBridge` by name while reaching no module — which is why the bundle-content assertion in `apps/tactics/electron/__tests__/packaged-bundle-content.test.ts` keys off graph-internal names instead.
 
 That assertion is the enforcement: it runs a real esbuild over the production bundle plan and fails if any marker reappears, with an inverted dev-build case so it cannot pass vacuously.
@@ -187,8 +187,13 @@ export class SnapshotInspector {
 
 ## SnapshotDiff
 
+Lives in the contract leaf and is re-exported by
+`@chimera-engine/simulation/debug` — see `simulation/debug/index.test.ts`. Its
+`TState` is constrained to `{ tick: number }`, which a projected
+`PlayerSnapshot` satisfies — it has no `seed` and no `timers` (Invariant #3).
+
 ```typescript
-// simulation/debug/SnapshotDiff.ts
+// simulation/foundation/snapshot-diff.ts
 
 export interface DiffEntry {
     path: string; // Dot-delimited JSON path: 'entities.unit-1.hp'

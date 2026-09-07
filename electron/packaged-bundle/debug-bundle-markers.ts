@@ -30,9 +30,10 @@
  *   drops the modules, but with `minify: false` it leaves the dead
  *   `if (false) { … }` statements in place, rewritten to `await null`. Those
  *   residual lines name the calls while reaching no module at all.
- * - `diffSnapshots` — ambiguous. A debug export (`simulation/debug/SnapshotDiff.ts`)
- *   AND an unrelated replay function (`electron/main/replay/CompressedReplaySerializer.ts`)
- *   that ships in every build, so its presence proves nothing.
+ * - `diffSnapshots` — ambiguous. A debug-barrel export
+ *   (`simulation/foundation/snapshot-diff.ts`) AND an unrelated replay function
+ *   (`electron/main/replay/CompressedReplaySerializer.ts`) that ships in every
+ *   build, so its presence proves nothing.
  *
  * Each marker below was verified by building both ways: present in dev, absent
  * packaged. Two are deliberately narrower than the obvious choice:

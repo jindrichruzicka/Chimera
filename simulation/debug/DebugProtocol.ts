@@ -18,7 +18,7 @@
 import type { BaseGameSnapshot, PlayerId } from '../engine/types.js';
 import type { ActionHistoryEntry } from '../engine/UndoManager.js';
 import type { PlayerSnapshot } from '../projection/StateProjector.js';
-import type { SnapshotDiff } from './SnapshotDiff.js';
+import type { SnapshotDiff } from '../foundation/snapshot-diff.js';
 
 // ─── Inspector data shapes ────────────────────────────────────────────────────
 

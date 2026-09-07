@@ -4,10 +4,7 @@
 // projection, for the Inspector's Projection Explorer (§4.12).
 //
 // Paths use the same dot-delimited convention as the simulation's snapshot
-// differ (root `''`, array indices as numbers-as-strings). The walk is
-// deliberately re-implemented here: the renderer must not import
-// `simulation/debug` at runtime (Invariant #27), so sharing the simulation
-// implementation is not an option.
+// differ (root `''`, array indices as numbers-as-strings).
 
 export type ProjectionDiffKind = 'hidden' | 'masked' | 'extra';
 

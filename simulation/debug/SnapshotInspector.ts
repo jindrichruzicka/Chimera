@@ -20,8 +20,8 @@
  * and log entries are shared by reference and never cloned or mutated.
  */
 
-import { diffSnapshots } from './SnapshotDiff.js';
-import type { SnapshotDiff } from './SnapshotDiff.js';
+import { diffSnapshots } from '../foundation/snapshot-diff.js';
+import type { SnapshotDiff } from '../foundation/snapshot-diff.js';
 import type { SnapshotRingBuffer } from './SnapshotRingBuffer.js';
 import type { PerfStats, TickDurationSample, TickEntry } from './DebugProtocol.js';
 import type { BaseGameSnapshot, PlayerId } from '../engine/types.js';

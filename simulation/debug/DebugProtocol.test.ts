@@ -25,7 +25,7 @@ import { entityId, gamePhase, playerId } from '../engine/types.js';
 import type { BaseGameSnapshot, EntityId } from '../engine/types.js';
 import type { ActionHistoryEntry } from '../engine/UndoManager.js';
 import type { PlayerSnapshot } from '../projection/StateProjector.js';
-import type { SnapshotDiff } from './SnapshotDiff.js';
+import type { SnapshotDiff } from '../foundation/snapshot-diff.js';
 
 // ─── Test fixtures ─────────────────────────────────────────────────────
 

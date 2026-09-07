@@ -27,7 +27,7 @@ import {
 } from './SnapshotInspector.js';
 import type { InspectorMemento } from './SnapshotInspector.js';
 import { SnapshotRingBuffer } from './SnapshotRingBuffer.js';
-import { diffSnapshots } from './SnapshotDiff.js';
+import { diffSnapshots } from '../foundation/snapshot-diff.js';
 import { gamePhase, playerId } from '../engine/types.js';
 import type { BaseGameSnapshot, PlayerId } from '../engine/types.js';
 import type { ActionHistoryEntry } from '../engine/UndoManager.js';
