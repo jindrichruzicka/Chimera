@@ -46,6 +46,12 @@ interface GameAPI {
      * use `useSendAction()` and the Zustand store instead.
      */
     onSnapshot(listener: (snapshot: PlayerSnapshot) => void): () => void;
+    /**
+     * Subscribe to the changed paths between the last whole snapshot this
+     * window was sent and the new one (§4.3 `SNAPSHOT_DELTA`). The bridge
+     * applies them with `applySnapshotDelta`; §4.4 has that side.
+     */
+    onSnapshotDelta(listener: (delta: SnapshotDelta) => void): () => void;
     /** Subscribe to action rejection notifications. */
     onActionRejected(listener: (rejection: ActionRejection) => void): () => void;
 }
@@ -56,6 +62,8 @@ interface ActionRejection {
     readonly reason: string; // Human-readable reason for developer/debug use
 }
 ```
+
+An excerpt: the interface is declared in full in `simulation/bridge/api-types.ts`.
 
 ---
 

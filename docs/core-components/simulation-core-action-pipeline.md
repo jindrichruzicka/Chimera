@@ -229,10 +229,15 @@ interface HistoryContext {
     readonly history: ActionHistory;
 }
 
-// Stage 7 only
+// Stage 7 only — the callback (StateBroadcaster) projects; `options.forceFull`
+// marks the engine:sync_request wave, which the callback cannot infer
 interface BroadcastContext {
-    readonly projector: StateProjector;
-    readonly broadcast: (snapshot: PlayerSnapshot, to: PlayerId) => void;
+    readonly broadcast?: (
+        snapshot: Readonly<BaseGameSnapshot>,
+        to: PlayerId,
+        options: BroadcastOptions,
+    ) => void;
+    readonly broadcastTick?: (tick: number, to: PlayerId) => void;
 }
 
 // Stage 3 only
