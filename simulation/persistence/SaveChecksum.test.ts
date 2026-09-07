@@ -35,6 +35,23 @@ function makeBody(): SaveBody {
 // ─── computeBodyChecksum ──────────────────────────────────────────────────────
 
 describe('computeBodyChecksum', () => {
+    it('rejects a bigint in the checkpoint rather than hashing a degraded body (Invariant #75)', async () => {
+        // The digest is over `JSON.stringify` of the body, which throws on a
+        // bigint: a `FixedPoint` in a checkpoint entity can no more be
+        // checksummed than saved. A claim pin, green at birth — see the
+        // matching pins in `SaveFile.test.ts`.
+        const body = makeBody();
+        const withBigint: SaveBody = {
+            ...body,
+            checkpoint: {
+                ...body.checkpoint,
+                entities: { 'e-1': { id: 'e-1', reach: 2n } },
+            } as unknown as SaveBody['checkpoint'],
+        };
+
+        await expect(computeBodyChecksum(withBigint)).rejects.toThrow(TypeError);
+    });
+
     it('returns a non-empty hex string', async () => {
         const checksum = await computeBodyChecksum(makeBody());
 

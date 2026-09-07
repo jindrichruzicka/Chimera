@@ -12,7 +12,7 @@ import { JsonSaveSerializer, MAX_SAVE_SIZE_CHARS } from './JsonSaveSerializer.js
 import { CURRENT_SCHEMA_VERSION, createDefaultMigrator, SaveParseError } from './SaveMigrator.js';
 import type { SaveFile } from './SaveFile.js';
 import type { GamePhase, BaseGameSnapshot } from '../engine/types.js';
-import { playerId as toPlayerId } from '../engine/types.js';
+import { entityId, playerId as toPlayerId } from '../engine/types.js';
 import type { GameTimer, TimerId } from '../engine/GameTimer.js';
 import type { CommitmentEnvelope } from '../projection/CommitmentScheme.js';
 import { toCommitmentId } from '../projection/CommitmentScheme.js';
@@ -105,6 +105,43 @@ describe('JsonSaveSerializer', () => {
         const raw = await serializer.serialize(makeSaveFile());
 
         expect(typeof raw).toBe('string');
+    });
+
+    // The two pins below hold Invariant #75's persistence half — a `FixedPoint`
+    // is a bigint, and this boundary is bare `JSON.stringify` / `JSON.parse`,
+    // which throws on one and never produces one. They are claim pins, green
+    // at birth: their red is the boundary learning a bigint replacer/reviver
+    // without the invariant and its doc comments being rewritten with it.
+    it('REFUSES a bigint in the checkpoint — serialize throws rather than degrading (Invariant #75)', async () => {
+        const serializer = new JsonSaveSerializer();
+        const file = makeSaveFile({
+            checkpoint: {
+                entities: { 'e-1': { id: 'e-1', reach: 2n } },
+            } as unknown as BaseGameSnapshot,
+        });
+
+        // `serialize` is Promise-typed but `JSON.stringify` throws before a
+        // promise exists; the async wrapper turns either shape into one
+        // rejection so the pin does not depend on which the caller sees.
+        await expect((async () => serializer.serialize(file))()).rejects.toThrow(TypeError);
+    });
+
+    it('does not revive a digit string in the checkpoint into a bigint', async () => {
+        const serializer = new JsonSaveSerializer();
+        const file = makeSaveFile({
+            checkpoint: {
+                entities: { 'e-1': { id: 'e-1', reach: '8589934592' } },
+            } as unknown as BaseGameSnapshot,
+        });
+
+        const result = await serializer.deserialize(await serializer.serialize(file));
+        const entity = result.checkpoint.entities[entityId('e-1')] as unknown as Record<
+            string,
+            unknown
+        >;
+
+        expect(typeof entity['reach']).toBe('string');
+        expect(entity['reach']).toBe('8589934592');
     });
 
     it('round-trip preserves all SaveFileHeader fields including optional thumbnailDataUrl', async () => {

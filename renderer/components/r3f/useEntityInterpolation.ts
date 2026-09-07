@@ -25,9 +25,8 @@
  * ## Presentation only
  *
  * The smoothed position is a plain `number` and it lives only here. It is never
- * put in an action payload, where Invariant #75 allows no `number` for a
- * fractional gameplay quantity, and it never reaches the snapshot, where
- * Invariant #44 requires an integer or a fixed-point representation.
+ * put in an action payload and it never reaches the snapshot (Invariants
+ * #44/#75).
  *
  * Architecture reference: §4.21 — Curves, Tweening & Interaction
  */

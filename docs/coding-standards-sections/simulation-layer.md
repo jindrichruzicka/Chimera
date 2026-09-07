@@ -14,7 +14,7 @@ tags: [simulation, determinism, reducer, GameSnapshot, FixedPoint, rng, coding-s
 
 1. **Action-driven clock only.** Time advances via `snapshot.tick`, never `Date.now()` or `performance.now()`.
 2. **Seeded RNG only.** All randomness flows through `ctx.rng` (xoshiro256\*\* seeded from `(snapshot.seed, snapshot.tick)`). No `Math.random()` anywhere in `simulation/` or `apps/*/simulation/`.
-3. **Integer arithmetic only in `GameSnapshot`.** All snapshot fields that participate in equality or arithmetic must be `bigint` (Q32.32 fixed-point via `FixedPoint`) or plain `number` integers. No `float` fields in `GameSnapshot`.
+3. **Integer arithmetic only in `GameSnapshot`.** All snapshot fields that participate in equality or arithmetic must be plain `number` integers — a fractional quantity as a scaled integer in a declared unit (§7.4). No `float` fields in `GameSnapshot`, and no `bigint` either: every persistence boundary is `JSON.stringify`, which throws on one.
 
 ## 7.2 Reducer purity
 
@@ -29,7 +29,8 @@ tags: [simulation, determinism, reducer, GameSnapshot, FixedPoint, rng, coding-s
 
 ## 7.4 Fixed-point arithmetic
 
-- Use `FixedPoint` (Q32.32 `bigint`) for all fractional simulation values. The `FixedPoint.fromFloat()` factory is forbidden inside `validate()`, `reduce()`, and all hot simulation paths. Use it only in content loaders for hard-coded constants.
+- A fractional gameplay quantity is STORED as a scaled integer `number` in a declared unit — milli-cells, basis points — never as a `FixedPoint` and never as a float (Invariants #44/#75). `FixedPoint` (Q32.32 `bigint`) is for the arithmetic that produces it — a ratio, a square root, a transcendental — and is converted with `toInt()`, or scaled and truncated, before the result reaches a `GameSnapshot` field or an `EngineAction.payload`. A `bigint` cannot cross any persistence boundary: every one is `JSON.stringify`, which throws on one.
+- The `FixedPoint.fromFloat()` factory is forbidden inside `validate()`, `reduce()`, and all hot simulation paths. Use it only in content loaders for hard-coded constants.
 - Prefer the named constants `FP_ZERO`, `FP_ONE`, `FP_HALF`, `FP_PI` over constructing equivalent values inline.
 
 ## 7.5 Snapshot retention

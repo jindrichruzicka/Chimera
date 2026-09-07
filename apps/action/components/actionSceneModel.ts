@@ -27,8 +27,8 @@ import { isActionGroundEntity, isActionPrimitiveEntity } from '../simulation/ent
  *
  * It lives HERE, on the renderer side, and not beside the arena extents it is
  * derived from. A fraction is exactly what `simulation/` may not carry
- * (Invariants #44/#75 — the only sanctioned fractional representation there is
- * `FixedPoint`), and this quantity has no business being one: nothing in a
+ * (Invariants #44/#75 — a fractional quantity there is a scaled integer in a
+ * declared unit), and this quantity has no business being one: nothing in a
  * reducer reads it, and a primitive's arena cell is an integer either way.
  */
 export const ACTION_PRIMITIVE_HEIGHT = 0.5;

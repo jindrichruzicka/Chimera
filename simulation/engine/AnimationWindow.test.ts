@@ -25,7 +25,9 @@
  *     shared empty closed-list, and builds no key or entry array on the way.
  *   `isEmpty` is true for an empty registry, false once a window is open, and
  *     stays true for an empty registry under a polluted `Object.prototype`.
- *   `open` refuses a non-integer or non-positive duration and a float payload.
+ *   `open` refuses a non-integer or non-positive duration and a payload value
+ *     that is not an integer `number` — a float, a `FixedPoint` (a bigint), and
+ *     a string as the positive control.
  *   Every verb is pure: a deep-frozen input throws nothing and still equals a
  *     pre-call clone.
  *
@@ -48,6 +50,7 @@ import { describe, it, expect, expectTypeOf, vi } from 'vitest';
 
 import type {
     AnimationWindowId,
+    AnimationWindowPayload,
     AnimationWindowRecord,
     AnimationWindowRegistry,
     ClosedAnimationWindow,
@@ -96,12 +99,15 @@ describe('AnimationWindowRecord', () => {
         expect(record.remainingBeats).toBe(3);
     });
 
-    it('accepts a FixedPoint payload value alongside an integer one', () => {
+    it('rejects a FixedPoint payload value — a bigint cannot be saved', () => {
         const reach: FixedPoint = fromInt(2);
         const record: AnimationWindowRecord = {
             id: WINDOW_ID,
             ownerId: OWNER,
             remainingBeats: 1,
+            // @ts-expect-error payload values are integer numbers (#44/#75): the
+            //                  registry is saved through `JSON.stringify`, which
+            //                  throws on a bigint, so a FixedPoint is refused.
             payload: { damage: 12, reach },
         };
 
@@ -113,7 +119,7 @@ describe('AnimationWindowRecord', () => {
             id: WINDOW_ID,
             ownerId: OWNER,
             remainingBeats: 1,
-            // @ts-expect-error payload values are integers or FixedPoint (#44/#75);
+            // @ts-expect-error payload values are integer numbers (#44/#75);
             //                  a string is not snapshot-resident numeric state.
             payload: { damageType: 'slashing' },
         };
@@ -284,17 +290,28 @@ describe('AnimationWindowManager.open', () => {
         expect(closed).toEqual([]);
     });
 
-    it('accepts a FixedPoint payload value', () => {
-        const reach: FixedPoint = fromInt(2);
+    it.each([
+        ['a FixedPoint', fromInt(2)],
+        ['a string', 'slashing'],
+    ])('throws RangeError on a payload carrying %s', (_label, value) => {
+        // The registry is serialised into saves through `JsonSaveSerializer`,
+        // which is bare `JSON.stringify`: it throws on a bigint, so a
+        // `FixedPoint` in a payload would make the match unsavable, and it is
+        // refused at the write, where the offending field is still known
+        // (Invariant #75). The string is the positive control that the guard
+        // is "an integer `number`" and not merely "not a float" — the type
+        // already forbids both, so each arrives through the cast a stale
+        // caller would use.
+        const payload = { reach: value } as unknown as AnimationWindowPayload;
 
-        const { next } = AnimationWindowManager.open(makeState(), {
-            id: WINDOW_ID,
-            ownerId: OWNER,
-            durationBeats: 1,
-            payload: { reach },
-        });
-
-        expect(next.animationWindows?.[WINDOW_ID]?.payload['reach']).toBe(reach);
+        expect(() =>
+            AnimationWindowManager.open(makeState(), {
+                id: WINDOW_ID,
+                ownerId: OWNER,
+                durationBeats: 1,
+                payload,
+            }),
+        ).toThrow(RangeError);
     });
 
     it.each([

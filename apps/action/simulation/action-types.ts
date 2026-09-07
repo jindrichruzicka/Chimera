@@ -13,7 +13,7 @@ import type { ActionPrimitiveShape } from './constants.js';
  * One velocity component. The whole vocabulary is three integers, so a
  * primitive moves at most one arena cell per axis per tick and the simulation
  * never needs a fractional quantity (Invariant #44 — and therefore never
- * engages Invariant #75's `FixedPoint` requirement, which governs fractional
+ * engages Invariant #75's scaled-integer rule, which governs fractional
  * gameplay state).
  */
 export type ActionVelocityComponent = -1 | 0 | 1;

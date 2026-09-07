@@ -169,4 +169,4 @@ return { ...state, timers: newTimers };
 ## Cross-References
 
 - [Simulation Core](simulation-core-action-pipeline.md) — `ReduceContext`, `ReductionContext.dispatch()`, pipeline stages
-- [Fixed-Point Math](fixed-point-math.md) — timer payloads may carry fixed-point values
+- [Fixed-Point Math](fixed-point-math.md) — why a saved timer payload carries no `FixedPoint`

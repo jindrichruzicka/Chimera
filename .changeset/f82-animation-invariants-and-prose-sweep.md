@@ -12,7 +12,7 @@ code falsified.
 
 **Invariant #129** (the last reserved slot, now authored) states that beat-owned gameplay windows
 are host-only — `StateProjector.project()`'s field allowlist omits the registry, so no window
-record ever crosses a boundary — that records are integer or `FixedPoint` throughout because the
+record ever crosses a boundary — that records are integers throughout because the
 registry is saved and replayed, that `AnimationWindowManager`'s three verbs are pure, and that
 within a match a window leaves through one of the manager's FOUR paths, each reported with a
 distinguishing reason: `'expired'`, `'owner-gone'` (checked first, so it stays the truthful reason

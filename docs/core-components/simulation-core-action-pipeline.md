@@ -351,13 +351,13 @@ Implementation: splitmix64 seed expansion → xoshiro256\*\* (fast, statisticall
 
 Cross-platform floating-point is not bit-exact. All `GameSnapshot` fields that participate in equality, checksums, or arithmetic must be integers.
 
-| Domain                  | Representation                     | Example                    |
-| ----------------------- | ---------------------------------- | -------------------------- |
-| Money                   | Integer — smallest currency unit   | `$3.50` → `350` (cents)    |
-| Grid position           | Integer coordinates                | `{ x: 3, y: 2 }`           |
-| Continuous position     | Integer fixed-point (Q16.16, etc.) | `x = 12345` means 12.345 m |
-| Percentages             | Integer basis points (0–10000)     | 37.5% → `3750`             |
-| Timestamps inside state | `tick` number only                 | never `Date.now()`         |
+| Domain                  | Representation                                             | Example                    |
+| ----------------------- | ---------------------------------------------------------- | -------------------------- |
+| Money                   | Integer — smallest currency unit                           | `$3.50` → `350` (cents)    |
+| Grid position           | Integer coordinates                                        | `{ x: 3, y: 2 }`           |
+| Continuous position     | Scaled integer — milli-units, Q16.16, etc. (Invariant #75) | `x = 12345` means 12.345 m |
+| Percentages             | Integer basis points (0–10000)                             | 37.5% → `3750`             |
+| Timestamps inside state | `tick` number only                                         | never `Date.now()`         |
 
 Floats are permitted inside the renderer (camera, animation, UI) but must never flow back into `GameSnapshot` or `EngineAction.payload`.
 
@@ -449,5 +449,5 @@ export default MoveEntityAction;
 - [Undo/Redo Policy](undo-redo-policy.md) — `UndoPolicy` interface, `DEFAULT_UNDO_POLICY`
 - [State Projection Interfaces](state-projection-interfaces.md) — `StateProjector`, `VisibilityRules`
 - [Content Database](content-database-data-refs.md) — `ContentDatabase` passed via `ReduceContext.db`
-- [Fixed-Point Math](fixed-point-math.md) — `FixedPoint` Q32.32 type for fractional simulation values
+- [Fixed-Point Math](fixed-point-math.md) — `FixedPoint` Q32.32 arithmetic for a fractional intermediate; the result is stored as a scaled integer (Invariant #75)
 - [Game Timers](game-timers.md) — `engine:tick` reducer + `ctx.dispatch` re-entry

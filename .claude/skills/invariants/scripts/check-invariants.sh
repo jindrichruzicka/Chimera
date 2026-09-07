@@ -660,10 +660,11 @@ check_grep "11" \
     apps/*/simulation apps/*/ai
 
 # ─── Check 21: no float literals in per-game simulation state (invariants 75, 44) ─
-# FixedPoint (bigint Q32.32) is the ONLY allowed fractional representation in a
-# game snapshot; floating-point is forbidden in simulation state (Invariants #44,
-# #75). Flags decimal number literals in per-game simulation logic
-# apps/<game>/simulation.
+# A fractional gameplay quantity in a game snapshot is a scaled integer, and
+# floating-point is forbidden in simulation state (Invariants #44, #75). Flags
+# decimal number literals in per-game simulation logic apps/<game>/simulation.
+# The other half of #75 — a FixedPoint bigint is never STORED — has no literal
+# shape to grep; it is held by the persistence pins the roll-call names.
 #
 # FP-suppression path (the highest false-positive risk in the set): a decimal in a
 # FULL-LINE comment — e.g. an architecture section citation like `§4.6` on a

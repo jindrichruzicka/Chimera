@@ -1,6 +1,6 @@
 ---
 title: 'Fixed-Point Math (Q32.32)'
-description: 'FixedPoint = bigint Q32.32, range/resolution, FP_* constants, fromInt/fromRatio/fromFloat/toFloat/toInt, arithmetic suite, transcendentals (sqrt/sin/cos/atan2), ESLint no-fromfloat-in-simulation rule, determinism golden-vector tests.'
+description: 'FixedPoint = bigint Q32.32, range/resolution, FP_* constants, fromInt/fromRatio/fromFloat/toFloat/toInt, arithmetic suite, transcendentals (sqrt/sin/cos/atan2), why a FixedPoint is never stored in a snapshot (Invariant #75), ESLint no-fromfloat-in-simulation rule, determinism golden-vector tests.'
 tags: [determinism, fixed-point, bigint, math, simulation, eslint]
 ---
 
@@ -99,14 +99,23 @@ export function eq(a: FixedPoint, b: FixedPoint): boolean;
 
 ## Rules of Use
 
-| Context                                        | Allowed                                          |
-| ---------------------------------------------- | ------------------------------------------------ |
-| Simulation state / `GameSnapshot` fields       | ✅ `FixedPoint` (`bigint`) for fractional values |
-| `validate()` / `reduce()` arithmetic           | ✅ `FixedPoint` only                             |
-| Content load (`simulation/content/loaders/**`) | ✅ `fromFloat()` once at load time               |
-| Renderer display (Three.js / CSS / React)      | ✅ `toFloat()` at boundary                       |
-| `number` for fractional game quantities        | ❌ violates invariant #44                        |
-| `Math.random()` inside simulation              | ❌ violates invariant #43                        |
+| Context                                         | Allowed                                                                 |
+| ----------------------------------------------- | ----------------------------------------------------------------------- |
+| Simulation state / `GameSnapshot` fields        | ✅ integer `number` — a fractional quantity as a scaled integer         |
+| `validate()` / `reduce()` arithmetic            | ✅ `FixedPoint` for a fractional intermediate; `toInt()` before storing |
+| Content load (`simulation/content/loaders/**`)  | ✅ `fromFloat()` once at load time                                      |
+| Renderer display (Three.js / CSS / React)       | ✅ `toFloat()` at boundary                                              |
+| `FixedPoint` in a snapshot or an action payload | ❌ violates invariant #75 — a `bigint` cannot be saved                  |
+| float `number` for fractional game quantities   | ❌ violates invariant #44                                               |
+| `Math.random()` inside simulation               | ❌ violates invariant #43                                               |
+
+---
+
+## Persistence
+
+`FixedPoint` is arithmetic, not storage. Every persistence boundary in the engine is bare `JSON.stringify`, which throws on a `bigint` rather than degrading; no reviver on the way back produces one. A `FixedPoint` placed in a `GameSnapshot` field or an `EngineAction.payload` therefore makes the match unsavable at the first autosave, which is why Invariant #75 stores a fractional quantity as a scaled integer `number` and keeps `FixedPoint` to the arithmetic that produces it. The pins are [`SaveFile.test.ts`](../../simulation/persistence/SaveFile.test.ts) › `REFUSES a bigint in the checkpoint`, [`SaveChecksum.test.ts`](../../simulation/persistence/SaveChecksum.test.ts) › `rejects a bigint in the checkpoint`, [`crc32.test.ts`](../../simulation/foundation/crc32.test.ts) › `throws TypeError when passed a bigint`, and [`AnimationWindow.test.ts`](../../simulation/engine/AnimationWindow.test.ts) › `throws RangeError on a payload carrying a FixedPoint` — refused at the write.
+
+The decision was between teaching every boundary a paired `bigint` replacer/reviver — with a save `schemaVersion` bump, a migrator step and a checksum that still verifies a save written before it — and relaxing the invariant to the representation Invariant #44 already blesses. The scaled integer is JSON-native and allocation-free on a realtime beat path; the replacer/reviver preserves `FixedPoint` as storage at the cost of a per-operation `bigint` allocation on every hot path that reads it. The engine takes the first.
 
 ---
 
@@ -132,15 +141,15 @@ The determinism test suite (§10.0) includes a golden-vector test:
 
 ## Invariants
 
-| #   | Rule                                                                                                                                                                                                                                  |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #75 | `FixedPoint` is the **only** allowed fractional representation in `GameSnapshot` and `EngineAction.payload`. A game that stores `number` for a fractional gameplay quantity violates invariant #44 even if it rounds consistently.    |
-| #76 | `fromFloat()` is permitted only at content-load time for hard-coded constants. It must not be called inside `validate()`, `reduce()`, or any hot simulation path. Enforced by `chimera/no-fromfloat-in-simulation` ESLint rule in CI. |
+| #   | Rule                                                                                                                                                                                                                                                                                                                                                          |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #75 | A fractional gameplay quantity in `GameSnapshot` or `EngineAction.payload` is a **scaled integer `number`** in a declared unit; `FixedPoint` is the arithmetic that produces it and is never stored, because every persistence boundary is `JSON.stringify`, which throws on a `bigint`. A float there violates invariant #44 even if it rounds consistently. |
+| #76 | `fromFloat()` is permitted only at content-load time for hard-coded constants. It must not be called inside `validate()`, `reduce()`, or any hot simulation path. Enforced by `chimera/no-fromfloat-in-simulation` ESLint rule in CI.                                                                                                                         |
 
 ---
 
 ## Cross-References
 
-- [Simulation Core](simulation-core-action-pipeline.md) — `FixedPoint` used in `GameSnapshot` fields
+- [Simulation Core](simulation-core-action-pipeline.md) — the integer / scaled-integer state rules a `FixedPoint` result is stored under
 - [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #42, #43, #44, #75, #76
 - [Curves & Tweening](curves-tweening-interaction.md) — renderer uses `toFloat()` at the R3F boundary

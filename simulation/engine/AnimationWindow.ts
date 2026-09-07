@@ -22,7 +22,6 @@
  */
 
 import type { EntityId } from '../foundation/engine-contract.js';
-import type { FixedPoint } from './FixedPoint.js';
 import type { BaseGameSnapshot } from './types.js';
 
 /**
@@ -39,12 +38,14 @@ export type AnimationWindowId = string & { readonly __brand: 'AnimationWindowId'
 /**
  * Snapshot-resident payload a window carries for the beat sweep that reads it.
  *
- * Values are INTEGERS or {@link FixedPoint} only (Invariants #44/#75): this
- * object lives inside `GameSnapshot`, is serialised into saves and is replayed,
- * so a float would make two machines disagree. Renderer-side quantities —
- * seconds, phase, playback rate — belong to the clip, never here.
+ * Values are integer `number`s only (Invariants #44/#75): this object lives
+ * inside `GameSnapshot`, is serialised into saves and is replayed, so a float
+ * would make two machines disagree, and a `FixedPoint` — a `bigint` — would
+ * make the save's `JSON.stringify` throw. A fractional quantity goes in as a
+ * scaled integer in a declared unit. Renderer-side quantities — seconds, phase,
+ * playback rate — belong to the clip, never here.
  */
-export type AnimationWindowPayload = Readonly<Record<string, number | FixedPoint>>;
+export type AnimationWindowPayload = Readonly<Record<string, number>>;
 
 /** One open beat-owned gameplay window stored in `GameSnapshot.animationWindows`. */
 export interface AnimationWindowRecord {
@@ -53,7 +54,7 @@ export interface AnimationWindowRecord {
     readonly ownerId: EntityId;
     /** Beats the window still has left. Always an integer (Invariant #44). */
     readonly remainingBeats: number;
-    /** Integer/`FixedPoint` state carried alongside the window while it is open. */
+    /** Integer state carried alongside the window while it is open. */
     readonly payload: AnimationWindowPayload;
 }
 
@@ -133,17 +134,19 @@ function assertPositiveIntegerBeats(durationBeats: number, id: AnimationWindowId
 }
 
 /**
- * Reject a payload value that is a non-integer `number`.
+ * Reject a payload value that is not an integer `number`.
  *
  * The payload lives inside `GameSnapshot`, so it is serialised into saves and
- * replayed: a float would let two machines disagree (Invariants #44/#75). A
- * `FixedPoint` is a `bigint` and so is integral by construction.
+ * replayed: a float would let two machines disagree, and a `bigint` — which is
+ * what a `FixedPoint` is — makes the save's `JSON.stringify` throw (Invariants
+ * #44/#75). `Number.isInteger` is false for both, and for anything that is not
+ * a `number` at all, so the one predicate refuses every shape the type forbids.
  */
 function assertIntegerPayload(payload: AnimationWindowPayload, id: AnimationWindowId): void {
     for (const [field, value] of Object.entries(payload)) {
-        if (typeof value === 'number' && !Number.isInteger(value)) {
+        if (!Number.isInteger(value)) {
             throw new RangeError(
-                `AnimationWindowManager.open: payload field "${field}" of window "${id}" is ${String(value)} — window payloads carry integers or FixedPoint only (Invariants #44/#75).`,
+                `AnimationWindowManager.open: payload field "${field}" of window "${id}" is ${String(value)} — window payloads carry integer numbers only (Invariants #44/#75): a float lets two machines disagree and a bigint cannot be saved.`,
             );
         }
     }
@@ -191,7 +194,7 @@ export const AnimationWindowManager = Object.freeze({
      * second swing overwrites the first swing's window instead of failing.
      *
      * @throws RangeError when `durationBeats` is not a positive integer, or when
-     *         the payload carries a non-integer `number`.
+     *         a payload value is not an integer `number`.
      */
     open<TState extends BaseGameSnapshot>(
         state: TState,

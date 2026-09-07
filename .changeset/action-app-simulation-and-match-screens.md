@@ -22,7 +22,7 @@ that renders and never moves.
 
 **Positions are INTEGERS, not `FixedPoint`, and that was measured rather than assumed.** A primitive
 advances whole arena cells per beat, so the simulation carries no fractional gameplay quantity and
-Invariant #75 is not engaged. It could not be satisfied here anyway: the engine's save path is
+Invariant #75 is not engaged. The engine's save path is
 `JsonSaveSerializer`, whose `JSON.stringify` throws on a `bigint` and whose `deserialize` has no
 reviver that could return one — a `FixedPoint` position would make the app unsavable, which the
 HUD's save affordance and F88's autosave/Continue flow both depend on.

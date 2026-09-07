@@ -170,8 +170,9 @@ describe('DiffViewPanel', () => {
     });
 
     it('renders bigint before/after values without crashing', async () => {
-        // FixedPoint simulation state is bigint (Invariant #75) and survives
-        // structured-clone IPC, so diff entries can carry it verbatim.
+        // A bigint is never legal snapshot state (Invariant #75), but
+        // structured-clone IPC can carry one, so a diff entry may arrive with
+        // it verbatim and the preview must not throw on it.
         const api = createDebugApiMock({
             listTicks: vi.fn(() => Promise.resolve(THREE_TICKS)),
             diff: vi.fn((fromTick: number, toTick: number) =>

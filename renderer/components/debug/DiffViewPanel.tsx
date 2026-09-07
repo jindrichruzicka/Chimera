@@ -57,8 +57,9 @@ function valuePreview(entry: DiffEntry, key: 'before' | 'after'): string {
     if (!Object.hasOwn(entry, key)) {
         return '—';
     }
-    // FixedPoint state is bigint (Invariant #75) and survives structured-clone
-    // IPC, so diff values can carry it; plain JSON.stringify would throw.
+    // No snapshot field is a bigint (Invariant #75: a bigint cannot be saved),
+    // but structured-clone IPC can carry one, so a debug preview of whatever a
+    // game did put there tolerates it where plain JSON.stringify would throw.
     const json =
         JSON.stringify(entry[key], (_jsonKey, value: unknown) =>
             typeof value === 'bigint' ? `${value}n` : value,

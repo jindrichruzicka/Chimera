@@ -5,10 +5,23 @@
  * This is the authoritative single-import point for all fixed-point operations
  * in the simulation layer.
  *
+ * A `FixedPoint` is ARITHMETIC, not storage. It is a `bigint`, and every
+ * persistence boundary in the engine is bare `JSON.stringify`, which throws on
+ * a `bigint` rather than degrading, and no reviver on the way back produces
+ * one. So a `FixedPoint` must not be stored
+ * in a `GameSnapshot` field or an `EngineAction.payload` (Invariant #75):
+ * compute with it, then store the result as an integer `number` — a fractional
+ * quantity as a scaled integer in a declared unit (milli-cells, basis points).
+ *
  * @module
  */
 
-/** Q32.32 fixed-point number represented as a `bigint`. */
+/**
+ * Q32.32 fixed-point number represented as a `bigint`.
+ *
+ * Not persistable — see the module doc. Convert with {@link toInt}, or scale
+ * and truncate, before a value reaches a snapshot or a payload.
+ */
 export type FixedPoint = bigint;
 
 const SHIFT = 32n;

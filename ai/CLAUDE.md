@@ -16,7 +16,7 @@ Use this file only as the fast BLOCK checklist:
 
 - `validate()` and `reduce()` are pure, deterministic, and immutable; never mutate input snapshots.
 - Use `ctx.rng` and `snapshot.tick`; no `Math.random()`, wall-clock APIs, I/O, DOM, or environment reads in simulation paths.
-- Store gameplay arithmetic as integers or `FixedPoint`, never floating-point `GameSnapshot` fields.
+- Store gameplay quantities as integer `number`s — a fractional one as a scaled integer; `FixedPoint` is arithmetic only and never a `GameSnapshot` field or payload, because a `bigint` cannot be saved. No floating-point `GameSnapshot` fields.
 - Keep imports pointing inward: `simulation/` takes no sibling `@chimera-engine/*` workspace package — it is the zero-dependency foundation leaf (Invariant #1), and the cross-layer contracts live in `simulation/foundation/`; `ai/` may import `simulation/`. No renderer, Electron, game package, network, DOM, Three.js, or graphics imports.
 - Route behavior through `ActionRegistry`, `ActionPipeline`, and AI `EngineAction` dispatch; no side-door mutation paths.
 - Prefer `readonly`, branded IDs, and strict generics (`TState extends BaseGameSnapshot`, payload, params).

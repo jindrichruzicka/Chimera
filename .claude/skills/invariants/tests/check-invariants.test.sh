@@ -2690,7 +2690,7 @@ test_profile_field_with_url_default_detected() {
 test_clean_snapshot_type_passes() {
     local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
     plant_file "${tmp}" "simulation/projection/PlayerView.ts" \
-        "export interface PlayerView { hp: bigint; team: number; }"
+        "export interface PlayerView { hp: number; team: number; }"
     expect_clean "${tmp}" "Check 29: a snapshot type with no settings/camera/profile fields"
 }
 
