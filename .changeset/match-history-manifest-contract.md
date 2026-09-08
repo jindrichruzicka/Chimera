@@ -12,10 +12,11 @@ resolver.
 
 `GameMatchHistorySupport` carries `undo`, `replay` and an optional `retainActions`.
 `resolveMatchHistorySupport(manifest)` returns all three, defaulting absent fields off
-`manifest.realtime`: a real-time game gets `{ undo: false, replay: true, retainActions:
-DEFAULT_REALTIME_RETAIN_ACTIONS }`, everything else `{ undo: true, replay: true, retainActions:
-MAX_ACTION_HISTORY_ENTRIES }` — the bound `InMemoryActionHistory` has always applied, so a manifest
-with no declaration resolves to the pre-existing behaviour.
+`manifest.realtime`: a real-time game gets
+`{ undo: false, replay: true, retainActions: DEFAULT_REALTIME_RETAIN_ACTIONS }`, everything else
+`{ undo: true, replay: true, retainActions: MAX_ACTION_HISTORY_ENTRIES }` — the bound
+`InMemoryActionHistory` has always applied, so a manifest with no declaration resolves to the
+pre-existing behaviour.
 
 The resolver never throws. `resolveTickerHz` throws on a bad `tickRateMs`, but that is the wrong
 precedent for an optional capability: malformed input is dropped the way `resolveGameLanguages` drops

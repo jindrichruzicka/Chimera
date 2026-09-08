@@ -35,9 +35,9 @@ length of a match. The crash dump is upstream of all of this — it drains the
 `LogRingBufferSink` the root logger is constructed with, above the fan-out — so no threshold on a
 leg can reach it.
 
-`main()` no longer builds the fan-out inline. `createMainLoggerSink({ file, memory, harnessStdout,
-devStderr, fileMinLevel })` composes it, because WHICH leg carries the threshold is the load-bearing
-decision and it is not observable from a test of the threshold helper alone. What `main()` in turn
+`main()` no longer builds the fan-out inline.
+`createMainLoggerSink({ file, memory, harnessStdout, devStderr, fileMinLevel })` composes it,
+because WHICH leg carries the threshold is the load-bearing decision and it is not observable from a test of the threshold helper alone. What `main()` in turn
 passes for `fileMinLevel` is not observable from a test of `createMainLoggerSink` either, so that is
 pinned by driving the real `main()` and pushing one entry per level through the `chimera:logs:emit`
 handler — whose sink is the root ring buffer, the same chain every main-process log call takes to

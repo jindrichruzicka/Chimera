@@ -1,5 +1,93 @@
 # @chimera-engine/networking
 
+## 1.0.0-rc.13
+
+### Minor Changes
+
+- 9d4fa92: Send the changed paths instead of the whole projection, with periodic keyframes.
+
+    `SNAPSHOT_DELTA` is a new `ServerMessage`. It carries a `SnapshotDelta`, a `version` (a client built for
+    another version REFUSES the frame at `ServerMessageSchema.safeParse` rather than applying it as if it
+    were this shape), and a CRC32 over the `delta` — the bytes the frame actually carries.
+    `ServerConnection` validates that checksum against the pre-Zod bytes exactly as it does a `SNAPSHOT`,
+    because a corrupt delta is the worse of the two: a snapshot REPLACES the client's state, so the next
+    one repairs it, while a delta is APPLIED to state the client keeps.
+
+    `StateBroadcaster` now keeps the last projection it sent each recipient and sends a delta against it.
+    Where it sends a whole snapshot instead is `StateBroadcaster.sendProjection`'s to say; the
+    size-fallback case also leaves a `trace` line and bumps a counter on `deltaMetrics()`.
+
+    `BroadcastContext.broadcast` gains a third argument, `{ forceFull }`, which Stage 7 sets for
+    `engine:sync_request`. The callback cannot infer it: a re-sync arriving after a run of clock-only beats
+    has a projection that genuinely DID change, so an empty diff is not the signal — and the viewer that
+    asked to be re-synced is precisely the one whose baseline the host cannot vouch for. Without it
+    `multiplayer-soak.spec.ts` fails: its `requestFullSnapshotSync` produced a delta rather than the
+    keyframe its name promises. Point-sends stay whole
+    snapshots: every caller of one is asking for the whole thing by definition. The baseline is keyed by RECIPIENT rather than by seat, so a spectator is diffed against
+    what that spectator received, and the broadcaster subscribes to `onPlayerLeft` itself to drop a
+    departed recipient's entry — the composition root's own handler returns early down several branches,
+    and a baseline left behind on any of them is the unbounded map this work exists to remove.
+
+    `HostTransport` gains `sendSnapshotDelta`. `ClientTransport` is unchanged: `WsClientTransport` and the
+    in-memory provider both rebuild the whole projection from the delta and publish THAT, so
+    `onSnapshotReceived` still hands subscribers a whole snapshot and nothing above the transport learns a
+    delta was on the wire. A delta the client cannot apply is dropped — never partially applied — and the
+    next whole snapshot re-establishes the chain. `WsClientTransport` also asks for one, sending
+    `engine:sync_request` once per broken chain, since that request makes the host broadcast to every viewer
+    rather than only to the asker.
+
+    The checksum `onSnapshotReceived` carries is now documented as the one the host stamped on the frame,
+    over that frame's own body, and the delta path passes it through rather than measuring the rebuild.
+    Measuring cannot give the host's number: `ServerMessageSchema` rebuilds a parsed snapshot in the
+    SCHEMA's key order rather than the host projector's, and `crc32Json` is order-sensitive, so two deeply
+    equal objects check differently. Comparing a host checksum with a client one is therefore meaningful
+    only across a whole-snapshot frame.
+
+    Breaking for anyone implementing `HostTransport` outside this repo: `sendSnapshotDelta` is required.
+
+### Patch Changes
+
+- 51f9231: Compute the outbound SNAPSHOT checksum only for a viewer with an open socket, and serialise the
+  snapshot once per frame.
+
+    `WsHostTransport.sendSnapshot` built `{ type: 'SNAPSHOT', snapshot, checksum: crc32Json(snapshot) }`
+    — a full `JSON.stringify` plus a per-byte CRC walk — and only then handed it to
+    `LobbyServer.sendToPlayer`, which looks the connection up and silently drops the frame when there is
+    no open socket. The local host seat is served in-process and never appears in either connection map,
+    so in a solo match every byte of that work was discarded. A connected seat then paid a second
+    `JSON.stringify` inside `sendToPlayer`, re-serialising the body it had just been given.
+
+    `LobbyServer` gains `hasOpenSocket(playerId)` — the same lookup `sendToPlayer` performs, over both
+    the seated-player and the spectator map — and `sendRawToPlayer(playerId, frame)` for a frame the
+    caller has already serialised. `sendSnapshot` returns before any work when the viewer has no open
+    socket; otherwise it stringifies the snapshot once, runs `crc32` over that exact string, and
+    assembles the frame around it. The wire bytes and the checksum are unchanged: the frame is
+    byte-identical to `JSON.stringify` of the previous message object, so the client's
+    `crc32Json(snapshot)` verification still matches.
+
+- Updated dependencies [370ed0c]
+- Updated dependencies [b7fe1b3]
+- Updated dependencies [b1ff2e4]
+- Updated dependencies [b8552d6]
+- Updated dependencies [b20e420]
+- Updated dependencies [1f2ef60]
+- Updated dependencies [3b29c86]
+- Updated dependencies [e170cf4]
+- Updated dependencies [51fec31]
+- Updated dependencies [5fdddf4]
+- Updated dependencies [eb6a674]
+- Updated dependencies [b4ee634]
+- Updated dependencies [fe82ccc]
+- Updated dependencies [7635670]
+- Updated dependencies [94c0cb1]
+- Updated dependencies [397708b]
+- Updated dependencies [9d4fa92]
+- Updated dependencies [a15bfbd]
+- Updated dependencies [ddca27d]
+- Updated dependencies [5a3584a]
+- Updated dependencies [16e3f97]
+    - @chimera-engine/simulation@1.0.0-rc.13
+
 ## 1.0.0-rc.12
 
 ### Minor Changes

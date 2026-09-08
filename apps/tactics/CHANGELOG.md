@@ -1,5 +1,70 @@
 # @chimera-engine/tactics
 
+## 0.9.1-rc.6
+
+### Patch Changes
+
+- a8e6bc0: Add an engine-owned entity interpolation seam, and move both reference games onto it.
+
+    `useEntityInterpolation({ entityId, target, durationMs, snapDistance? })` smooths one entity between
+    two authoritative positions and returns the ref to attach to the object being moved. It writes the
+    transform from `useFrame` through that ref, so a moving entity costs no React commit per frame.
+
+    A game whose entities live on a unit grid advances them a whole cell per beat, so an entity driven
+    straight from the snapshot teleports one cell at a time — ten visible steps a second at
+    `apps/action`'s 100 ms beat, and a diagonal step covering √2 world units at once. The hook draws the move instead of the
+    arrival, at the cost of showing the entity up to one beat behind the host; that delay is stated in
+    the hook's contract rather than left to be discovered, and anything that must agree with the host
+    reads the snapshot instead.
+
+    Three discontinuities are handled rather than smoothed: an entity appearing mid-match starts where it
+    belongs instead of sliding in from the origin, a change of `entityId` snaps, and a move at least
+    `snapDistance` far snaps — a deliberate teleport is not a fast walk.
+
+    `durationMs` is the caller's, because a game's beat is not something the renderer holds. `apps/action`
+    passes the same constant its manifest declares `tickRateMs` from. `apps/tactics` already tweened its
+    units this way and now does it through the shared hook,
+    which deletes its private copies of `lerp` and the ease-out curve; its duration is still the
+    `--ch-duration-normal` motion token, so reduced motion still collapses the movement to an instant
+    one.
+
+- fe82ccc: Derive the `ActionPipeline` tick budget from the game's declared tick rate.
+
+    `TICK_BUDGET_MS = 16` was documented as "≤ 16 ms at 20 Hz" but was parameterised by nothing, while
+    `resolveTickerHz` accepts any finite positive `tickRateMs` (100 Hz is pinned as correct in
+    `game-manifest-contract.test.ts`). A game declaring a 10 ms period was therefore gated against a
+    budget larger than its entire beat — a gate that could not fail.
+
+    `tickBudgetMsFor(tickRateMs)` now returns `TICK_BUDGET_DUTY` (0.32) of the declared period, and
+    `TICK_BUDGET_MS` is derived from `DEFAULT_TICK_RATE_MS`: it is still 16, so no existing gate's
+    number moved. The duty is locked by a test the way the heap budgets are, so changing the engine's
+    headroom policy is a deliberate act. `tickBudgetMsFor` throws a `RangeError` on a non-finite or
+    non-positive period, mirroring `resolveTickerHz`'s refusal of the same inputs, and accepts a
+    fractional one, as `resolveTickerHz` also does.
+
+- 94c0cb1: Remove the client-prediction surface, which was implemented and tested but reachable from nothing.
+
+    There was no client prediction: every action waited a full host round trip. What existed was a chain
+    where each link's only consumer was the next one, and the last led nowhere — `ActionDefinition.predictable`,
+    the `chimera:game:predictable-action-types` channel and its `GameAPI.getPredictableActionTypes()`
+    method, the `isPredictable` predicate the IPC client was built with, `gameStore.addPrediction` /
+    `confirmPrediction`, and the `predictedActions` array, which no component, hook or reducer anywhere
+    in the repo read. Beside it sat `ClientPredictor` and `ReconcileBuffer`, exported from the engine
+    barrel and unit-tested, constructed only in their own tests, and typed on `BaseGameSnapshot` — the
+    state Invariant #3 keeps inside the main process — so a client could not have used them as written.
+
+    All of it is gone, together with the comment in `ipcClient.ts` that forbade importing the two
+    classes: a prohibition outlives its subject as a puzzle, not a rule. `PredictionStore` is now
+    `MatchStatusStore`, carrying the three fields that survive — `latencyMs`, `canUndo`, `canRedo`. What `latencyMs` is written by, and
+    what reads it, is §6.3's.
+
+    §6 says what it costs to add prediction properly instead of describing what was there: the renderer
+    holds a `PlayerSnapshot`, so the reducers it would replay have to be renderer-safe and registered as
+    such, and the optimistic state may never become an authoritative write.
+
+    Breaking for adopters who set `predictable: true` on an action definition, or who call
+    `getPredictableActionTypes()`: both are removed. Neither did anything.
+
 ## 0.9.1-rc.5
 
 ### Patch Changes

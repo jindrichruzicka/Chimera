@@ -1,5 +1,154 @@
 # @chimera-engine/action
 
+## 0.1.1-rc.1
+
+### Patch Changes
+
+- 5f2639a: Declare the action app's match-history capability on its manifest, and prove end to end that undo is
+  withheld.
+
+    `matchHistory: { undo: false, replay: true }` states what a real-time game's default already resolves
+    to. The point is that the intent is readable off the manifest rather than inferred from the loop mode:
+    this arena offers no undo, and keeps replay recording. `retainActions` is left to the real-time
+    default, because there is no intent there to record. A manifest test asserts the declaration resolves identically to the same manifest without it,
+    so this is documentation rather than a behaviour change.
+
+    The new `no-undo.spec.ts` measures the resolved capability in the shipped build. Three withholdings
+    have to hold at once there — the host arms a refusing policy, mints no start-of-match memento, and
+    the renderer registers no key subscription — and each is unit tested in isolation against a double.
+    The spec drives the shipped path into a match, moves the seat's primitive so there is something an
+    undo could take back, presses the engine's default undo binding, and asserts the primitive stayed
+    where the move left it while the HUD clock kept advancing. It is NOT sensitive to whether the capability was declared
+    or inherited: the two resolve identically, which is the manifest test's job to say.
+
+    The companion case asserts the match route renders no `undo` or `redo` control. Neither the engine
+    shell nor this app's HUD draws one today, so it is a regression guard rather than a measurement of
+    this change.
+
+- 085f120: Advance the tick in the action app's reducers, so a recorded match replays.
+
+    `action:set-velocity` and `action:select-primitive` both returned a changed snapshot carrying the
+    input tick through, violating Invariant #42 — `GameSnapshot.tick` advances by exactly 1 per action
+    applied by `ActionPipeline.process()`. Nothing in a live match notices, because the pipeline takes
+    `reduce`'s output verbatim. The consequence surfaces only when the recording is opened:
+    `ReplayPlayer.step()` refuses the first such entry with
+    `DeterminismError: replay action at tick 0 advanced to 0 instead of 1`. Both reduce returns now
+    write `tick: state.tick + 1`.
+
+    `action:select-primitive` also accepted a click on the primitive the acting seat already drives,
+    while its reduce returned the input reference for it. `HostSessionPipeline.processAction` is where
+    an applied action meets the replay recorder, so that click was the same unreplayable entry by
+    another route. `validate` now refuses it with `already_controlled`; the click stays a no-op on
+    screen, as it always was, and `ActionPrimitiveMesh` no longer reports that click at all, so the
+    refusal is a guarantee rather than something a player trips on every pick.
+
+    The reducers' remaining no-op arms are unchanged: each returns the input reference without touching
+    the tick, and each is refused by `validate`, so none can reach a recording. The per-beat movement
+    pass `advanceActionPrimitives` is untouched — it runs inside `engine:tick`'s own reduce, which has
+    already advanced, and it still returns the input reference when nothing moved.
+
+- ae4858c: Add a per-beat benchmark for the realtime reference game.
+
+    `ActionBeatPerf.bench.test.ts` times the simulation leg of a beat —
+    `ActionPipeline.process()`, which runs the engine's tick reduce and then the app's `onBeat` hook
+    `advanceActionPrimitives` — and the app's own `action:set-velocity` reducer beside it. The existing
+    benches cover `ActionPipeline.process()` through tactics fixtures and the Stage-7 outbound wave; the
+    per-beat game work was timed by neither. The outbound wave stays the outbound bench's, so neither
+    file measures a whole beat alone.
+
+    It is the first gate to evaluate the rate-derived budget: the app declares `tickRateMs: 100`, so its
+    gates read `tickBudgetMsFor(ACTION_TICK_RATE_MS)` rather than the default-rate `TICK_BUDGET_MS`, and
+    a test pins that the two differ by the ratio of the periods — comparing the budget against
+    `tickBudgetMsFor(ACTION_TICK_RATE_MS)` would be a tautology a rate-ignoring implementation
+    satisfies.
+
+    Two widths. The shipped 3-primitive arena records the baseline and could not fail on any regression
+    short of a hang, which is why a synthetic 2000-entity arena runs beside it: making the beat hook
+    quadratic breaches the gate there. Each run logs median/p95/max against the budget rather than
+    freezing a figure in prose, and the percentile selection behind that log is pinned by its own test.
+    Every timed sample asserts it rewrote the entities record, so a fixture drift that parked the arena
+    cannot silently leave the bench measuring an early-out.
+
+- ddbee1c: Build the action app's per-beat entities copy only once a primitive moves.
+
+    `advanceActionPrimitives` copied `state.entities` before walking it and returned the input reference
+    only after discovering that nothing had moved. The early-out was already load-bearing — with every
+    field handed back by reference the pipeline keeps an idle beat on its clock-only broadcast, and the
+    perspective recorder's growth stays proportional to time in motion — but the copy was paid on every
+    beat regardless. The copy is now materialised on the first primitive that actually changes cell; an
+    idle beat, or a beat whose only moving primitive is clamped against the arena wall, walks the record
+    without building a copy. The contract is unchanged: the input reference comes back when nothing
+    moved, a moved beat returns a new record with only the moved entities replaced, and the input is
+    never mutated.
+
+- f7e6831: Assert the action seat's own undo refusal in `no-undo.spec.ts`, off a projection fresh enough to mean
+  it.
+
+    A seat's `undoMeta` is derived per projection, and a real-time host broadcasts only a beat that changed
+    something — so an idle match leaves a seat holding the start-of-match projection, which reports
+    `canUndo: false` on a build with undo ARMED too, because at `engine:start_game` that seat has nothing to
+    undo yet. Read stale, that looked like an ineligibility upstream of the declaration; it is staleness.
+    The spec now pairs its refusal with a projection-tick comparison, so the assertion fails when the two
+    host arms are reverted rather than passing on the start-of-match answer. `electron/main/index.test.ts`
+    pins the start-of-match refusal, and pins that the start-of-match projection goes out before the seat's
+    memento is seeded — so the reading a seat holds is taken while it has no baseline to undo to at all.
+
+- a8e6bc0: Add an engine-owned entity interpolation seam, and move both reference games onto it.
+
+    `useEntityInterpolation({ entityId, target, durationMs, snapDistance? })` smooths one entity between
+    two authoritative positions and returns the ref to attach to the object being moved. It writes the
+    transform from `useFrame` through that ref, so a moving entity costs no React commit per frame.
+
+    A game whose entities live on a unit grid advances them a whole cell per beat, so an entity driven
+    straight from the snapshot teleports one cell at a time — ten visible steps a second at
+    `apps/action`'s 100 ms beat, and a diagonal step covering √2 world units at once. The hook draws the move instead of the
+    arrival, at the cost of showing the entity up to one beat behind the host; that delay is stated in
+    the hook's contract rather than left to be discovered, and anything that must agree with the host
+    reads the snapshot instead.
+
+    Three discontinuities are handled rather than smoothed: an entity appearing mid-match starts where it
+    belongs instead of sliding in from the origin, a change of `entityId` snaps, and a move at least
+    `snapDistance` far snaps — a deliberate teleport is not a fast walk.
+
+    `durationMs` is the caller's, because a game's beat is not something the renderer holds. `apps/action`
+    passes the same constant its manifest declares `tickRateMs` from. `apps/tactics` already tweened its
+    units this way and now does it through the shared hook,
+    which deletes its private copies of `lerp` and the ease-out curve; its duration is still the
+    `--ch-duration-normal` motion token, so reduced motion still collapses the movement to an instant
+    one.
+
+- 08acd12: Record what the action app's no-undo e2e cannot measure, and complete the traceability-matrix rows the
+  F96 arc touched.
+
+    The `undo` / `redo` control count in `no-undo.spec.ts` reads zero whatever the manifest says: `ActionGameHud`
+    draws no undo pair under any declaration and the F96 arc changed nothing under `apps/action/screens/`,
+    so that assertion passed identically on the tree before it. The Ctrl+Z half kills only the full
+    conjunction of three withholdings, so reverting any one arm leaves the other two refusing.
+
+    The matrix carried F96 into the §4.5 and §4.28 rows and the M10 index row, leaving `F71–F92, F96` — a
+    census that skips three shipped M10 features. F93 (§4.5, §4.27, §4.28), F94 (§4.2.1, §4.28) and F95
+    (§4.5, §7) now have their rows, the index row reads `F71–F96`, and the preamble sentence that named F73
+    as the one feature carried without a roadmap heading names the whole set.
+    `tools/traceability-matrix.test.ts` deliberately does not assert this direction — a row may name a
+    feature with no heading — so that sentence is what records these as intended rather than missed.
+
+- a98157b: Write the snapshot retention rules into the simulation-layer standards, and add the per-beat
+  outbound baseline they are measured against.
+
+    `docs/coding-standards-sections/simulation-layer.md` gains §7.5: `events` is a per-action outbox; a
+    fired one-shot leaves `timers` in the beat that fired it while a `cancel()`ed entry stays until a
+    `create()` under the same id replaces it (`timers` is in `BASE_SNAPSHOT_KEYS`); a new
+    snapshot-resident collection declares its retention on the field where it is added; and retention
+    always produces a new snapshot (Invariant #43). §4.2 and §4.20 point at the rules rather than
+    restating them.
+
+    The baseline the section quotes is measured in-tree rather than restated from an audit: the new
+    `apps/action/__tests__/OutboundPerBeatPerf.bench.test.ts` times what Stage 7 costs the host per
+    eventful beat — `StateProjector.project()`, then `JSON.stringify` and `crc32` of the projection,
+    once per viewer — at 500 × 4 and 2000 × 8 (entities × viewers) over the action app's shipped
+    visibility rules, logs the numbers on every run, and is part of `pnpm test:perf`. The 500 × 4 grid
+    is gated against `TICK_BUDGET_MS`; the 2000 × 8 grid is logged only and compared against nothing.
+
 ## 0.1.1-rc.0
 
 ### Patch Changes

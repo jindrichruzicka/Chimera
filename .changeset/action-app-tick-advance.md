@@ -8,8 +8,9 @@ Advance the tick in the action app's reducers, so a recorded match replays.
 input tick through, violating Invariant #42 — `GameSnapshot.tick` advances by exactly 1 per action
 applied by `ActionPipeline.process()`. Nothing in a live match notices, because the pipeline takes
 `reduce`'s output verbatim. The consequence surfaces only when the recording is opened:
-`ReplayPlayer.step()` refuses the first such entry with `DeterminismError: replay action at tick 0
-advanced to 0 instead of 1`. Both reduce returns now write `tick: state.tick + 1`.
+`ReplayPlayer.step()` refuses the first such entry with
+`DeterminismError: replay action at tick 0 advanced to 0 instead of 1`. Both reduce returns now
+write `tick: state.tick + 1`.
 
 `action:select-primitive` also accepted a click on the primitive the acting seat already drives,
 while its reduce returned the input reference for it. `HostSessionPipeline.processAction` is where

@@ -1,5 +1,237 @@
 # @chimera-engine/renderer
 
+## 1.0.0-rc.13
+
+### Minor Changes
+
+- 397708b: Apply snapshot deltas in the renderer bridge, and measure what the delta path saves.
+
+    `GameAPI` gains `onSnapshotDelta` and the `chimera:game:snapshot-delta` channel. On a beat the
+    broadcaster decided is a delta, main sends the changed paths instead of the whole projection — that
+    IPC leg cost a structured clone of a whole projection per beat, and the changed paths are what it
+    costs instead. Main still keeps the projection for what needs it in-process: `getCurrentSnapshot`
+    answers with it and the perspective recorder appends it, both pinned.
+
+    `ipcClient` holds the last snapshot it RECEIVED, separate from the store's, which is the last one
+    PAINTED — the host measures the next delta against the former. Deltas are applied on arrival and only
+    the store WRITE is paced: newest-wins is right for a whole snapshot, which is measured against
+    nothing, and wrong for a delta, which is measured against what the one before it produced. So a frame
+    carries one write with everything that accumulated in it and no delta is dropped. An inapplicable
+    delta is refused rather than partly applied, and `engine:sync_request` is sent once per broken chain.
+
+    `RendererSnapshotRecipient.sendSnapshot` now takes the delta alongside the projection — `null` on a
+    keyframe. Breaking for anyone who registered a recipient directly.
+
+    The measurement F101 asked for is now in `OutboundPerBeatPerf.bench.test.ts` and recorded in §7.5, at
+    both ends of the axis the delta path lives on. At a realtime beat's motion — 25 of 500 entities, 100 of
+    2000 — the payload is about a twentieth of the projection at both grids. With nearly the whole arena
+    moving the delta is LARGER than the snapshot it would replace, about 105% of its bytes, which is the
+    case `StateBroadcaster`'s size fallback exists for. Each run reports the count `measureDeltaWave` counted, and
+    neither delta row is gated: a ratio asserted there would gate the runner
+    rather than the code.
+
+- 737aa88: Withhold the undo and redo affordances from a game that declares no undo — both the `/game` route's
+  key registrations and the handlers it hands the shell.
+
+    Manifest data reaches the renderer only when a game re-forwards a named field from its own
+    `renderer/loaders.ts` — the renderer package is import-banned from `apps/*`. So this is a second
+    declaration, not a read of the main-side one. `LoadedRendererGame` gains an optional `matchHistory` carrying the
+    game's RESOLVED capability, forwarded the same way `translations.languages` already is. Absent ⇒ undo
+    is offered, which is what every game got before the field existed.
+
+    `useInputAction` gains an `enabled` option (its `UseInputActionOptions` type stays off the
+    `@chimera-engine/renderer/input` barrel's closed export set — a call site passes an object literal). `false` registers NOTHING rather than registering a
+    callback that ignores the press, so the hook call itself stays unconditional at the top level and it
+    is the effect that is gated — React's rules of hooks are untouched. The subscription is established
+    and torn down as the flag flips.
+
+    The `/game` route reads `matchHistory.undo` for both surfaces: it passes `enabled` to the
+    `engine:undo` and `engine:redo` registrations, and withholds `onUndo`/`onRedo` from `GameShell`
+    entirely rather than passing disabled handlers — the same shape `onSaveGame` already uses. The engine
+    shell draws no undo control of its own, so what a game's own HUD receives is `undoDisabled: true`.
+    The capability is read only once the game payload has loaded: until then it is unknown rather than
+    absent, so no key is registered on the way in and torn down after.
+
+    `apps/tactics` is turn-based and declares nothing, so it resolves to undo on: it keeps both key
+    registrations and both handlers.
+    `apps/action` is real-time, so it resolves to undo off: its Ctrl+Z now reaches no listener at all. It reached one before, but that listener returns on `!snapshot.undoMeta.canUndo`,
+    which the host has projected `false` for this game since the host-side sibling landed — so what this
+    removes is the registration, not a live dispatch.
+
+### Patch Changes
+
+- Stop an authoritative beat cascading a render through the whole match tree.
+
+    `GameShellBaseProps.tick` is now OPTIONAL, and omitting it is the instruction: the HUD leaf
+    subscribes to the match store's clock itself, so a clock-only beat re-renders that one leaf instead
+    of the route, the frame, the router and the game screen hanging off it. Passing it keeps the old
+    behaviour and is what a clock that is not the live store's must do — the replay player drives its
+    own. Absence is distinguished from tick 0, which is a legal tick: the leaf reads `null` when the
+    store holds no match and falls back to the snapshot's own tick, so a shell mounted over a snapshot
+    the live store never saw still prints the right number.
+
+    The match route no longer selects `currentTick`. Its `sendAction` reads the clock from the store at
+    DISPATCH instead, which is strictly fresher than a value closed over at render time, and holds the
+    snapshot in a ref for the same reason. `SceneRouter` is memoised on its props, and each registry
+    screen is wrapped in `React.memo` through a module-level `WeakMap` keyed on the component — the
+    wrapper is the element's type, so a wrapper whose identity changed between renders would unmount
+    and remount the screen.
+
+    What the bail-outs actually rest on is the caller's callback identities, measured in
+    `SceneRouter.memo.test.tsx`, `GameShell.beat.test.tsx` and `page.beat.test.tsx` rather than
+    asserted. One consequence is written down where it bites: the fade transition's ready-dispatch
+    interval is pinned to the caller's `sendAction`, so a caller that re-creates that callback every
+    beat clears and re-arms the interval faster than its own period and it never fires.
+
+- a8e6bc0: Add an engine-owned entity interpolation seam, and move both reference games onto it.
+
+    `useEntityInterpolation({ entityId, target, durationMs, snapDistance? })` smooths one entity between
+    two authoritative positions and returns the ref to attach to the object being moved. It writes the
+    transform from `useFrame` through that ref, so a moving entity costs no React commit per frame.
+
+    A game whose entities live on a unit grid advances them a whole cell per beat, so an entity driven
+    straight from the snapshot teleports one cell at a time — ten visible steps a second at
+    `apps/action`'s 100 ms beat, and a diagonal step covering √2 world units at once. The hook draws the move instead of the
+    arrival, at the cost of showing the entity up to one beat behind the host; that delay is stated in
+    the hook's contract rather than left to be discovered, and anything that must agree with the host
+    reads the snapshot instead.
+
+    Three discontinuities are handled rather than smoothed: an entity appearing mid-match starts where it
+    belongs instead of sliding in from the origin, a change of `entityId` snaps, and a move at least
+    `snapDistance` far snaps — a deliberate teleport is not a fast walk.
+
+    `durationMs` is the caller's, because a game's beat is not something the renderer holds. `apps/action`
+    passes the same constant its manifest declares `tickRateMs` from. `apps/tactics` already tweened its
+    units this way and now does it through the shared hook,
+    which deletes its private copies of `lerp` and the ease-out curve; its duration is still the
+    `--ch-duration-normal` motion token, so reduced motion still collapses the movement to an instant
+    one.
+
+- 3b29c86: Report host heap and recorded-action count in the Performance HUD.
+
+    `PerfSample`'s `heapMb` is the RENDERER's `performance.memory`, so a host-side buffer could grow to
+    any size with the HUD unchanged. Two new fields carry the host's own numbers: `hostHeapMb` from
+    `process.memoryUsage().heapUsed`, and `recordedActionCount` from a new
+    `ReplayManager.recordedActionCount()` over the live deterministic recording.
+
+    They arrive on a new `chimera:game:host-metrics` push driven by main's own 1 Hz timer
+    (`startHostMetricsPush`), never per beat — at a beat rate the push would be the cost it measures.
+    Only scalars cross, and the payload is schema-validated at the preload boundary,
+    where an absent key is refused rather than read as `null`.
+
+    Both fields are `number | null` where `null` means UNAVAILABLE — no push yet, or no recording
+    running — and the HUD renders it as `—`. A started recording holding no actions reads `0`. `PerfStats.totalActionCount` remains what it was: the debug bridge's own array
+    length, capped and constant once saturated, and absent from a shipped game.
+
+    §13.5 now records what actually executes where. The timing gates run on CI, because the bench files
+    sit under `apps/*/__tests__/` and `pnpm -r test` collects them. The main-process heap case runs and
+    logs there too, but its assertion sits behind an `if (gc !== undefined)` guard, and `globalThis.gc`
+    exists only under `--expose-gc`, which `npm run test:perf` passes and CI does not.
+
+- 34a6cfb: Pace a realtime game's authoritative snapshots to the frame clock, and fix a save race the change
+  surfaced.
+
+    `ipcClient` now holds the newest arriving `PlayerSnapshot` and applies it on the next animation
+    frame. Newest-wins, never a queue: a snapshot superseded inside one frame is dropped where it
+    stands, because draining it later would put the renderer a frame behind the host for nothing, and a
+    backlog the host can outpace has no bound. `onTick` is deliberately NOT paced and still writes the store on every beat.
+
+    The pacing is the game's choice, not a global default. Measured: with it on for everyone, a
+    turn-based canvas-interaction spec failed its first attempt on 3 of 3 runs, while the same tree with
+    pacing off was 3 of 3 clean — a turn-based game pushes on a player's action, where a frame of
+    presentation lag buys nothing and costs interaction fidelity. So `manifest.realtime` is forwarded on
+    `LoadedRendererGame` the way `matchHistory` already is, the match route publishes it, and the
+    client's scheduler asks whenever it requests a frame rather than once, because the client is built at app start
+    and no game is known then. A game that declares nothing keeps application on arrival.
+
+    The one addition a consumer can reach is `LoadedRendererGame.realtime`, on the `./game` subpath — the
+    scheduler types the pacing is built from are renderer internals (Invariant #96), reachable through no
+    export. `createIpcClient` still applies on arrival when given no scheduler, so an existing call site
+    is unchanged.
+
+    `FileSaveRepository.save()` now names its temp file per WRITE rather than per slot. The autosave slot
+    has two writers nothing serialises — the fire-and-forget autosave after `engine:end_turn`, and an
+    explicit `saves.save()` naming no `slotId`, which defaults onto that slot — and with one shared temp
+    path the first rename moved the file out from under the second, whose rename failed with `ENOENT` and
+    whose caller saw its save rejected while a file the other writer produced sat on disk.
+
+- 94c0cb1: Remove the client-prediction surface, which was implemented and tested but reachable from nothing.
+
+    There was no client prediction: every action waited a full host round trip. What existed was a chain
+    where each link's only consumer was the next one, and the last led nowhere — `ActionDefinition.predictable`,
+    the `chimera:game:predictable-action-types` channel and its `GameAPI.getPredictableActionTypes()`
+    method, the `isPredictable` predicate the IPC client was built with, `gameStore.addPrediction` /
+    `confirmPrediction`, and the `predictedActions` array, which no component, hook or reducer anywhere
+    in the repo read. Beside it sat `ClientPredictor` and `ReconcileBuffer`, exported from the engine
+    barrel and unit-tested, constructed only in their own tests, and typed on `BaseGameSnapshot` — the
+    state Invariant #3 keeps inside the main process — so a client could not have used them as written.
+
+    All of it is gone, together with the comment in `ipcClient.ts` that forbade importing the two
+    classes: a prohibition outlives its subject as a puzzle, not a rule. `PredictionStore` is now
+    `MatchStatusStore`, carrying the three fields that survive — `latencyMs`, `canUndo`, `canRedo`. What `latencyMs` is written by, and
+    what reads it, is §6.3's.
+
+    §6 says what it costs to add prediction properly instead of describing what was there: the renderer
+    holds a `PlayerSnapshot`, so the reducers it would replay have to be renderer-safe and registered as
+    such, and the optimistic state may never become an authoritative write.
+
+    Breaking for adopters who set `predictable: true` on an action definition, or who call
+    `getPredictableActionTypes()`: both are removed. Neither did anything.
+
+- ddca27d: Give `snapshot.events` a retention rule and enforce it: it is a per-ACTION outbox, drained by
+  `ActionPipeline.process()` before every outer action's reduce.
+
+    Nothing cleared `events` before this. The field is in `BASE_SNAPSHOT_KEYS`, so `baseSnapshotOnly()`
+    carried it across both match boundaries and it accumulated for the life of a SESSION — riding into
+    every projected `PlayerSnapshot`, every broadcast and every save checkpoint the body checksum
+    covers.
+
+    The rule is enforced per action rather than per beat, which is what the issue proposed. Measured:
+    `resolveTickerHz` returns `null` for a `realtime: false` manifest, so outside the `CHIMERA_E2E`
+    forced-interval seam the host builds no `RealtimeTicker` for such a game — and
+    `apps/tactics/simulation/actions.ts`, which appends events, sits under exactly such a manifest.
+    Clearing inside the `engine:tick` reduce would therefore have left a shipped session of it
+    accumulating while the docs claimed a bound. Per action also makes the documented contract literally
+    true: `tick` is "+1 per applied action", so "all events this tick" and "one action's events" are the
+    same sentence.
+
+    The drain is gated on `#depth === 0`, so a fired timer's nested dispatch adds to the outer action's
+    outbox rather than replacing it. Every later comparison in the frame reads the DRAINED value, which
+    is what keeps `#isClockOnlyTick` seeing an idle beat as idle — including the first beat after an
+    eventful one — so the tick-only broadcast branch stays engaged. The drained array is one shared
+    frozen constant: an in-place append, already forbidden by Invariant #43, throws at the offending
+    line instead of contaminating every later drain.
+
+    `EventAudioPlayer` tracked a played COUNT, which only works while the array grows; under a drained
+    outbox that silently drops any batch no longer than the one before it. It now plays each batch whole
+    and keys its ref on the array's IDENTITY, so a re-render carrying a new `binding` object plays
+    nothing.
+
+    `GameEvent`'s shape is unchanged, and `StateProjector` filters per viewer exactly as before.
+
+- Updated dependencies [370ed0c]
+- Updated dependencies [b7fe1b3]
+- Updated dependencies [b1ff2e4]
+- Updated dependencies [b8552d6]
+- Updated dependencies [b20e420]
+- Updated dependencies [1f2ef60]
+- Updated dependencies [3b29c86]
+- Updated dependencies [e170cf4]
+- Updated dependencies [51fec31]
+- Updated dependencies [5fdddf4]
+- Updated dependencies [eb6a674]
+- Updated dependencies [b4ee634]
+- Updated dependencies [fe82ccc]
+- Updated dependencies [7635670]
+- Updated dependencies [94c0cb1]
+- Updated dependencies [397708b]
+- Updated dependencies [9d4fa92]
+- Updated dependencies [a15bfbd]
+- Updated dependencies [ddca27d]
+- Updated dependencies [5a3584a]
+- Updated dependencies [16e3f97]
+    - @chimera-engine/simulation@1.0.0-rc.13
+
 ## 1.0.0-rc.12
 
 ### Minor Changes

@@ -1,5 +1,517 @@
 # @chimera-engine/simulation
 
+## 1.0.0-rc.13
+
+### Minor Changes
+
+- 1f2ef60: Resolve `FixedPoint`'s persistence gap: it is arithmetic, not storage.
+
+    A `FixedPoint` is a `bigint`, and every persistence boundary in the engine is bare
+    `JSON.stringify`, which throws on a `bigint` rather than degrading; no reviver on the way back
+    produces one. Invariant #75 no longer names `FixedPoint` as the stored form of a fractional gameplay
+    quantity: that form is a scaled integer `number` in a declared unit (milli-cells, basis points),
+    which Invariant #44 already blesses, JSON-native and allocation-free on a realtime beat path.
+    `FixedPoint` stays the arithmetic that produces such a value, converted with `toInt()` before it
+    reaches a `GameSnapshot` field or an `EngineAction.payload`, and its doc comment now says so.
+
+    `AnimationWindowPayload` narrows from `number | FixedPoint` to `number`, and
+    `AnimationWindowManager.open` refuses any payload value that
+    is not an integer `number` (a float, a `bigint`, or a non-number that arrived through a cast) with
+    the same `RangeError` it already raised for a float. A window opened with a `FixedPoint` value used
+    to be accepted and then made the match unsavable at the first autosave.
+
+    The alternative — a paired `bigint` replacer/reviver at every boundary, a save `schemaVersion`
+    bump with a migrator step, and a checksum that still verifies a save written before it — was
+    weighed and not taken: it keeps a per-operation `bigint` allocation on every hot path and touches
+    four boundaries to preserve a representation with no production call site.
+
+- 5fdddf4: Add `GameManifest.matchHistory` and `resolveMatchHistorySupport` — a per-game declaration of what
+  match history the host should keep.
+
+    A game had no way to tell the host it needs no undo, no replay recording, or a tighter action-history
+    bound. The mechanical knobs already existed — `InMemoryActionHistory({ maxEntries })` and
+    `UndoPolicy.allowUndo` — with no contract to drive them from. This adds the declaration and its
+    resolver.
+
+    `GameMatchHistorySupport` carries `undo`, `replay` and an optional `retainActions`.
+    `resolveMatchHistorySupport(manifest)` returns all three, defaulting absent fields off
+    `manifest.realtime`: a real-time game gets
+    `{ undo: false, replay: true, retainActions: DEFAULT_REALTIME_RETAIN_ACTIONS }`, everything else
+    `{ undo: true, replay: true, retainActions: MAX_ACTION_HISTORY_ENTRIES }` — the bound
+    `InMemoryActionHistory` has always applied, so a manifest with no declaration resolves to the
+    pre-existing behaviour.
+
+    The resolver never throws. `resolveTickerHz` throws on a bad `tickRateMs`, but that is the wrong
+    precedent for an optional capability: malformed input is dropped the way `resolveGameLanguages` drops
+    it, per field, so a bad manifest degrades instead of bricking the boot. A `retainActions` that is not
+    an integer in `[1, MAX_ACTION_HISTORY_ENTRIES]` falls back to the mode's default; a non-boolean
+    `undo` or `replay` falls back to its own default without disturbing the other. `realtime` is read for
+    truthiness, the same reading `resolveTickerHz` uses, so the two cannot disagree about which games are
+    real-time.
+
+    `MAX_ACTION_HISTORY_ENTRIES` moves to
+    `simulation/foundation/game-manifest-contract.ts`, because the resolver in the contract leaf clamps
+    against it and `foundation/` imports nothing from `engine/`. `simulation/engine/UndoManager.ts`
+    re-exports it under the same name, so every existing import path and the
+    `@chimera-engine/simulation/engine` barrel are unchanged, and its value is unchanged.
+
+- 397708b: Apply snapshot deltas in the renderer bridge, and measure what the delta path saves.
+
+    `GameAPI` gains `onSnapshotDelta` and the `chimera:game:snapshot-delta` channel. On a beat the
+    broadcaster decided is a delta, main sends the changed paths instead of the whole projection — that
+    IPC leg cost a structured clone of a whole projection per beat, and the changed paths are what it
+    costs instead. Main still keeps the projection for what needs it in-process: `getCurrentSnapshot`
+    answers with it and the perspective recorder appends it, both pinned.
+
+    `ipcClient` holds the last snapshot it RECEIVED, separate from the store's, which is the last one
+    PAINTED — the host measures the next delta against the former. Deltas are applied on arrival and only
+    the store WRITE is paced: newest-wins is right for a whole snapshot, which is measured against
+    nothing, and wrong for a delta, which is measured against what the one before it produced. So a frame
+    carries one write with everything that accumulated in it and no delta is dropped. An inapplicable
+    delta is refused rather than partly applied, and `engine:sync_request` is sent once per broken chain.
+
+    `RendererSnapshotRecipient.sendSnapshot` now takes the delta alongside the projection — `null` on a
+    keyframe. Breaking for anyone who registered a recipient directly.
+
+    The measurement F101 asked for is now in `OutboundPerBeatPerf.bench.test.ts` and recorded in §7.5, at
+    both ends of the axis the delta path lives on. At a realtime beat's motion — 25 of 500 entities, 100 of
+    2000 — the payload is about a twentieth of the projection at both grids. With nearly the whole arena
+    moving the delta is LARGER than the snapshot it would replace, about 105% of its bytes, which is the
+    case `StateBroadcaster`'s size fallback exists for. Each run reports the count `measureDeltaWave` counted, and
+    neither delta row is gated: a ratio asserted there would gate the runner
+    rather than the code.
+
+- 9d4fa92: Send the changed paths instead of the whole projection, with periodic keyframes.
+
+    `SNAPSHOT_DELTA` is a new `ServerMessage`. It carries a `SnapshotDelta`, a `version` (a client built for
+    another version REFUSES the frame at `ServerMessageSchema.safeParse` rather than applying it as if it
+    were this shape), and a CRC32 over the `delta` — the bytes the frame actually carries.
+    `ServerConnection` validates that checksum against the pre-Zod bytes exactly as it does a `SNAPSHOT`,
+    because a corrupt delta is the worse of the two: a snapshot REPLACES the client's state, so the next
+    one repairs it, while a delta is APPLIED to state the client keeps.
+
+    `StateBroadcaster` now keeps the last projection it sent each recipient and sends a delta against it.
+    Where it sends a whole snapshot instead is `StateBroadcaster.sendProjection`'s to say; the
+    size-fallback case also leaves a `trace` line and bumps a counter on `deltaMetrics()`.
+
+    `BroadcastContext.broadcast` gains a third argument, `{ forceFull }`, which Stage 7 sets for
+    `engine:sync_request`. The callback cannot infer it: a re-sync arriving after a run of clock-only beats
+    has a projection that genuinely DID change, so an empty diff is not the signal — and the viewer that
+    asked to be re-synced is precisely the one whose baseline the host cannot vouch for. Without it
+    `multiplayer-soak.spec.ts` fails: its `requestFullSnapshotSync` produced a delta rather than the
+    keyframe its name promises. Point-sends stay whole
+    snapshots: every caller of one is asking for the whole thing by definition. The baseline is keyed by RECIPIENT rather than by seat, so a spectator is diffed against
+    what that spectator received, and the broadcaster subscribes to `onPlayerLeft` itself to drop a
+    departed recipient's entry — the composition root's own handler returns early down several branches,
+    and a baseline left behind on any of them is the unbounded map this work exists to remove.
+
+    `HostTransport` gains `sendSnapshotDelta`. `ClientTransport` is unchanged: `WsClientTransport` and the
+    in-memory provider both rebuild the whole projection from the delta and publish THAT, so
+    `onSnapshotReceived` still hands subscribers a whole snapshot and nothing above the transport learns a
+    delta was on the wire. A delta the client cannot apply is dropped — never partially applied — and the
+    next whole snapshot re-establishes the chain. `WsClientTransport` also asks for one, sending
+    `engine:sync_request` once per broken chain, since that request makes the host broadcast to every viewer
+    rather than only to the asker.
+
+    The checksum `onSnapshotReceived` carries is now documented as the one the host stamped on the frame,
+    over that frame's own body, and the delta path passes it through rather than measuring the rebuild.
+    Measuring cannot give the host's number: `ServerMessageSchema` rebuilds a parsed snapshot in the
+    SCHEMA's key order rather than the host projector's, and `crc32Json` is order-sensitive, so two deeply
+    equal objects check differently. Comparing a host checksum with a client one is therefore meaningful
+    only across a whole-snapshot frame.
+
+    Breaking for anyone implementing `HostTransport` outside this repo: `sendSnapshotDelta` is required.
+
+- a15bfbd: Generalise the structural snapshot differ, and add the after-only form of a diff.
+
+    `diffSnapshots` moves from `simulation/debug/SnapshotDiff.ts` to the contract leaf at
+    `simulation/foundation/snapshot-diff.ts`, with its constraint relaxed from
+    `TState extends BaseGameSnapshot` to `TState extends { tick: number }`. A projected
+    `PlayerSnapshot` carries no `seed` and no `timers` by design (Invariant #3), so the old constraint admitted one only through a
+    cast — and the cast erased exactly the distinction the invariant rests on. Nothing about the diff's
+    behaviour changed, and `@chimera-engine/simulation/debug` re-exports `diffSnapshots`, `DiffEntry`
+    and `SnapshotDiff` from the new location, so that public subpath still carries them — see
+    `simulation/debug/index.test.ts`.
+
+    `simulation/foundation/snapshot-delta.ts` is new. `toSnapshotDelta` projects a diff onto its
+    after-only form: a `DiffEntry` carries `before` as well as `after`, which is right for an inspector
+    showing both sides and wrong for anything that has to fit in a frame, where repeating the old value
+    can make the delta larger than the snapshot it replaces. `applySnapshotDelta` is the other half — it
+    reproduces the new snapshot from the old one, copying only the containers along a changed path and
+    sharing the rest by reference. Where it refuses, it answers `null` rather than writing partially.
+    What it refuses, and why each refusal matters, is the `rejects a delta it cannot apply` block of
+    `simulation/foundation/snapshot-delta.test.ts`.
+
+    `@chimera-engine/electron` takes a comment-only change: the packaged-bundle marker file names the
+    differ's path in its rationale for excluding `diffSnapshots` from the marker set.
+
+### Patch Changes
+
+- 370ed0c: Latch the `action-history:overflow` report so a saturated history reports once per episode, not once
+  per append.
+
+    `InMemoryActionHistory.append()` warned inside its eviction branch, and that branch is taken on
+    every append once the history is full. For a turn-based game that is nearly free: `pruneTo` runs on
+    `engine:end_turn` and keeps the history far below its cap, so the warn fires only when pruning is
+    genuinely broken — which is what it was written for.
+
+    A game that dispatches no `engine:end_turn` never runs that prune, so the cap is the bound it
+    operates against: the history fills, and every append after that evicts.
+
+    Saturation is a state transition — retention has just become lossy — not a per-append event. A
+    private latch is raised on the first eviction — not on reaching the cap, since a full history that
+    has dropped nothing is still lossless — and re-armed by a `pruneTo` that drops the live size back
+    below capacity, so a turn-based game that saturates, prunes and saturates again still
+    reports each episode. Only a prune that actually FREES space re-arms it: `pruneTo` with a cutoff
+    that evicts nothing leaves the history saturated, so nothing transitioned and the next append must
+    not re-report the same episode.
+
+    Eviction itself is untouched — every overflowing append still drops its oldest entry, and the
+    `sinceLastMemento()`, head-cursor and compaction bookkeeping are unchanged. Only the reporting
+    cadence moves. The log key `action-history:overflow` and its `capacity` field are unchanged too.
+
+    Invariant #45 is amended to state the cadence rather than implying one warn per eviction, and
+    `electron/main/__tests__/logger-wiring.integration.test.ts` now drives the real host pipeline 200
+    appends past the cap and pins exactly one warn — a pipeline that never prunes is the condition that
+    made the cadence matter, and no unit test constructs it.
+
+- b7fe1b3: Assert the one-tick-per-action rule at the pipeline seam.
+
+    Invariant #42 says `GameSnapshot.tick` advances by exactly 1 per action applied by
+    `ActionPipeline.process()`. Three consumers depended on it and none could enforce it:
+    `ReplayPlayer.step()` throws a `DeterminismError` long after the fact, naming only the tick it
+    stopped at, and `replay-playback-manager` derives both `totalTicks` and its `step()` fast path from
+    the same rule. Stage 5 took `def.reduce`'s output verbatim, so a reducer that changed the snapshot
+    without touching the clock produced a match that played fine and a recording that could not.
+
+    `ActionPipeline` now checks it immediately after Stage 5 and throws a named `TickContractError`
+    whose message identifies the reducer at fault. The check is development-only — `NODE_ENV` is the
+    signal, which the packaging `define` bakes to `"production"` in a packaged bundle — so a violation
+    discovered after release cannot brick a shipped game. It still surfaces at replay time, where it
+    always did.
+
+    The rule is measured against `reduce`'s own output, and only for a reduce that ran alone. Four
+    cases are exempt, each with its own test: a reducer that returns its INPUT REFERENCE changed
+    nothing, so there is no action for the clock to count (`engine:save`, `engine:load`,
+    `engine:sync_request` and `engine:end_turn` with no `turnClock` all take this arm); `engine:undo`
+    and `engine:redo` are exempt by name, because a recorded undo reconstructs a prior state rather
+    than advancing; the check does not run on a nested dispatch; and a reduce that
+    dispatched children returns their cumulative advance rather than its own, which is what `engine:tick`
+    does when a timer fires.
+
+- b1ff2e4: Skip the per-beat animation-window sweep, and the entity key set it builds, when the registry is
+  empty.
+
+    `engine:tick` built `new Set(Object.keys(nextState.entities))` and spread the snapshot on every beat
+    whenever `animationWindows` was merely present. The field is sticky — the close paths leave `{}`
+    behind rather than deleting the key — so a game that had ever opened one window paid an O(entities)
+    walk on every later beat, and `AnimationWindowManager.advance` discovered the registry was empty
+    only after the caller had paid it. `apps/action` never touches the field; this was armed for the
+    next realtime game.
+
+    `AnimationWindowManager.isEmpty(registry)` probes the registry without allocating (a guarded
+    `for...in`, so a polluted `Object.prototype` cannot make an empty registry look occupied), the beat
+    pass checks it before building the key set, and `advance` uses the same probe for its own fast
+    path. A beat with an empty registry now leaves `animationWindows` as the same reference by never
+    writing it, which keeps the pipeline's clock-only broadcast engaged, as before.
+
+- b8552d6: Answer `UndoManager.canUndo` from an O(1) history size query instead of a copy of the entry list.
+
+    `canUndo` only asks whether the effective undo segment is non-empty, but it read that segment through
+    `getEffectiveEntries()` → `ActionHistory.sinceLastMemento()`, which slices the live history into a
+    fresh array. It sits on the per-viewer broadcast projection path — `ActionPipeline` Stage 7 projects
+    once per seated player, and `StateBroadcaster.fanOutToSpectators` projects again for each spectator's
+    followed seat — and in a game that dispatches no `engine:end_turn` the segment is never re-based by a
+    memento boundary, so its length grows to the history's cap.
+
+    `ActionHistory` gains `sizeSinceLastMemento(): number`. This is a required member, so any
+    implementer of the interface must add it. It and `sinceLastMemento()` now both derive their start
+    index from one private accessor, so the count describes exactly the array the slice would produce.
+
+    `canUndo` reads the per-player virtual history's length when an undo has already diverged it from the
+    shared history, and the size query otherwise. What it answers for a given state is pinned by the
+    `canUndo` and `canUndo — history access` describe blocks in `simulation/engine/UndoManager.test.ts`.
+    `undo()` still calls `sinceLastMemento()`: it genuinely replays the entries.
+
+- b20e420: Wire the compressed replay serializer, and stop pretty-printing replay files.
+
+    `CompressedReplaySerializer` gzips a `ReplayFile` and its own docblock said to inject it for
+    space-efficient storage — but `main()` wired the uncompressed `JsonReplaySerializer` into the
+    deterministic `FileReplayRepository`. Separately, `serializeReplay` called
+    `JSON.stringify(file, null, 2)`; the indentation is pure size for a file no human reads, and
+    `deserializeReplay` is indifferent to whitespace, so removing it changes nothing a consumer sees.
+
+    Both halves are dev/e2e-scoped: `createDeterministicReplayPort` returns `undefined` when
+    `app.isPackaged`, so a shipped build writes no deterministic replay at all.
+
+    The read path had to change with the write path. Both encodings share the `.chimera-replay`
+    extension, so nothing in the path distinguishes them, and `FileReplayRepository`
+    deserializes every matching file with no per-file tolerance — one unreadable replay would
+    take the whole listing, not just its own row. `deserializeReplayCompressed` therefore dispatches on
+    the gzip magic (`1f 8b`, RFC 1952) and falls through to plain JSON when it is absent, so a replay
+    already on disk still loads and a mixed directory still lists.
+
+    Dispatching on the magic rather than on a failed `gunzip` is the load-bearing half of that: a
+    truncated or corrupt gzip stream keeps its own error instead of falling through to be reported as
+    bad JSON. Both routes throw `ReplayParseError`, so the tests assert on the message — a check on the
+    error type alone cannot tell the two apart, and passes against the wrong implementation.
+
+    `durationTicks`, the file extension, the listing sort, `parseReplayFile`'s validation and the
+    `safeReviver` prototype-pollution guard are untouched.
+
+- 3b29c86: Report host heap and recorded-action count in the Performance HUD.
+
+    `PerfSample`'s `heapMb` is the RENDERER's `performance.memory`, so a host-side buffer could grow to
+    any size with the HUD unchanged. Two new fields carry the host's own numbers: `hostHeapMb` from
+    `process.memoryUsage().heapUsed`, and `recordedActionCount` from a new
+    `ReplayManager.recordedActionCount()` over the live deterministic recording.
+
+    They arrive on a new `chimera:game:host-metrics` push driven by main's own 1 Hz timer
+    (`startHostMetricsPush`), never per beat — at a beat rate the push would be the cost it measures.
+    Only scalars cross, and the payload is schema-validated at the preload boundary,
+    where an absent key is refused rather than read as `null`.
+
+    Both fields are `number | null` where `null` means UNAVAILABLE — no push yet, or no recording
+    running — and the HUD renders it as `—`. A started recording holding no actions reads `0`. `PerfStats.totalActionCount` remains what it was: the debug bridge's own array
+    length, capped and constant once saturated, and absent from a shipped game.
+
+    §13.5 now records what actually executes where. The timing gates run on CI, because the bench files
+    sit under `apps/*/__tests__/` and `pnpm -r test` collects them. The main-process heap case runs and
+    logs there too, but its assertion sits behind an `if (gc !== undefined)` guard, and `globalThis.gc`
+    exists only under `--expose-gc`, which `npm run test:perf` passes and CI does not.
+
+- e170cf4: Thread a game's declared match-history capability into the hosted session's undo policy, action-history
+  bound and start-of-match memento.
+
+    `buildHostSessionPipeline` hard-wired both collaborators: `new InMemoryActionHistory({ logger })` and
+    `new InMemoryUndoManager(history, DEFAULT_UNDO_POLICY, replay)`. `HostSessionPipelineOptions` gains
+    `undoPolicy` and `retainActions`; both are optional and both default to what was hard-wired, so a
+    caller that passes neither builds exactly the pipeline it built before.
+
+    `undoPolicyForMatchHistory` maps a resolved `GameMatchHistorySupport` onto an `UndoPolicy`, reading
+    only `undo`. A game that keeps undo gets `DEFAULT_UNDO_POLICY` itself; one that declares none gets the
+    same policy with `allowUndo` false. The manager stays in `PipelineContext` either way, so `engine:undo`
+    still enters through the Stage 3 intercept and is refused there with `policy_disallows` (Invariant #7).
+
+    The composition root resolves the capability once from the hosted game's manifest, so no consumer of
+    it can disagree with another. The turn handover keeps seeding the next player's memento from inside `ActionPipeline`'s
+    `engine:end_turn` branch, which this change does not touch; what a declining game loses is the
+    start-of-match baseline, which is refreshed only by that same handover.
+
+    `apps/tactics` declares no `matchHistory`, so it resolves to undo on, replay on and the
+    `MAX_ACTION_HISTORY_ENTRIES` bound — the values the host already used, unchanged.
+
+    `apps/action` is `realtime: true`, so it resolves to undo off, replay on and a 1,000-entry history
+    where the host previously gave it `DEFAULT_UNDO_POLICY`, a start-of-match memento and 10,000 entries. Its Ctrl+Z binding is the engine default spread into the app's settings
+    schema; it survives, and the seat's projected `undoMeta.canUndo` is now `false`, which is what the
+    renderer's own key handler returns on.
+
+    Prose the change falsified is repaired rather than left standing: `InMemoryActionHistory`'s
+    `maxEntries` option is documented as a host knob rather than a test-only override, and Invariant #45,
+    the `ActionHistory` listing in the action-pipeline doc and three pending changesets no longer name
+    `MAX_ACTION_HISTORY_ENTRIES` as the bound every hosted session runs against.
+
+- 51fec31: Document the declared match-history contract, and amend Invariant #45 so its two numbers read
+  correctly after it.
+
+    Only one of Invariant #45's two numbers moved across this arc.
+    `TURN_MEMENTO_RETENTION = 4` is unchanged and the row now says so: it is turn-scoped, reached only
+    from `ActionPipeline`'s `engine:end_turn` branch, and no manifest declaration touches it. The entry
+    cap is what became per-game — a hosted session's history is constructed with the game's resolved
+    `matchHistory.retainActions`, for which `MAX_ACTION_HISTORY_ENTRIES = 10_000` is the turn-based
+    default and the ceiling a declaration may not exceed, and `DEFAULT_REALTIME_RETAIN_ACTIONS` is the
+    real-time default.
+
+    §4.5/§7 gains the contract: the interface, the `realtime`-keyed default table, the never-throws
+    rule, and what the host and the renderer each read from the resolved capability. §4.28 gains the
+    declining path, including that the save and preview refusals are the ones a never-recorded match
+    already gets. The Turn Boundary Rules table gains the declared-no-undo row. §4.26 gains
+    `useInputAction`'s `enabled` option, and its "what stays internal" paragraph no longer enumerates
+    names it cannot keep complete.
+
+    The blank scaffold template documents `matchHistory` on its manifest with a commented-out example,
+    and its `renderer/loaders.ts` forwards the resolved capability. Without that forward a scaffolded
+    game that declares no undo would still bind its undo key — the renderer half of the declaration
+    exists only because a game forwards it.
+
+    The traceability matrix names F96 on the §4.5, §4.28 and §4.37 rows and in the feature-to-milestone
+    index.
+
+- eb6a674: Report `action-history:overflow` at `info` rather than `warn` when no undo replays the history.
+
+    The warn was written for a retention failure — a capability the player has, quietly reduced. A game
+    that declares no undo has no such capability: the entries the cap drops are read back through the undo
+    manager alone, since `HistoryContext.history` narrows the type to `append` and `pruneTo` for every
+    other consumer. The action app is the case that made this matter: it declares no undo, dispatches no
+    `engine:end_turn` and so never reaches `pruneTo`, and `ActionPipeline` appends every depth-0 dispatch
+    including `engine:tick`. At its resolved bound of 1_000 entries and a 100 ms beat that history
+    saturates about 100 seconds in and stays saturated, so a `warn` there names steady-state behaviour as
+    a fault and an operator who reads one learns nothing.
+
+    `InMemoryActionHistory` takes an `undoable` option, defaulting to `true` so an existing caller is
+    unchanged, and `buildHostSessionPipeline` supplies the resolved `UndoPolicy.allowUndo`. Only the level
+    moves: the message, the `capacity` context and the saturation latch are the same. `info` rather than
+    `debug` is where `resolveFileLogLevel` defaults the durable file sink's threshold (§4.27). Invariant
+    #45 and §4.5 state which level follows which resolved capability.
+
+- b4ee634: Walk the projector's entity and player records by `Object.keys` instead of `Object.entries`.
+
+    `DefaultStateProjector` ran `Object.entries(fullState.entities)` and `Object.entries(fullState.players)`
+    once per recipient per beat, materialising one `[key, value]` pair array per entry each time — the
+    O(entities × viewers) allocation on the broadcast path. `Object.keys` with an indexed lookup
+    enumerates the same own keys in the same order (integer-like keys ascending, then strings in
+    insertion order), so the projected records are deep-equal and serialise to the same bytes, which
+    keeps every downstream checksum unchanged.
+
+    `for...in` was measured as well and rejected: over the plain-object source record it also
+    enumerates any enumerable key added to `Object.prototype`, which `Object.entries` and
+    `Object.keys` never do, and it was no faster. A test pollutes the prototype for the duration of
+    one projection and asserts the polluted key is absent from both records. Measured on the
+    development machine (Node v25.9.0, 1000 entities, median of 5 runs of 2000 calls): a masking
+    projection pass took 0.126 ms with `Object.entries`, 0.061 ms with `for...in`, 0.054 ms with
+    `Object.keys`; the bare loop without masking took 0.092 ms, 0.026 ms and 0.021 ms respectively.
+
+- fe82ccc: Derive the `ActionPipeline` tick budget from the game's declared tick rate.
+
+    `TICK_BUDGET_MS = 16` was documented as "≤ 16 ms at 20 Hz" but was parameterised by nothing, while
+    `resolveTickerHz` accepts any finite positive `tickRateMs` (100 Hz is pinned as correct in
+    `game-manifest-contract.test.ts`). A game declaring a 10 ms period was therefore gated against a
+    budget larger than its entire beat — a gate that could not fail.
+
+    `tickBudgetMsFor(tickRateMs)` now returns `TICK_BUDGET_DUTY` (0.32) of the declared period, and
+    `TICK_BUDGET_MS` is derived from `DEFAULT_TICK_RATE_MS`: it is still 16, so no existing gate's
+    number moved. The duty is locked by a test the way the heap budgets are, so changing the engine's
+    headroom policy is a deliberate act. `tickBudgetMsFor` throws a `RangeError` on a non-finite or
+    non-positive period, mirroring `resolveTickerHz`'s refusal of the same inputs, and accepts a
+    fractional one, as `resolveTickerHz` also does.
+
+- 7635670: Refuse undo when eviction has dropped entries recorded since the turn memento.
+
+    `InMemoryUndoManager.undo()` replays `sinceLastMemento()` on top of `memento.snapshotAtTurnStart`.
+    `InMemoryActionHistory` evicts by advancing a head cursor, and `#clampMementoBoundary()` drags the
+    memento boundary up with it — so once eviction passes the boundary, the tail `sinceLastMemento()`
+    returns begins later than the baseline it is relative to. The entries in between are gone, and
+    `undo()` replayed the remainder onto the stale baseline and returned a snapshot that is neither the
+    pre-undo state nor any state the match had been in, with no error.
+
+    Two evictors reach that clamp: the overflow cap in `append()`, and `pruneTo()` walking past the
+    boundary. A realtime game is where the cap bites — it dispatches no `engine:end_turn`, so it neither
+    prunes nor re-takes a memento.
+
+    `ActionHistory` gains `hasEvictedSinceMemento(): boolean`. It is a required member, so every
+    implementer must add it. `InMemoryActionHistory` raises the flag where `#clampMementoBoundary()`
+    actually moves the boundary, and clears it on the next `markMementoBoundary()` — a fresh baseline is
+    anchored to the live tail, so an earlier gap is no longer in front of the segment.
+
+    `canUndo()` returns `false` while the flag holds and the player is reading the shared history, so the
+    projected `undoMeta` stops advertising undo, and `undo()` throws `UndoNotAllowedError`. Its `reason`
+    is the existing `not_enough_history` rather than a new code: the entries between the baseline and the
+    surviving tail are exactly the history the undo needs and no longer has. Re-anchoring the memento is
+    deliberately not attempted — that would need a snapshot the manager does not hold, and refusing is
+    the honest answer.
+
+    A player who has already undone reads their own virtual history, which the manager owns and which
+    was captured while the segment was whole, so their undo is unaffected. Eviction that has only reached
+    entries recorded _before_ the memento is unaffected too — the segment undo replays is still intact.
+
+- 94c0cb1: Remove the client-prediction surface, which was implemented and tested but reachable from nothing.
+
+    There was no client prediction: every action waited a full host round trip. What existed was a chain
+    where each link's only consumer was the next one, and the last led nowhere — `ActionDefinition.predictable`,
+    the `chimera:game:predictable-action-types` channel and its `GameAPI.getPredictableActionTypes()`
+    method, the `isPredictable` predicate the IPC client was built with, `gameStore.addPrediction` /
+    `confirmPrediction`, and the `predictedActions` array, which no component, hook or reducer anywhere
+    in the repo read. Beside it sat `ClientPredictor` and `ReconcileBuffer`, exported from the engine
+    barrel and unit-tested, constructed only in their own tests, and typed on `BaseGameSnapshot` — the
+    state Invariant #3 keeps inside the main process — so a client could not have used them as written.
+
+    All of it is gone, together with the comment in `ipcClient.ts` that forbade importing the two
+    classes: a prohibition outlives its subject as a puzzle, not a rule. `PredictionStore` is now
+    `MatchStatusStore`, carrying the three fields that survive — `latencyMs`, `canUndo`, `canRedo`. What `latencyMs` is written by, and
+    what reads it, is §6.3's.
+
+    §6 says what it costs to add prediction properly instead of describing what was there: the renderer
+    holds a `PlayerSnapshot`, so the reducers it would replay have to be renderer-safe and registered as
+    such, and the optimistic state may never become an authoritative write.
+
+    Breaking for adopters who set `predictable: true` on an action definition, or who call
+    `getPredictableActionTypes()`: both are removed. Neither did anything.
+
+- ddca27d: Give `snapshot.events` a retention rule and enforce it: it is a per-ACTION outbox, drained by
+  `ActionPipeline.process()` before every outer action's reduce.
+
+    Nothing cleared `events` before this. The field is in `BASE_SNAPSHOT_KEYS`, so `baseSnapshotOnly()`
+    carried it across both match boundaries and it accumulated for the life of a SESSION — riding into
+    every projected `PlayerSnapshot`, every broadcast and every save checkpoint the body checksum
+    covers.
+
+    The rule is enforced per action rather than per beat, which is what the issue proposed. Measured:
+    `resolveTickerHz` returns `null` for a `realtime: false` manifest, so outside the `CHIMERA_E2E`
+    forced-interval seam the host builds no `RealtimeTicker` for such a game — and
+    `apps/tactics/simulation/actions.ts`, which appends events, sits under exactly such a manifest.
+    Clearing inside the `engine:tick` reduce would therefore have left a shipped session of it
+    accumulating while the docs claimed a bound. Per action also makes the documented contract literally
+    true: `tick` is "+1 per applied action", so "all events this tick" and "one action's events" are the
+    same sentence.
+
+    The drain is gated on `#depth === 0`, so a fired timer's nested dispatch adds to the outer action's
+    outbox rather than replacing it. Every later comparison in the frame reads the DRAINED value, which
+    is what keeps `#isClockOnlyTick` seeing an idle beat as idle — including the first beat after an
+    eventful one — so the tick-only broadcast branch stays engaged. The drained array is one shared
+    frozen constant: an in-place append, already forbidden by Invariant #43, throws at the offending
+    line instead of contaminating every later drain.
+
+    `EventAudioPlayer` tracked a played COUNT, which only works while the array grows; under a drained
+    outbox that silently drops any batch no longer than the one before it. It now plays each batch whole
+    and keys its ref on the array's IDENTITY, so a re-render carrying a new `binding` object plays
+    nothing.
+
+    `GameEvent`'s shape is unchanged, and `StateProjector` filters per viewer exactly as before.
+
+- 5a3584a: Add a sustained-match retention gate that fails when a retained structure grows without bound.
+
+    Every growth defect this arc found shares one shape: a structure that grows with elapsed beats and
+    nothing that notices. The new `electron/main/__tests__/sustained-match-retention.integration.test.ts`
+    drives a REAL hosted session with the action history, the deterministic recorder and the perspective
+    recorder armed, through a harness under `electron/main/__test-support__/`. The §13.4 heap gate
+    builds a bare `ActionPipeline`, so none of those three is wired there.
+
+    It probes the defect class rather than an instance: retained sizes are sampled at N beats and again
+    at 2N and compared, so the assertion is about growth rate and not about a byte number that drifts.
+    Two scales, because the capped buffers must be sampled past a 10,000 cap while the per-beat working
+    state must be sampled small — `TimerManager.advance` walks the timer registry once per beat, so a
+    fired timer that survives its beat makes the run quadratic, and a synchronous beat loop cannot be
+    cut short by a test timeout.
+
+    Two small observability seams make it possible. `InMemoryActionHistory.size()` reports the live
+    entry count — what `maxEntries` bounds, whole rather than the undoable tail `sizeSinceLastMemento()`
+    reports once a turn memento has re-based it. `HostSessionPipelineResult.retainedActionCount()`
+    surfaces it for a session whose history is constructed inside `buildHostSessionPipeline`.
+
+- 16e3f97: Remove a fired one-shot timer from `snapshot.timers` instead of rewriting it as an
+  `{ active: false }` tombstone.
+
+    `TimerManager.advance()` had no delete path: once a one-shot fired, its entry stayed in the registry
+    inactive for the rest of the session. The registry is snapshot-resident, so every tombstone sat in
+    every later save checkpoint the body checksum covers and under every later beat's walk of the
+    registry — one dead entry per fire, for a game that schedules per-entity timers. (It never crossed
+    to a client: `StateProjector.project()` carries no `timers` field — Invariant #8.)
+
+    The removal happens inside `advance()`'s own pure pass (Invariant #55): the fired entry is simply
+    not carried into the returned registry. Everything else is as it was — a repeating timer resets and
+    stays, a timer still counting down keeps its slot, and an entry that was ALREADY inactive (a
+    cancelled timer, or a tombstone written by an engine that still left them behind) is passed through
+    untouched, so a save carrying tombstones loads with no migration and the tombstone is skipped on
+    the next beat exactly as before. When nothing in the registry is active, `advance()` still returns
+    its input reference, so `engine:tick` keeps `snapshot.timers` by reference and the pipeline's
+    clock-only broadcast stays reachable; with the fired entry gone, the beat after a one-shot fires is
+    that fast path rather than a walk over a dead entry.
+
+    `GameTimer.active` and `TimerManager.cancel()` are unchanged. A sweep of production code under
+    `simulation/`, `ai/`, `networking/`, `renderer/`, `electron/`, `apps/` and the scaffold templates
+    for readers of a timer's `active` field, and for callers of `TimerManager.create` / `cancel`,
+    found none outside `GameTimer.ts` itself.
+
 ## 1.0.0-rc.12
 
 ### Minor Changes

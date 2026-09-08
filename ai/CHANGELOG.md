@@ -1,5 +1,47 @@
 # @chimera-engine/ai
 
+## 1.0.0-rc.13
+
+### Minor Changes
+
+- f6ad1d8: Skip the per-beat projection for agents that do not observe ticks.
+
+    `AgentManager.tickAll` projected a `PlayerSnapshot` for every registered agent and handed it to
+    `onTick`. `HumanPlayerAgent.onTick` is an empty body, so for every human seat that projection was
+    computed and thrown away on every beat — O(entities) per human seat, growing with the tick rate the
+    realtime arc is built to raise. `PlayerAgent` now carries `observesTicks`; `HumanPlayerAgent`
+    declares `false`, `AIPlayerAgent` declares `true`, and `tickAll` skips a `false` agent before either
+    the projection or the `onTick` call. The coordinator reads the flag, never `kind`. `onGameStart` and
+    `onGameEnd` still project for every agent.
+
+    An honest tick-observing agent receives the projector's own return, by identity, as before. The
+    skipped agent receives nothing, so the skip opens no path to unprojected state (Invariant #17).
+
+### Patch Changes
+
+- Updated dependencies [370ed0c]
+- Updated dependencies [b7fe1b3]
+- Updated dependencies [b1ff2e4]
+- Updated dependencies [b8552d6]
+- Updated dependencies [b20e420]
+- Updated dependencies [1f2ef60]
+- Updated dependencies [3b29c86]
+- Updated dependencies [e170cf4]
+- Updated dependencies [51fec31]
+- Updated dependencies [5fdddf4]
+- Updated dependencies [eb6a674]
+- Updated dependencies [b4ee634]
+- Updated dependencies [fe82ccc]
+- Updated dependencies [7635670]
+- Updated dependencies [94c0cb1]
+- Updated dependencies [397708b]
+- Updated dependencies [9d4fa92]
+- Updated dependencies [a15bfbd]
+- Updated dependencies [ddca27d]
+- Updated dependencies [5a3584a]
+- Updated dependencies [16e3f97]
+    - @chimera-engine/simulation@1.0.0-rc.13
+
 ## 1.0.0-rc.12
 
 ### Patch Changes

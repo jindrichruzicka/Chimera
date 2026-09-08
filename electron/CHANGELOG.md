@@ -1,5 +1,590 @@
 # @chimera-engine/electron
 
+## 1.0.0-rc.13
+
+### Minor Changes
+
+- 7905ea8: Record nothing for a game whose manifest declares `matchHistory.replay: false` — neither the
+  deterministic replay nor the host's or a joined client's perspective recording.
+
+    `createDeterministicReplayPort` already modelled declining: it answers `undefined` in a packaged
+    build, and the pipeline skips `recordAction` when the port is absent. The game's declaration joins
+    `app.isPackaged` as a second gate on the same factory, whose two parameters move into one
+    `DeterministicReplayGates` object (`isPackaged`, `replayDeclared`). The composition root is its only
+    caller in this repo, and the helper is not on `@chimera-engine/electron`'s exports map.
+
+    The perspective side declines in `startSessionRecordings`, which is also what return-to-lobby calls to
+    re-arm for a fresh match — so a declining game does not start a recording on the way back into a match
+    either. `hostPerspectiveActive` therefore stays `false` and the per-broadcast `recordSnapshot` is never
+    reached. A joined client's `clientPerspective` stays `null` for the same declaration.
+
+    Nothing new guards the save or preview paths. With no recording started, `exportCurrent` and the
+    current-match playback sentinel refuse exactly as they already do for a match that was never recorded:
+    the IPC invoke rejects and no file is written. A game whose post-game screen opens the current match
+    (as `apps/tactics` does) reaches that refusal rather than a crash or a frameless playback.
+
+    A game that resolves to `replay: true` records exactly as before.
+
+- e170cf4: Thread a game's declared match-history capability into the hosted session's undo policy, action-history
+  bound and start-of-match memento.
+
+    `buildHostSessionPipeline` hard-wired both collaborators: `new InMemoryActionHistory({ logger })` and
+    `new InMemoryUndoManager(history, DEFAULT_UNDO_POLICY, replay)`. `HostSessionPipelineOptions` gains
+    `undoPolicy` and `retainActions`; both are optional and both default to what was hard-wired, so a
+    caller that passes neither builds exactly the pipeline it built before.
+
+    `undoPolicyForMatchHistory` maps a resolved `GameMatchHistorySupport` onto an `UndoPolicy`, reading
+    only `undo`. A game that keeps undo gets `DEFAULT_UNDO_POLICY` itself; one that declares none gets the
+    same policy with `allowUndo` false. The manager stays in `PipelineContext` either way, so `engine:undo`
+    still enters through the Stage 3 intercept and is refused there with `policy_disallows` (Invariant #7).
+
+    The composition root resolves the capability once from the hosted game's manifest, so no consumer of
+    it can disagree with another. The turn handover keeps seeding the next player's memento from inside `ActionPipeline`'s
+    `engine:end_turn` branch, which this change does not touch; what a declining game loses is the
+    start-of-match baseline, which is refreshed only by that same handover.
+
+    `apps/tactics` declares no `matchHistory`, so it resolves to undo on, replay on and the
+    `MAX_ACTION_HISTORY_ENTRIES` bound — the values the host already used, unchanged.
+
+    `apps/action` is `realtime: true`, so it resolves to undo off, replay on and a 1,000-entry history
+    where the host previously gave it `DEFAULT_UNDO_POLICY`, a start-of-match memento and 10,000 entries. Its Ctrl+Z binding is the engine default spread into the app's settings
+    schema; it survives, and the seat's projected `undoMeta.canUndo` is now `false`, which is what the
+    renderer's own key handler returns on.
+
+    Prose the change falsified is repaired rather than left standing: `InMemoryActionHistory`'s
+    `maxEntries` option is documented as a host knob rather than a test-only override, and Invariant #45,
+    the `ActionHistory` listing in the action-pipeline doc and three pending changesets no longer name
+    `MAX_ACTION_HISTORY_ENTRIES` as the bound every hosted session runs against.
+
+- 2cc292b: Give the perspective replay frame buffer an explicit ceiling with oldest-frame eviction.
+
+    `PerspectiveReplayManager.recordSnapshot` appended a whole projected `PlayerSnapshot` to
+    `recording.frames` with viewerId and tick-order checks but no capacity check — a sweep of
+    `electron/main/replay` for `maxFrames|cap|truncat|prune|evict` returned nothing. The buffer is
+    released per **match** — `abort()` on return-to-lobby, on session close and on joined teardown — not
+    per session, so what it holds is set by how long one uninterrupted match runs.
+
+    For a turn-based game that is bounded by the players. For a realtime host it was not: a frame is
+    retained per CHANGED beat, so growth tracked time-in-motion, and each frame is a whole projected
+    snapshot whose size scales with the game's entity count.
+
+    `PerspectiveReplayManager` now takes a `maxFrames` option defaulting to
+    `DEFAULT_MAX_PERSPECTIVE_REPLAY_FRAMES`. A non-positive or non-integer value throws at construction
+    rather than degrading to unbounded. The default matches `MAX_ACTION_HISTORY_ENTRIES` — the engine's
+    existing order of magnitude for a per-match retained buffer — and nothing more is claimed for it:
+    the two fill at different rates, since the action history appends on every depth-0 dispatch while a
+    frame is retained only when the beat changed something.
+
+    On overflow the oldest frame is dropped and a `perspective-replay:overflow` warn carrying
+    `maxFrames` is raised **once per recording** — past the ceiling every frame evicts, so a
+    per-eviction warn would be a log line per beat for the rest of the match. The latch lives on the
+    recording state rather than on the manager, so a second match that overflows reports again.
+
+    Eviction moves the FRONT of the buffer while `recordSnapshot`'s strictly-increasing-tick check reads
+    the back, so a dropped frame cannot make a later one look out of order — pinned by a test that
+    records past the ceiling and then offers both an evicted tick and a retained one, expecting both to
+    be skipped. Every existing validation, `durationTicks`, and the file format are untouched, and
+    playback reads an overflowed file without special-casing: it binary-searches frames by tick and
+    already holds the first frame for any tick before it. What an overflowed file costs the viewer is
+    its prefix — `durationTicks` still spans the whole match, so the scrubber's early range renders the
+    earliest retained frame held.
+
+    Overflowing a long match costs the OLDEST frames of its perspective replay. That is a retention
+    decision, not a correctness one, and it is independent of any per-game switch that turns recording
+    off.
+
+- 397708b: Apply snapshot deltas in the renderer bridge, and measure what the delta path saves.
+
+    `GameAPI` gains `onSnapshotDelta` and the `chimera:game:snapshot-delta` channel. On a beat the
+    broadcaster decided is a delta, main sends the changed paths instead of the whole projection — that
+    IPC leg cost a structured clone of a whole projection per beat, and the changed paths are what it
+    costs instead. Main still keeps the projection for what needs it in-process: `getCurrentSnapshot`
+    answers with it and the perspective recorder appends it, both pinned.
+
+    `ipcClient` holds the last snapshot it RECEIVED, separate from the store's, which is the last one
+    PAINTED — the host measures the next delta against the former. Deltas are applied on arrival and only
+    the store WRITE is paced: newest-wins is right for a whole snapshot, which is measured against
+    nothing, and wrong for a delta, which is measured against what the one before it produced. So a frame
+    carries one write with everything that accumulated in it and no delta is dropped. An inapplicable
+    delta is refused rather than partly applied, and `engine:sync_request` is sent once per broken chain.
+
+    `RendererSnapshotRecipient.sendSnapshot` now takes the delta alongside the projection — `null` on a
+    keyframe. Breaking for anyone who registered a recipient directly.
+
+    The measurement F101 asked for is now in `OutboundPerBeatPerf.bench.test.ts` and recorded in §7.5, at
+    both ends of the axis the delta path lives on. At a realtime beat's motion — 25 of 500 entities, 100 of
+    2000 — the payload is about a twentieth of the projection at both grids. With nearly the whole arena
+    moving the delta is LARGER than the snapshot it would replace, about 105% of its bytes, which is the
+    case `StateBroadcaster`'s size fallback exists for. Each run reports the count `measureDeltaWave` counted, and
+    neither delta row is gated: a ratio asserted there would gate the runner
+    rather than the code.
+
+- 9d4fa92: Send the changed paths instead of the whole projection, with periodic keyframes.
+
+    `SNAPSHOT_DELTA` is a new `ServerMessage`. It carries a `SnapshotDelta`, a `version` (a client built for
+    another version REFUSES the frame at `ServerMessageSchema.safeParse` rather than applying it as if it
+    were this shape), and a CRC32 over the `delta` — the bytes the frame actually carries.
+    `ServerConnection` validates that checksum against the pre-Zod bytes exactly as it does a `SNAPSHOT`,
+    because a corrupt delta is the worse of the two: a snapshot REPLACES the client's state, so the next
+    one repairs it, while a delta is APPLIED to state the client keeps.
+
+    `StateBroadcaster` now keeps the last projection it sent each recipient and sends a delta against it.
+    Where it sends a whole snapshot instead is `StateBroadcaster.sendProjection`'s to say; the
+    size-fallback case also leaves a `trace` line and bumps a counter on `deltaMetrics()`.
+
+    `BroadcastContext.broadcast` gains a third argument, `{ forceFull }`, which Stage 7 sets for
+    `engine:sync_request`. The callback cannot infer it: a re-sync arriving after a run of clock-only beats
+    has a projection that genuinely DID change, so an empty diff is not the signal — and the viewer that
+    asked to be re-synced is precisely the one whose baseline the host cannot vouch for. Without it
+    `multiplayer-soak.spec.ts` fails: its `requestFullSnapshotSync` produced a delta rather than the
+    keyframe its name promises. Point-sends stay whole
+    snapshots: every caller of one is asking for the whole thing by definition. The baseline is keyed by RECIPIENT rather than by seat, so a spectator is diffed against
+    what that spectator received, and the broadcaster subscribes to `onPlayerLeft` itself to drop a
+    departed recipient's entry — the composition root's own handler returns early down several branches,
+    and a baseline left behind on any of them is the unbounded map this work exists to remove.
+
+    `HostTransport` gains `sendSnapshotDelta`. `ClientTransport` is unchanged: `WsClientTransport` and the
+    in-memory provider both rebuild the whole projection from the delta and publish THAT, so
+    `onSnapshotReceived` still hands subscribers a whole snapshot and nothing above the transport learns a
+    delta was on the wire. A delta the client cannot apply is dropped — never partially applied — and the
+    next whole snapshot re-establishes the chain. `WsClientTransport` also asks for one, sending
+    `engine:sync_request` once per broken chain, since that request makes the host broadcast to every viewer
+    rather than only to the asker.
+
+    The checksum `onSnapshotReceived` carries is now documented as the one the host stamped on the frame,
+    over that frame's own body, and the delta path passes it through rather than measuring the rebuild.
+    Measuring cannot give the host's number: `ServerMessageSchema` rebuilds a parsed snapshot in the
+    SCHEMA's key order rather than the host projector's, and `crc32Json` is order-sensitive, so two deeply
+    equal objects check differently. Comparing a host checksum with a client one is therefore meaningful
+    only across a whole-snapshot frame.
+
+    Breaking for anyone implementing `HostTransport` outside this repo: `sendSnapshotDelta` is required.
+
+### Patch Changes
+
+- a585ae5: Pin `APP_AI_PATH`'s `ai`-segment right boundary.
+
+    `APP_AI_PATH` gates Invariant #76's per-game AI arm in `no-fromfloat-in-simulation`. Widening the
+    `ai` segment from `ai\/` to `ai[^/]*\/` — the segment gaining a `[^/]*` suffix before its own
+    trailing slash — left the whole `electron/dev-tools/eslint` directory green. No case pinned this
+    boundary for a sibling directory whose name merely starts with `ai`.
+
+    The widening buys reachable wrong behaviour: a directory such as `apps/tactics/aiHelpers/` — a
+    plausible helper directory that is not the sanctioned AI zone — becomes a forbidden zone, so
+    `fromFloat` inside it is wrongly reported.
+
+    The rule is unchanged and correct; this is test coverage. One `valid` case added
+    (`apps/tactics/aiHelpers/util.ts`), carrying a real `fromFloat` call imported from FixedPoint so it
+    can only pass because the zone check said no, and verified RED against its own spliced mutant first.
+
+- 23764c2: Pin `APP_AI_PATH`'s segment anchor, trailing slash, and single-segment app name.
+
+    `APP_AI_PATH` gates Invariant #76's per-game AI arm in `no-fromfloat-in-simulation`, so widening it
+    silently turns unrelated code into a forbidden zone. Three independent widenings of that one regex
+    left the whole `electron/dev-tools/eslint` directory green — the `(?:^|/)` segment anchor, the
+    trailing `/`, and `[^/]+` relaxed to `.+`. No `valid` case in the file carried `apps/<x>/ai` as a
+    substring, so no fixture sat on the far side of any of them.
+
+    Each widening buys reachable wrong behaviour. Without the anchor, a directory whose name merely ENDS
+    in `apps` contains `apps/<game>/ai/` as a substring, so a `webapps/` tree's AI code is reported.
+    Without the trailing slash, a file directly under `apps/<game>/` whose name merely starts with `ai`
+    fires. With `.+` the app-name segment crosses slashes, so any nested `ai/` inside a game app — a
+    renderer one, say — becomes a forbidden zone.
+
+    The rule is unchanged and correct; this is test coverage. Three `valid` cases, one per axis, each
+    carrying a real `fromFloat` call imported from FixedPoint so it can only pass because the zone check
+    said no, and each verified RED against its own spliced mutant first. The sibling rules' "file
+    directly under `apps/`" fixture does not transfer: `APP_AI_PATH` ends one segment later than
+    `isGameFile`, so such a path matches neither the shipped regex nor the mutant.
+
+- b20e420: Wire the compressed replay serializer, and stop pretty-printing replay files.
+
+    `CompressedReplaySerializer` gzips a `ReplayFile` and its own docblock said to inject it for
+    space-efficient storage — but `main()` wired the uncompressed `JsonReplaySerializer` into the
+    deterministic `FileReplayRepository`. Separately, `serializeReplay` called
+    `JSON.stringify(file, null, 2)`; the indentation is pure size for a file no human reads, and
+    `deserializeReplay` is indifferent to whitespace, so removing it changes nothing a consumer sees.
+
+    Both halves are dev/e2e-scoped: `createDeterministicReplayPort` returns `undefined` when
+    `app.isPackaged`, so a shipped build writes no deterministic replay at all.
+
+    The read path had to change with the write path. Both encodings share the `.chimera-replay`
+    extension, so nothing in the path distinguishes them, and `FileReplayRepository`
+    deserializes every matching file with no per-file tolerance — one unreadable replay would
+    take the whole listing, not just its own row. `deserializeReplayCompressed` therefore dispatches on
+    the gzip magic (`1f 8b`, RFC 1952) and falls through to plain JSON when it is absent, so a replay
+    already on disk still loads and a mixed directory still lists.
+
+    Dispatching on the magic rather than on a failed `gunzip` is the load-bearing half of that: a
+    truncated or corrupt gzip stream keeps its own error instead of falling through to be reported as
+    bad JSON. Both routes throw `ReplayParseError`, so the tests assert on the message — a check on the
+    error type alone cannot tell the two apart, and passes against the wrong implementation.
+
+    `durationTicks`, the file extension, the listing sort, `parseReplayFile`'s validation and the
+    `safeReviver` prototype-pollution guard are untouched.
+
+- 2089ae9: Correct the curated-rules predicate list: `no-raw-r3f-canvas` has an `apps/<name>/` predicate too.
+
+    `curated-rules.ts` is what an adopter reads to understand why a curated rule went quiet in their
+    layout, and its enumeration named three rules with an `apps/<name>/` path predicate. There are four
+    — `no-raw-r3f-canvas` carries one and says so in its own source, and `preset.ts` already counted it.
+    A reader trusting the shorter list would conclude that rule is layout-independent when it is not.
+
+    The same passage said those predicates "read the ABSOLUTE filename". What they want is the
+    `apps/<name>/` SEGMENT, not a leading slash — a relative filename satisfies them just as well, which
+    `no-raw-r3f-canvas.test.ts` measures. That file gains a case for a game surface at a bare project
+    root, which must NOT fire — the layout `preset.ts` warns a standalone game about.
+
+    No rule behaviour changes. The same "ABSOLUTE" wording is struck wherever this branch's repaired
+    passage would send a reader — `preset.ts`, its test header, `electron/dev-tools/eslint/README.md`,
+    §4.32, and the pending `standalone-lint-config-preset` changeset, which republishes at `pre exit`.
+    The published copy in `electron/CHANGELOG.md` is a release record and is left as written.
+
+- b7970a5: Put a level threshold in front of the durable log file, and demote the per-beat log sites to
+  `trace`.
+
+    The root logger deliberately owns no threshold — it fans out to sinks with different appetites, so
+    one threshold on the logger would starve whichever leg wants more. The threshold therefore belongs
+    on a sink, and `createMinLevelSink` has existed for exactly that. It had one production call site:
+    the dev-stderr mirror, which is `null` when `app.isPackaged`. The file leg was passed raw, so every
+    `debug` a shipped build emitted reached the daily log file — a file with rotation but no size cap.
+
+    That is only a defect once something logs per beat, which is what a realtime host does.
+    `StateBroadcaster` logged once per viewer per beat on both the full-snapshot path and the
+    clock-only path, and once per spectator per wave on the spectator fan-out; `PerspectiveReplayManager`
+    logged once per recorded frame. `main()` now wires the file leg as
+    `createMinLevelSink(resolveFileLogLevel(process.env['CHIMERA_LOG_LEVEL']), pinoSink)`, defaulting to
+    `info`, and those four sites moved to `trace`.
+
+    Both halves are load-bearing and neither works alone. `trace` ranks BELOW `debug`, so demoting the
+    call sites against an unfiltered sink changes nothing; and the threshold alone would leave the
+    sites at a level a bug report is likely to ask for, so `CHIMERA_LOG_LEVEL=debug` would put the
+    per-beat lines straight back. `trace` is what an operator asks for when they actually want the beat.
+
+    `CHIMERA_LOG_LEVEL` accepts any `LogLevel`, trimmed and case-insensitive; an unrecognised value
+    resolves to `info` rather than failing the boot, because a mistyped variable must not cost a shipped
+    build its log file. It is read once, at wire-up.
+
+    The threshold wraps the fan-out LEG, not `pinoSink` itself, so `startPeriodicFlush` and
+    `refuseToStart` keep draining the real SonicBoom buffer. The memory ring buffer that backs
+    `chimera:logs:readRecent` is unfiltered, and so is the `dev:mp` harness stdout stream: one is
+    capacity-bounded, the other is a live developer stream, and neither is a file that grows for the
+    length of a match. The crash dump is upstream of all of this — it drains the
+    `LogRingBufferSink` the root logger is constructed with, above the fan-out — so no threshold on a
+    leg can reach it.
+
+    `main()` no longer builds the fan-out inline.
+    `createMainLoggerSink({ file, memory, harnessStdout, devStderr, fileMinLevel })` composes it,
+    because WHICH leg carries the threshold is the load-bearing decision and it is not observable from a test of the threshold helper alone. What `main()` in turn
+    passes for `fileMinLevel` is not observable from a test of `createMainLoggerSink` either, so that is
+    pinned by driving the real `main()` and pushing one entry per level through the `chimera:logs:emit`
+    handler — whose sink is the root ring buffer, the same chain every main-process log call takes to
+    the fan-out — then reading what the Pino destination received.
+
+- 3b8b49f: Pin the `apps/<name>/` filename predicate the curated ESLint rules gate on.
+
+    `isGameFile` decides whether `no-raw-r3f-canvas` and `no-game-renderer-internals` run at all — a
+    rule that says no returns `{}` and sees nothing. Three independent deletions from that one regex
+    survived every test in the repo: the `(?:^|/)` segment anchor, the trailing `/`, and the
+    `normalizePath` call. The filename side had none of the three axes the specifier-side classifier
+    already pins in `game-path.test.ts`.
+
+    Each deletion buys reachable wrong behaviour. Without the anchor, `webapps/` — anything whose
+    directory name merely ENDS in `apps` — reads as a game app, so checking the repo out under such a
+    directory misreads every engine renderer file as a game file. Without the trailing slash, a file
+    sitting directly under `apps/` fires. Without `normalizePath`, both rules go silently inert on
+    every Windows path. `no-fromfloat-in-simulation` carried its own untested backslash normalisation,
+    under a header claiming it "normalises Windows backslashes" — the same shape, inert the same way.
+
+    The rules are unchanged and correct; this is test coverage. `no-raw-r3f-canvas` and
+    `no-game-renderer-internals` each gain one case per axis, and the latter's Windows case is a
+    `screens/*.tsx` path so it traverses `isGameRendererSurface` alongside `isGameFile`; two further
+    Windows cases there pin `isGameI18nCatalogue` and `isAppNextHostRoute`.
+    `no-fromfloat-in-simulation` gains the backslash case its own normalisation needed. Each was
+    verified RED against its own mutant. The `[^/]+` → `[^/]*` variant deliberately gets no case: it is equivalent over the
+    reachable domain, since `path.resolve` collapses the doubled slash an empty app-name segment would
+    need, and the test file records that reason where the next reader meets it.
+
+- 30545f3: Apply a player action on a heartbeat-driven host at the beat it arrives on.
+
+    `ActionPipeline.process()` refuses an envelope whose `tick` is not the snapshot's (`StaleActionError`).
+    A realtime host's `RealtimeTicker` advances that tick on its own, so the tick a sender stamps — the last
+    one the host pushed to it — is behind by the time the envelope arrives whenever that round trip spans a
+    beat. The action app's held-key e2e specs (`movement`, `two-player`, `autosave-continue`) passed on a
+    developer machine and failed on every completed run of the e2e workflow on main since the suite landed,
+    the primitive never moving; the diagnosis, on a runner an order slower, is that the round trip spans the
+    100 ms beat and each `action:set-velocity` is refused as stale. Reproduced on a developer machine by
+    forcing a 5 ms and a 1 ms beat through the e2e seam (`CHIMERA_E2E_REALTIME_TICK_MS`): the same specs
+    fail with the same signature, and pass again at both beats with this change.
+
+    The host's per-action fan-out (`runHostAction`) now re-stamps a received action with the current
+    snapshot tick before `applyAction` when a `RealtimeTicker` is driving the clock — every envelope
+    entering it, from the host's own renderer, a remote client or an AI seat — through
+    `restampForHeartbeatHost`, a pure helper with its own tests. A host with no ticker applies the envelope
+    as stamped, so `StaleActionError` still refuses a stale stamp where the clock moves only when someone
+    acts; the composition-root test pins both arms. Invariant #42 is unaffected: the tick applied is the
+    snapshot's own, and the recorded envelope carries it.
+
+- 3b29c86: Report host heap and recorded-action count in the Performance HUD.
+
+    `PerfSample`'s `heapMb` is the RENDERER's `performance.memory`, so a host-side buffer could grow to
+    any size with the HUD unchanged. Two new fields carry the host's own numbers: `hostHeapMb` from
+    `process.memoryUsage().heapUsed`, and `recordedActionCount` from a new
+    `ReplayManager.recordedActionCount()` over the live deterministic recording.
+
+    They arrive on a new `chimera:game:host-metrics` push driven by main's own 1 Hz timer
+    (`startHostMetricsPush`), never per beat — at a beat rate the push would be the cost it measures.
+    Only scalars cross, and the payload is schema-validated at the preload boundary,
+    where an absent key is refused rather than read as `null`.
+
+    Both fields are `number | null` where `null` means UNAVAILABLE — no push yet, or no recording
+    running — and the HUD renders it as `—`. A started recording holding no actions reads `0`. `PerfStats.totalActionCount` remains what it was: the debug bridge's own array
+    length, capped and constant once saturated, and absent from a shipped game.
+
+    §13.5 now records what actually executes where. The timing gates run on CI, because the bench files
+    sit under `apps/*/__tests__/` and `pnpm -r test` collects them. The main-process heap case runs and
+    logs there too, but its assertion sits behind an `if (gc !== undefined)` guard, and `globalThis.gc`
+    exists only under `--expose-gc`, which `npm run test:perf` passes and CI does not.
+
+- 6095bda: Serve `.mp3` and the other common audio containers over `chimera://` with a real content type.
+
+    The MIME table behind the `chimera://` protocol carried only `.ogg` and `.wav` on the audio side, so
+    `.mp3` — the format a game is most likely to ship — fell to `application/octet-stream`. That is not
+    just a cosmetic header: `isRangeCapableContentType` reads the content-type string to decide whether
+    to honour a `Range` request, and `application/octet-stream` fails it. Chromium's media stack issues a
+    ranged request and refuses to play a source answered with a plain `200`, so an `<audio>` or
+    `<video>` element pointed at an `.mp3` cannot play it.
+
+    `.mp3`, `.m4a`, `.aac`, `.flac` and `.opus` now have rows. `.avi` and `.mkv` deliberately do not, and
+    a test holds them on the fallback so their absence stays a decision rather than an oversight — a row
+    makes neither container playable. The table's docblock now records what a row actually buys.
+
+    The engine's own `audio-clip` asset kind was never affected: it decodes through `fetch` +
+    `decodeAudioData` and does not consult the content type.
+
+- 08db0c2: Lower-case the extension before the `chimera://` MIME lookup, so `hero.PNG` resolves.
+
+    Every key in `CONTENT_TYPES_BY_EXTENSION` is lower-case and `path.extname` returns whatever the
+    filename carries, so `hero.PNG`, `sky.WebP` and `clip.MP4` all missed rows that exist and fell to
+    `application/octet-stream`. For a media file that also cost range serving — `isRangeCapableContentType`
+    reads the content-type string — so a capitalised `.MP3` or `.MP4` got a plain `200` and would not
+    play.
+
+    The two halves of the same pipeline disagreed about what an extension is: the renderer's
+    `getAssetExtension` ends `.toLowerCase()`, the main-process half did not. They agree now.
+
+    Only the extension is lowered, never the path: paths are case-sensitive on Linux, so a normalisation
+    applied at resolution would fail to open the file at all. A test holds the resolved path at its
+    original capitalisation on both resolution arms — the renderer root and the game's assets root are
+    separate functions — and the unmapped-extension fallback is asserted in both cases, so the
+    normalisation cannot turn an unknown extension into a known one.
+
+    The lowering is unconditional, so it reaches every row rather than only the ones this was reported
+    for: `notes.TXT`, `page.HTML`, `boot.JS` and `art.SVG` now get their real types too. A test lists
+    those four, so the reach is a recorded decision rather than a side effect. It is not an escalation:
+    the protocol still serves only files under the renderer root or the game's own assets root.
+
+- 34a6cfb: Pace a realtime game's authoritative snapshots to the frame clock, and fix a save race the change
+  surfaced.
+
+    `ipcClient` now holds the newest arriving `PlayerSnapshot` and applies it on the next animation
+    frame. Newest-wins, never a queue: a snapshot superseded inside one frame is dropped where it
+    stands, because draining it later would put the renderer a frame behind the host for nothing, and a
+    backlog the host can outpace has no bound. `onTick` is deliberately NOT paced and still writes the store on every beat.
+
+    The pacing is the game's choice, not a global default. Measured: with it on for everyone, a
+    turn-based canvas-interaction spec failed its first attempt on 3 of 3 runs, while the same tree with
+    pacing off was 3 of 3 clean — a turn-based game pushes on a player's action, where a frame of
+    presentation lag buys nothing and costs interaction fidelity. So `manifest.realtime` is forwarded on
+    `LoadedRendererGame` the way `matchHistory` already is, the match route publishes it, and the
+    client's scheduler asks whenever it requests a frame rather than once, because the client is built at app start
+    and no game is known then. A game that declares nothing keeps application on arrival.
+
+    The one addition a consumer can reach is `LoadedRendererGame.realtime`, on the `./game` subpath — the
+    scheduler types the pacing is built from are renderer internals (Invariant #96), reachable through no
+    export. `createIpcClient` still applies on arrival when given no scheduler, so an existing call site
+    is unchanged.
+
+    `FileSaveRepository.save()` now names its temp file per WRITE rather than per slot. The autosave slot
+    has two writers nothing serialises — the fire-and-forget autosave after `engine:end_turn`, and an
+    explicit `saves.save()` naming no `slotId`, which defaults onto that slot — and with one shared temp
+    path the first rename moved the file out from under the second, whose rename failed with `ENOENT` and
+    whose caller saw its save rejected while a file the other writer produced sat on disk.
+
+- 94c0cb1: Remove the client-prediction surface, which was implemented and tested but reachable from nothing.
+
+    There was no client prediction: every action waited a full host round trip. What existed was a chain
+    where each link's only consumer was the next one, and the last led nowhere — `ActionDefinition.predictable`,
+    the `chimera:game:predictable-action-types` channel and its `GameAPI.getPredictableActionTypes()`
+    method, the `isPredictable` predicate the IPC client was built with, `gameStore.addPrediction` /
+    `confirmPrediction`, and the `predictedActions` array, which no component, hook or reducer anywhere
+    in the repo read. Beside it sat `ClientPredictor` and `ReconcileBuffer`, exported from the engine
+    barrel and unit-tested, constructed only in their own tests, and typed on `BaseGameSnapshot` — the
+    state Invariant #3 keeps inside the main process — so a client could not have used them as written.
+
+    All of it is gone, together with the comment in `ipcClient.ts` that forbade importing the two
+    classes: a prohibition outlives its subject as a puzzle, not a rule. `PredictionStore` is now
+    `MatchStatusStore`, carrying the three fields that survive — `latencyMs`, `canUndo`, `canRedo`. What `latencyMs` is written by, and
+    what reads it, is §6.3's.
+
+    §6 says what it costs to add prediction properly instead of describing what was there: the renderer
+    holds a `PlayerSnapshot`, so the reducers it would replay have to be renderer-safe and registered as
+    such, and the optimistic state may never become an authoritative write.
+
+    Breaking for adopters who set `predictable: true` on an action definition, or who call
+    `getPredictableActionTypes()`: both are removed. Neither did anything.
+
+- 4840fdc: Pin `ReplayPlaybackManager`'s playback cursor write.
+
+    `#projectedAt` keeps a mutable cursor, `active.lastTick`, and updates it after every projection. That
+    write is the bookkeeping the `step()` fast path reads on the _next_ call, and it was unpinned:
+    deleting the line left `replay-playback-manager.test.ts` green, and the whole
+    `electron/main/replay` directory with it.
+
+    Neither mutant is equivalent. With the write deleted the cursor stays at `baseTick`
+    forever, so the fast path fires on every call and each one steps the player forward — replaying the
+    same request twice serves a different frame each time. With the cursor set one ahead, a request two
+    ticks forward wrongly looks sequential and serves the frame before the one asked for.
+
+    The manager is constructed only in `electron/main/index.ts` and in its own suite, and the IPC
+    handler tests inject a fake `playback` port that never reaches `#projectedAt`. The existing cases
+    walk 0 → 1 → 2 and 3 → 1, so they never ask for the same tick twice and never skip forward by
+    exactly two from a fast-path position.
+
+    Three tests close it — a repeated `snapshotAt`, a repeated `snapshotRange` (the production-shaped
+    form, since the renderer prefetches ranges), and a skip-ahead-by-two — each run RED against its own
+    mutant first. The two mutants are not interchangeable: the repeat tests pass under the one-ahead
+    cursor and the skip-ahead test passes under the deletion, so neither alone closes the gap. No test
+    targets setting the cursor to `absoluteTick`; that mutant leaves the directory green, and the tick
+    both replay channels admit is validated by a `z.number().int().nonnegative()` schema. The manager
+    itself is unchanged.
+
+- 67dde44: Pin `ReplayPlaybackManager.#projectedAt`'s `step()`/`seek()` fork.
+
+    `#projectedAt` forks on `absoluteTick === active.lastTick + 1`: a `step()` fast path for the
+    sequential case, falling back to `active.player.seek(absoluteTick)` on `step()`'s `null` (end of
+    recording) or when the request isn't sequential. Two independent mutants on that fork survived: the
+    whole fork replaced by an unconditional `seek(absoluteTick)`, and `next ?? active.player.seek(...)`
+    replaced by `next as BaseGameSnapshot`. Both left `electron/main/replay` green.
+
+    Both arms answer a sequential request with the same snapshot, so no tick assertion can separate
+    them — the pre-existing test named `advances one tick via step on sequential requests` asserted only
+    ticks, so its title was a claim its body did not make. What differs is which call the fork makes:
+    that test now spies `ReplayPlayer.prototype.step`/`seek` and asserts the sequential walk takes one
+    `seek` (the initial non-sequential request) and two `step`s, never a further `seek`. Under the
+    unconditional-seek mutant, `seek` is called 3 times instead of 1.
+
+    The end-of-replay arm needed a fixture that runs `step()` out from a fast-path position: a new test
+    requests one tick past the final recorded action, so `step()` returns `null` and `?? seek(...)`
+    answers with the refusal — a `ReplaySeekError` naming the requested tick, not a snapshot. Drop that
+    arm and the `null` reaches `state.tick`, turning the refusal into a `TypeError`.
+
+    The manager is unchanged; this is test coverage only. `PerspectiveReplayPlaybackManager` binary-
+    searches stored frames and holds no equivalent fork, so it is untouched.
+
+- 9ff91a9: Record why replay playback builds its pipeline at the engine defaults rather than at the recorded
+  game's declared `matchHistory`.
+
+    `ReplayPlaybackManager` is the one `buildHostSessionPipeline` caller that passes neither `undoPolicy`
+    nor `retainActions`, and the call site now says why. Neither can change what playback produces: a
+    recorded `engine:undo` ends the replay whatever wiring it meets, because Stage 3 hands back a
+    reconstruction of an earlier tick and `ReplayPlayer.step()` accepts only `tick + 1`. A declared
+    `retainActions` would additionally raise `action-history:overflow` on the playback log — a host-time saturation reported against a history no
+    host is filling. Three cases in `replay-playback-manager.test.ts` hold both halves.
+
+- 7c72aa6: Correct the replay tick-advance claims: the `step()` fast path rests on a refusal, not a guarantee.
+
+    `replay-playback-manager` stated the one-tick rule as a property of recordings — "every recorded
+    action advances the tick by exactly 1 (Invariant #42)" — and derived both `totalTicks` and the
+    `step()` fast path from it. That sentence was already false before it was written: §4.28 records
+    that a recorded `engine:undo` does not advance the tick and does not replay, and a recorded action
+    whose reducer dispatches a child advances by more than 1.
+
+    Nothing about the manager's behaviour changes; the reason it is sound does. `ReplayPlayer.step()`
+    throws `DeterminismError` unless the pipeline advanced by exactly +1, so it returns either the
+    snapshot at `lastTick + 1` or `null` — never one at an unexpected tick, so `lastTick` cannot
+    desynchronise. The manager suite
+    now reaches both refusals: a reducer that CHANGES the snapshot without advancing is caught inside
+    `process()` by the development-only tick-contract check, and one that returns its INPUT REFERENCE is
+    exempt there and refused by `step()`, whose comparison reads no build flag. Deleting that comparison
+    from the built simulation makes the second case serve a snapshot at the wrong tick, and the test
+    says so.
+
+- a15bfbd: Generalise the structural snapshot differ, and add the after-only form of a diff.
+
+    `diffSnapshots` moves from `simulation/debug/SnapshotDiff.ts` to the contract leaf at
+    `simulation/foundation/snapshot-diff.ts`, with its constraint relaxed from
+    `TState extends BaseGameSnapshot` to `TState extends { tick: number }`. A projected
+    `PlayerSnapshot` carries no `seed` and no `timers` by design (Invariant #3), so the old constraint admitted one only through a
+    cast — and the cast erased exactly the distinction the invariant rests on. Nothing about the diff's
+    behaviour changed, and `@chimera-engine/simulation/debug` re-exports `diffSnapshots`, `DiffEntry`
+    and `SnapshotDiff` from the new location, so that public subpath still carries them — see
+    `simulation/debug/index.test.ts`.
+
+    `simulation/foundation/snapshot-delta.ts` is new. `toSnapshotDelta` projects a diff onto its
+    after-only form: a `DiffEntry` carries `before` as well as `after`, which is right for an inspector
+    showing both sides and wrong for anything that has to fit in a frame, where repeating the old value
+    can make the delta larger than the snapshot it replaces. `applySnapshotDelta` is the other half — it
+    reproduces the new snapshot from the old one, copying only the containers along a changed path and
+    sharing the rest by reference. Where it refuses, it answers `null` rather than writing partially.
+    What it refuses, and why each refusal matters, is the `rejects a delta it cannot apply` block of
+    `simulation/foundation/snapshot-delta.test.ts`.
+
+    `@chimera-engine/electron` takes a comment-only change: the packaged-bundle marker file names the
+    differ's path in its rationale for excluding `diffSnapshots` from the marker set.
+
+- 5a3584a: Add a sustained-match retention gate that fails when a retained structure grows without bound.
+
+    Every growth defect this arc found shares one shape: a structure that grows with elapsed beats and
+    nothing that notices. The new `electron/main/__tests__/sustained-match-retention.integration.test.ts`
+    drives a REAL hosted session with the action history, the deterministic recorder and the perspective
+    recorder armed, through a harness under `electron/main/__test-support__/`. The §13.4 heap gate
+    builds a bare `ActionPipeline`, so none of those three is wired there.
+
+    It probes the defect class rather than an instance: retained sizes are sampled at N beats and again
+    at 2N and compared, so the assertion is about growth rate and not about a byte number that drifts.
+    Two scales, because the capped buffers must be sampled past a 10,000 cap while the per-beat working
+    state must be sampled small — `TimerManager.advance` walks the timer registry once per beat, so a
+    fired timer that survives its beat makes the run quadratic, and a synchronous beat loop cannot be
+    cut short by a test timeout.
+
+    Two small observability seams make it possible. `InMemoryActionHistory.size()` reports the live
+    entry count — what `maxEntries` bounds, whole rather than the undoable tail `sizeSinceLastMemento()`
+    reports once a turn memento has re-based it. `HostSessionPipelineResult.retainedActionCount()`
+    surfaces it for a session whose history is constructed inside `buildHostSessionPipeline`.
+
+- Updated dependencies [370ed0c]
+- Updated dependencies [b7fe1b3]
+- Updated dependencies [b1ff2e4]
+- Updated dependencies
+- Updated dependencies [b8552d6]
+- Updated dependencies [b20e420]
+- Updated dependencies [a8e6bc0]
+- Updated dependencies [1f2ef60]
+- Updated dependencies [3b29c86]
+- Updated dependencies [e170cf4]
+- Updated dependencies [51fec31]
+- Updated dependencies [5fdddf4]
+- Updated dependencies [eb6a674]
+- Updated dependencies [b4ee634]
+- Updated dependencies [fe82ccc]
+- Updated dependencies [34a6cfb]
+- Updated dependencies [7635670]
+- Updated dependencies [94c0cb1]
+- Updated dependencies [397708b]
+- Updated dependencies [f6ad1d8]
+- Updated dependencies [51f9231]
+- Updated dependencies [9d4fa92]
+- Updated dependencies [a15bfbd]
+- Updated dependencies [ddca27d]
+- Updated dependencies [5a3584a]
+- Updated dependencies [16e3f97]
+- Updated dependencies [737aa88]
+    - @chimera-engine/simulation@1.0.0-rc.13
+    - @chimera-engine/renderer@1.0.0-rc.13
+    - @chimera-engine/ai@1.0.0-rc.13
+    - @chimera-engine/networking@1.0.0-rc.13
+
 ## 1.0.0-rc.12
 
 ### Minor Changes
