@@ -274,7 +274,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         ]);
     });
 
-    it('pulls in exactly forty-four modules — four stores, the log bridge, both animation halves, and no clone seam', async () => {
+    it('pulls in exactly forty-five modules — four stores, the log bridge, both animation halves, and no clone seam', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // EXHAUSTIVE, not a denylist (see the audio sibling for why). The four
@@ -316,6 +316,11 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         // is a host seam rather than an import, so no module records it.
         // `utils/curves.ts` is the whole of §4.21's maths and imports nothing at
         // all — it is a leaf in every sense.
+        // `r3f/rendererConfig.ts` is where a curated renderer prop's engine
+        // name becomes a `three` constant. It rides in on GameCanvas and
+        // adds no edge beyond `three`, which GameCanvas already names for its
+        // camera constructors — so it is reached here and, like GameCanvas
+        // itself, stays off the shell layout graph the `three` census walks.
         const dirAndFile = inputs.map((input) => input.split('/').slice(-2).join('/')).sort();
         expect(dirAndFile).toEqual([
             'animation/ClipBackend.ts',
@@ -351,6 +356,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'r3f/interactionContext.ts',
             'r3f/mainCanvasRegistry.ts',
             'r3f/mixerBindingRegistry.ts',
+            'r3f/rendererConfig.ts',
             'r3f/selectTargetFps.ts',
             'r3f/useClipPlayback.ts',
             'r3f/useClipPlayer.ts',

@@ -57,6 +57,12 @@
  * shape as `components/ui` re-exporting `EscapeStackProvider` from
  * `renderer/components/shell/`.
  *
+ * The renderer-configuration types (`ShadowQuality`, `ToneMappingMode`,
+ * `OutputColorSpace`, `RenderScale`) ship as TYPES only, and that asymmetry is
+ * the point: their values are engine-owned NAMES, so a game annotates a
+ * variable with one and still imports no `three` constant. The name → constant
+ * mapping is renderer-internal (`rendererConfig.ts`) and stays that way.
+ *
  * GameCanvas is the only canvas root a game mounts. It wires `PerfProbe` (main
  * role only), `FrameRateLimiter`, the `frameloop` prop itself, and the
  * `<InteractionBlocker>` that gates pointer input for every canvas
@@ -114,6 +120,10 @@ export type {
     OrthographicFrustum,
     GameCanvasCamera,
     GameCanvasProps,
+    OutputColorSpace,
+    RenderScale,
+    ShadowQuality,
+    ToneMappingMode,
     Vector3Tuple,
 } from './GameCanvas';
 // `Vector3Tuple` is NOT re-exported from `useCamera` as well: both it and

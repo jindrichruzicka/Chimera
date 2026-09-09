@@ -7,7 +7,17 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three';
+import {
+    ACESFilmicToneMapping,
+    LinearSRGBColorSpace,
+    NoToneMapping,
+    OrthographicCamera,
+    PerspectiveCamera,
+    ReinhardToneMapping,
+    SRGBColorSpace,
+    Vector3,
+} from 'three';
+import type { WebGLRenderer } from 'three';
 import { Canvas } from '@react-three/fiber';
 import { GameCanvas } from './GameCanvas';
 import type {
@@ -51,6 +61,11 @@ const fiberMock = vi.hoisted(() => {
         // on root state, which is the instance handed to the `camera` prop.
         size: { width: 0, height: 0 },
         camera: null as unknown,
+        // The renderer r3f publishes on root state. Its three colour fields are
+        // the ones GameCanvas writes from inside the canvas, and beforeEach
+        // seeds them with what r3f's own configure() leaves behind — this
+        // factory is hoisted above the imports, so it cannot name a constant.
+        gl: null as unknown as ColorState,
     };
     // Stands in for a camera a game installs from inside the canvas (a
     // `makeDefault` control): R3F then reports THAT on root state, not the
@@ -130,6 +145,18 @@ class ResizeObserverStub {
     }
 }
 
+/** The renderer fields GameCanvas is allowed to write, and nothing else. */
+type ColorState = Pick<WebGLRenderer, 'toneMapping' | 'toneMappingExposure' | 'outputColorSpace'>;
+
+/** What r3f 9.6.1's configure() leaves on a freshly built renderer. */
+function r3fDefaultColorState(): ColorState {
+    return {
+        toneMapping: ACESFilmicToneMapping,
+        toneMappingExposure: 1,
+        outputColorSpace: SRGBColorSpace,
+    };
+}
+
 let logEmit: ReturnType<typeof vi.fn>;
 let rafCallbacks: Map<number, (timestamp: number) => void>;
 let nextRafHandle: number;
@@ -138,6 +165,7 @@ beforeEach(() => {
     fiberMock.rootState.frameloop = 'always';
     fiberMock.rootState.size = { width: 0, height: 0 };
     fiberMock.rootState.camera = null;
+    fiberMock.rootState.gl = r3fDefaultColorState();
     fiberMock.installedCamera.current = null;
     // Zero by default: an unmeasured frame has nothing to fit, so a test that
     // sets no box exercises r3f's own 100%/100% sizing.
@@ -338,6 +366,13 @@ describe('GameCanvas', () => {
         // literal call site. The @ts-expect-error lines ARE the assertions:
         // typecheck fails the moment any key becomes accepted. One pin per key
         // so widening by a single key kills a named line.
+        //
+        // Two of these are now aimed at the r3f SPELLING of a curated concern
+        // rather than at the concern: `dpr` is renderScale under r3f's name, and
+        // `shadows` is curated but takes a ShadowQuality name — r3f's bare
+        // boolean stays rejected, which is what keeps a game off three's own
+        // vocabulary. A key that became accepted outright would make its
+        // directive unused and red tsc with TS2578.
         void (
             <GameCanvas
                 camera="free"
@@ -350,7 +385,7 @@ describe('GameCanvas', () => {
         void (
             <GameCanvas
                 camera="free"
-                // @ts-expect-error: dpr is not a curated GameCanvas prop
+                // @ts-expect-error: dpr is r3f's name — the curated one is renderScale
                 dpr={2}
             >
                 <mesh />
@@ -359,7 +394,7 @@ describe('GameCanvas', () => {
         void (
             <GameCanvas
                 camera="free"
-                // @ts-expect-error: shadows is not a curated GameCanvas prop
+                // @ts-expect-error: shadows takes a ShadowQuality name, not r3f's boolean
                 shadows
             >
                 <mesh />
@@ -1744,6 +1779,182 @@ describe('GameCanvas pointer-interaction gating (§4.23)', () => {
     });
 });
 
+describe('GameCanvas curated renderer configuration', () => {
+    afterEach(cleanup);
+
+    it('forwards the shadow quality to the canvas under r3f own shadow-map name', () => {
+        render(
+            <GameCanvas camera="free" shadows="variance">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasProps().shadows).toBe('variance');
+    });
+
+    it("disables shadow mapping for 'off' rather than passing the name through", () => {
+        render(
+            <GameCanvas camera="free" shadows="off">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasProps().shadows).toBe(false);
+    });
+
+    it('forwards a fixed render scale and a clamped range as the canvas dpr', () => {
+        const { rerender } = render(
+            <GameCanvas camera="free" renderScale={1.5}>
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasProps().dpr).toBe(1.5);
+
+        rerender(
+            <GameCanvas camera="free" renderScale={[1, 2]}>
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasProps().dpr).toEqual([1, 2]);
+    });
+
+    it('writes tone mapping, exposure and output colour space onto the live renderer', () => {
+        render(
+            <GameCanvas
+                camera="free"
+                toneMapping="reinhard"
+                toneMappingExposure={1.4}
+                outputColorSpace="linear"
+            >
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(fiberMock.rootState.gl).toEqual({
+            toneMapping: ReinhardToneMapping,
+            toneMappingExposure: 1.4,
+            outputColorSpace: LinearSRGBColorSpace,
+        });
+    });
+
+    // The colour knobs are applied live, from inside the canvas.
+    // One case per knob, and each is the ONLY thing that kills its own entry
+    // in the effect's dependency list: dropping `toneMappingExposure` or
+    // `outputColorSpace` from that list leaves a mount-only assertion green,
+    // and no lint rule covers the gap (react-hooks/exhaustive-deps is not
+    // configured in this repo).
+    it.each([
+        {
+            knob: 'toneMapping',
+            before: { toneMapping: 'reinhard' },
+            after: { toneMapping: 'none' },
+            read: (gl: ColorState): unknown => gl.toneMapping,
+            expected: NoToneMapping,
+        },
+        {
+            knob: 'toneMappingExposure',
+            before: { toneMappingExposure: 1.4 },
+            after: { toneMappingExposure: 0.6 },
+            read: (gl: ColorState): unknown => gl.toneMappingExposure,
+            expected: 0.6,
+        },
+        {
+            knob: 'outputColorSpace',
+            before: { outputColorSpace: 'srgb' },
+            after: { outputColorSpace: 'linear' },
+            read: (gl: ColorState): unknown => gl.outputColorSpace,
+            expected: LinearSRGBColorSpace,
+        },
+    ] as const)('applies a changed $knob without remounting the canvas', (knobCase) => {
+        const { rerender } = render(
+            <GameCanvas camera="free" {...knobCase.before}>
+                <mesh />
+            </GameCanvas>,
+        );
+        // The DOM node r3f's stand-in rendered. A remount replaces it, so
+        // holding the node is what distinguishes a re-render from a new canvas
+        // — a render-CALL count would be satisfied by either.
+        const canvasOnMount = screen.getByTestId('r3f-canvas');
+
+        rerender(
+            <GameCanvas camera="free" {...knobCase.after}>
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(knobCase.read(fiberMock.rootState.gl)).toBe(knobCase.expected);
+        expect(screen.getByTestId('r3f-canvas')).toBe(canvasOnMount);
+    });
+
+    // "Omitting every new prop reproduces today's rendering", pinned rather
+    // than argued: the two canvas keys stay ABSENT so r3f applies its own
+    // defaults, and the three renderer fields are left exactly as configure()
+    // left them.
+    it('omits every renderer key and writes no renderer field when the game authors none', () => {
+        render(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        const props = latestCanvasProps();
+        expect('shadows' in props).toBe(false);
+        expect('dpr' in props).toBe(false);
+        expect(fiberMock.rootState.gl).toEqual(r3fDefaultColorState());
+    });
+
+    // The documented limit of "omitted keeps r3f's default": that holds at
+    // MOUNT. A renderer has no unset state, so dropping the prop later leaves
+    // the last authored value standing rather than restoring ACES filmic —
+    // pinned here so a reader meets the behaviour in a test, not in a scene.
+    it('leaves the last authored colour value standing when the prop is dropped', () => {
+        const { rerender } = render(
+            <GameCanvas camera="free" toneMapping="none">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        rerender(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(fiberMock.rootState.gl.toneMapping).toBe(NoToneMapping);
+    });
+
+    // Scoped to the two knobs that ride Canvas PROPS, which is what the name
+    // says. The colour trio is per-canvas by construction — each GameCanvas
+    // mounts its own <ApplyColorConfig> against its own canvas's root state —
+    // but this harness cannot show it: the stand-in `useThree` resolves every
+    // canvas through one hoisted `fiberMock.rootState`, so both appliers write
+    // the same renderer and the last one committed wins. Asserting a
+    // per-canvas colour value here would be asserting the harness.
+    it('lets an overlay canvas carry different shadow and render-scale configuration from a concurrent main', () => {
+        render(
+            <>
+                <GameCanvas camera="free" role="main" shadows="soft" renderScale={[1, 2]}>
+                    <mesh />
+                </GameCanvas>
+                <GameCanvas camera="free" role="overlay" shadows="off" renderScale={1}>
+                    <mesh />
+                </GameCanvas>
+            </>,
+        );
+
+        const [mainProps, overlayProps] = vi
+            .mocked(Canvas)
+            .mock.calls.map(([props]) => props as ReturnType<typeof latestCanvasProps>);
+
+        expect(mainProps?.shadows).toBe('soft');
+        expect(mainProps?.dpr).toEqual([1, 2]);
+        expect(overlayProps?.shadows).toBe(false);
+        expect(overlayProps?.dpr).toBe(1);
+    });
+});
+
 /** Reads the context a canvas child sees, so a missing provider throws here. */
 function InteractionProbe(): React.ReactElement {
     const { isBlocked } = useInteractionContext();
@@ -1867,6 +2078,8 @@ function latestCanvasProps(): Readonly<{
     className?: unknown;
     style?: unknown;
     onPointerMissed?: unknown;
+    shadows?: unknown;
+    dpr?: unknown;
 }> {
     const lastCall = vi.mocked(Canvas).mock.calls.at(-1);
     if (!lastCall) {

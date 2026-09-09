@@ -1,7 +1,7 @@
 'use client';
 
 import { Canvas, useThree } from '@react-three/fiber';
-import type { Camera } from '@react-three/fiber';
+import type { Camera, RootState } from '@react-three/fiber';
 import React from 'react';
 import type { ReactNode } from 'react';
 import { PerfProbe } from '../shell/perf/PerfProbe';
@@ -16,6 +16,15 @@ import {
 } from './cameraFit';
 import type { CameraFit, CanvasBox } from './cameraFit';
 import { registerMainCanvas } from './mainCanvasRegistry';
+import { applyColorConfig, shadowsProp } from './rendererConfig';
+import type {
+    ColorConfigurableRenderer,
+    OutputColorSpace,
+    RendererColorConfig,
+    RenderScale,
+    ShadowQuality,
+    ToneMappingMode,
+} from './rendererConfig';
 import { useEngineFrameloop } from './useEngineFrameloop';
 import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three';
 import type { Vector3Tuple } from '../../types/r3f-types.js';
@@ -24,6 +33,12 @@ export type CameraMode = 'perspective' | 'orthographic';
 export type CameraPreset = 'isometric' | 'top-down' | 'side-scrolling' | 'free';
 export type { Vector3Tuple } from '../../types/r3f-types.js';
 export type { CameraFit } from './cameraFit';
+export type {
+    OutputColorSpace,
+    RenderScale,
+    ShadowQuality,
+    ToneMappingMode,
+} from './rendererConfig';
 
 /**
  * World-unit orthographic view volume. An explicit frustum always marks the
@@ -108,6 +123,37 @@ export type GameCanvasProps = Readonly<{
     className?: string;
     /** Forwarded to the r3f `<Canvas>` `onPointerMissed` (deselect-on-empty-click). */
     onPointerMissed?: (event: MouseEvent) => void;
+    /**
+     * Shadow-map quality, per canvas. Omitted leaves shadow mapping off, which
+     * is what the canvas has always done — a mesh's `castShadow` is inert until
+     * a game turns this on AND the scene has a light that casts.
+     *
+     * The value is an engine name, never a `three` constant: the mapping lives
+     * in `rendererConfig.ts` so a game configuring the renderer imports neither
+     * `three` nor `Canvas` (Invariant #127).
+     */
+    shadows?: ShadowQuality;
+    /**
+     * Tone-mapping curve; omitted keeps r3f's ACES filmic default.
+     *
+     * This and the two below are applied to the live renderer, so a change
+     * takes effect without remounting the canvas. REMOVING one after it was
+     * set does not restore the default: a renderer has no unset state, and
+     * writing r3f's default back would overwrite whatever else set the field.
+     * Author the value you want rather than dropping the prop.
+     */
+    toneMapping?: ToneMappingMode;
+    /** Tone-mapping exposure multiplier; omitted keeps the renderer's `1`. */
+    toneMappingExposure?: number;
+    /** Output colour space; omitted keeps r3f's sRGB default. */
+    outputColorSpace?: OutputColorSpace;
+    /**
+     * Device-pixel ratio to draw at — a fixed multiplier, or a `[min, max]`
+     * range clamped against the display's own ratio. Omitted keeps r3f's
+     * `[1, 2]`. This is r3f's `dpr` under an engine name; `dpr` itself stays
+     * rejected so one spelling owns the concern.
+     */
+    renderScale?: RenderScale;
 }>;
 
 // Each preset carries its documented projection mode (camera-system.md preset
@@ -175,6 +221,11 @@ export function GameCanvas({
     role = 'main',
     className,
     onPointerMissed,
+    shadows,
+    toneMapping,
+    toneMappingExposure,
+    outputColorSpace,
+    renderScale,
 }: GameCanvasProps): React.ReactElement {
     // `resolveCameraConfig` returns either the caller's own object or a
     // module-level preset, so it is already stable per `camera` and needs no
@@ -216,9 +267,20 @@ export function GameCanvas({
                 // exactOptionalPropertyTypes the key must be omitted, not set to
                 // undefined.
                 {...(onPointerMissed ? { onPointerMissed } : {})}
+                // Both keys are OMITTED when the game authored nothing, so r3f
+                // applies its own defaults (`shadows = false`, `dpr = [1, 2]`)
+                // and a canvas that configures nothing renders exactly as it
+                // did before these props existed.
+                {...(shadows === undefined ? {} : { shadows: shadowsProp(shadows) })}
+                {...(renderScale === undefined ? {} : { dpr: canvasDpr(renderScale) })}
             >
                 {role === 'main' ? <PerfProbe /> : null}
                 <FrameRateLimiter />
+                <ApplyColorConfig
+                    toneMapping={toneMapping}
+                    toneMappingExposure={toneMappingExposure}
+                    outputColorSpace={outputColorSpace}
+                />
                 {fit === 'expand' ? <ExpandCameraToCanvas config={config} /> : null}
                 {/*
                  * Pointer gating for everything the game renders (§4.23). Mounted
@@ -233,6 +295,48 @@ export function GameCanvas({
             </Canvas>
         </div>
     );
+}
+
+/**
+ * Writes the colour half of the curated configuration onto the live renderer.
+ *
+ * It lives INSIDE the `<Canvas>` because the renderer is R3F root state, and
+ * because the alternative — handing r3f a raw `gl={…}` object — is the
+ * pass-through shape Invariant #127 keeps out of game files. That a change
+ * takes effect without remounting the canvas is measured by
+ * `GameCanvas.test.tsx`'s `applies a changed '<knob>' without remounting the
+ * canvas`, one case per knob.
+ *
+ * The three values are taken as separate props rather than one object so the
+ * effect's dependencies ARE the authored values: a parent re-render with
+ * unchanged knobs re-runs nothing.
+ */
+function ApplyColorConfig({
+    toneMapping,
+    toneMappingExposure,
+    outputColorSpace,
+}: RendererColorConfig): null {
+    const gl = useThree(selectRenderer);
+
+    React.useLayoutEffect(() => {
+        applyColorConfig(gl, { toneMapping, toneMappingExposure, outputColorSpace });
+    }, [gl, toneMapping, toneMappingExposure, outputColorSpace]);
+
+    return null;
+}
+
+/** Narrowed at the selector, the way FrameRateLimiter narrows `advance`. */
+function selectRenderer(state: RootState): ColorConfigurableRenderer {
+    return state.gl;
+}
+
+/**
+ * The authored render scale as r3f's `dpr`. A range is copied rather than cast:
+ * `RenderScale` is `readonly` because it is read off a `Readonly` props object,
+ * and r3f's own `Dpr` tuple is mutable.
+ */
+function canvasDpr(renderScale: RenderScale): number | [number, number] {
+    return typeof renderScale === 'number' ? renderScale : [renderScale[0], renderScale[1]];
 }
 
 /**

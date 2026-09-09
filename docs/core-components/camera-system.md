@@ -177,6 +177,37 @@ export type GameCanvasProps = Readonly<{
     className?: string;
     /** Forwarded to the r3f `<Canvas>` `onPointerMissed` (deselect-on-empty-click). */
     onPointerMissed?: (event: MouseEvent) => void;
+    /**
+     * Shadow-map quality, per canvas. Omitted leaves shadow mapping off, which
+     * is what the canvas has always done — a mesh's `castShadow` is inert until
+     * a game turns this on AND the scene has a light that casts.
+     *
+     * The value is an engine name, never a `three` constant: the mapping lives
+     * in `rendererConfig.ts` so a game configuring the renderer imports neither
+     * `three` nor `Canvas` (Invariant #127).
+     */
+    shadows?: ShadowQuality;
+    /**
+     * Tone-mapping curve; omitted keeps r3f's ACES filmic default.
+     *
+     * This and the two below are applied to the live renderer, so a change
+     * takes effect without remounting the canvas. REMOVING one after it was
+     * set does not restore the default: a renderer has no unset state, and
+     * writing r3f's default back would overwrite whatever else set the field.
+     * Author the value you want rather than dropping the prop.
+     */
+    toneMapping?: ToneMappingMode;
+    /** Tone-mapping exposure multiplier; omitted keeps the renderer's `1`. */
+    toneMappingExposure?: number;
+    /** Output colour space; omitted keeps r3f's sRGB default. */
+    outputColorSpace?: OutputColorSpace;
+    /**
+     * Device-pixel ratio to draw at — a fixed multiplier, or a `[min, max]`
+     * range clamped against the display's own ratio. Omitted keeps r3f's
+     * `[1, 2]`. This is r3f's `dpr` under an engine name; `dpr` itself stays
+     * rejected so one spelling owns the concern.
+     */
+    renderScale?: RenderScale;
 }>;
 ```
 
@@ -271,6 +302,58 @@ const OPEN_WORLD_CAMERA = { ...BOARD_CAMERA, fit: 'expand' } as const satisfies 
 ```
 
 > **Stability note:** if the `camera` config object is constructed inline (`camera={{ mode: … }}`), a new three.js camera is recreated on every render because the internal `useMemo` compares by reference. Hoist the config to a module-level constant (as above) or `useMemo` it in the parent component.
+
+---
+
+## Renderer Configuration
+
+Five props beyond the camera configure how the canvas renders. Their values are **engine-owned names**, so a game sets all of them while importing neither `Canvas` nor `three` — which is what makes Invariant #127's ban on the `Canvas` binding liveable rather than merely restrictive.
+
+```typescript
+// renderer/components/r3f/rendererConfig.ts (types re-exported from the r3f barrel)
+
+export type ShadowQuality = 'off' | 'basic' | 'percentage' | 'soft' | 'variance';
+
+export type ToneMappingMode =
+    | 'none'
+    | 'linear'
+    | 'reinhard'
+    | 'cineon'
+    | 'aces-filmic'
+    | 'agx'
+    | 'neutral';
+
+export type OutputColorSpace = 'srgb' | 'linear';
+
+export type RenderScale = number | readonly [number, number];
+```
+
+| Prop                  | Type               | Omitted ⇒          | Applied by                             |
+| --------------------- | ------------------ | ------------------ | -------------------------------------- |
+| `shadows`             | `ShadowQuality`    | shadow mapping off | the `<Canvas shadows>` prop            |
+| `renderScale`         | `RenderScale`      | r3f's `[1, 2]`     | the `<Canvas dpr>` prop                |
+| `toneMapping`         | `ToneMappingMode`  | ACES filmic        | a null component **inside** the canvas |
+| `toneMappingExposure` | `number`           | `1`                | a null component **inside** the canvas |
+| `outputColorSpace`    | `OutputColorSpace` | sRGB               | a null component **inside** the canvas |
+
+"Omitted ⇒" is the value at **mount**. The three colour fields are written onto the live renderer, so changing one takes effect without remounting the canvas — but a renderer has no unset state, so _removing_ the prop afterwards leaves the last authored value standing rather than restoring r3f's default. Author the value you want rather than dropping the prop.
+
+Every prop is **per canvas**, so an `overlay` (a minimap, a preview) runs its own configuration and can be cheaper than the `main` scene it sits over. Omitting all five reproduces the rendering the canvas had before they existed: the two Canvas keys are omitted rather than defaulted, so r3f applies its own defaults, and the three colour fields are never written.
+
+### Why the colour knobs are not Canvas props
+
+The alternative is handing r3f a raw `gl={…}` object, which is the pass-through shape Invariant #127 keeps out of game files — so the curated props carry the concern, and `GameCanvas` applies these three from a null component mounted inside the `<Canvas>`, where the renderer is R3F root state. That a change to any of them takes effect **without remounting the canvas** is measured by `GameCanvas.test.tsx`'s `applies a changed '<knob>' without remounting the canvas`, one case per knob.
+
+### Where a named-mode mapping table may live
+
+Nothing the always-mounted shell layout chunk reaches through a static **value** edge may name `three` — measured by `renderer/__tests__/shell-layout-graph-census.test.ts`, not asserted. A named-mode prop needs an engine-name → `three`-constant table, and a module-scope table in a module that graph reaches will red the census with the file named.
+
+Two compliant shapes, and the next feature adding such a prop should pick one rather than rediscovering the constraint by failing CI:
+
+- **Off the graph entirely.** `rendererConfig.ts` is reached only from `GameCanvas`, which already imports `three` at module scope for its camera constructors, so neither is on the layout graph. This is where the tone-mapping and colour-space tables live.
+- **Behind a dynamic edge.** `renderer/assets/AssetManager.ts` reaches `TextureLoader` through `await import('three')` for exactly this reason.
+
+A `type`-only import of `three` is not a value edge and is always fine — the census wording is specific about this, so lean on it rather than avoiding `three` types.
 
 ---
 
