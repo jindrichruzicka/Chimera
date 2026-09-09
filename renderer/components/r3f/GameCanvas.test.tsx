@@ -231,6 +231,16 @@ function loggedErrorNames(): (string | undefined)[] {
         .map((entry) => entry.error?.name);
 }
 
+/** Seeds the player half of the display-quality settings. */
+function setDisplayQuality(
+    display: Readonly<{ shadowQuality?: string; renderScale?: number }>,
+): void {
+    useSettingsStore.setState({
+        activeGameId: 'game',
+        settings: { game: { display } },
+    } as never);
+}
+
 function setTargetFps(targetFps: 30 | 60 | 120 | 0): void {
     useSettingsStore.setState({
         activeGameId: 'game',
@@ -1818,17 +1828,22 @@ describe('GameCanvas pointer-interaction gating (§4.23)', () => {
 describe('GameCanvas curated renderer configuration', () => {
     afterEach(cleanup);
 
-    it('forwards the shadow quality to the canvas under r3f own shadow-map name', () => {
+    it("forwards the resolved shadow quality under r3f's own shadow-map name", () => {
+        setDisplayQuality({ shadowQuality: 'high' });
+
         render(
             <GameCanvas camera="free" shadows="variance">
                 <mesh />
             </GameCanvas>,
         );
 
-        expect(latestCanvasProps().shadows).toBe('variance');
+        // 'high' asks for 'soft', which is under the 'variance' ceiling.
+        expect(latestCanvasProps().shadows).toBe('soft');
     });
 
-    it("disables shadow mapping for 'off' rather than passing the name through", () => {
+    it("disables shadow mapping for a resolved 'off' rather than passing a name through", () => {
+        setDisplayQuality({ shadowQuality: 'high' });
+
         render(
             <GameCanvas camera="free" shadows="off">
                 <mesh />
@@ -1838,7 +1853,13 @@ describe('GameCanvas curated renderer configuration', () => {
         expect(latestCanvasProps().shadows).toBe(false);
     });
 
-    it('forwards a fixed render scale and a clamped range as the canvas dpr', () => {
+    // The dpr handed to the canvas is always a SCALAR: a range ceiling is
+    // resolved here, against the display's own ratio, rather than passed on
+    // for r3f to clamp — see resolveRenderScale for why scaling a range's ends
+    // is not the same operation.
+    it('forwards a resolved scalar dpr for a fixed ceiling and for a range', () => {
+        setDisplayQuality({ renderScale: 1 });
+
         const { rerender } = render(
             <GameCanvas camera="free" renderScale={1.5}>
                 <mesh />
@@ -1853,7 +1874,24 @@ describe('GameCanvas curated renderer configuration', () => {
             </GameCanvas>,
         );
 
-        expect(latestCanvasProps().dpr).toEqual([1, 2]);
+        // jsdom reports devicePixelRatio 1, which the [1, 2] ceiling clamps to 1.
+        expect(latestCanvasProps().dpr).toBe(1);
+    });
+
+    // The same canvas on a 2x display, which is where a range ceiling and a
+    // scalar one stop agreeing — and where a render-scale setting that merely
+    // scaled the range ends would still have drawn at the panel's full ratio.
+    it('resolves a range ceiling against the display ratio the browser reports', () => {
+        vi.stubGlobal('devicePixelRatio', 2);
+        setDisplayQuality({ renderScale: 0.5 });
+
+        render(
+            <GameCanvas camera="free" renderScale={[1, 2]}>
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasProps().dpr).toBe(1);
     });
 
     it('writes tone mapping, exposure and output colour space onto the live renderer', () => {
@@ -1925,19 +1963,24 @@ describe('GameCanvas curated renderer configuration', () => {
     });
 
     // "Omitting every new prop reproduces today's rendering", pinned rather
-    // than argued: the two canvas keys stay ABSENT so r3f applies its own
-    // defaults, and the three renderer fields are left exactly as configure()
-    // left them.
-    it('omits every renderer key and writes no renderer field when the game authors none', () => {
+    // than argued. The two canvas keys are now always emitted, so what has to
+    // hold is that their VALUES are r3f's own defaults; the three renderer
+    // fields are left exactly as configure() left them.
+    it("resolves to r3f's own defaults when neither the game nor the player configured anything", () => {
         render(
             <GameCanvas camera="free">
                 <mesh />
             </GameCanvas>,
         );
 
+        // Not "the key is absent" any more — the keys are always emitted, so
+        // what has to hold is that their VALUES resolve to r3f's own. The dpr
+        // is asserted against r3f's OWN formula for its `[1, 2]` default
+        // rather than a hand-copied number, because that formula is the thing
+        // the canvas used to go through.
         const props = latestCanvasProps();
-        expect('shadows' in props).toBe(false);
-        expect('dpr' in props).toBe(false);
+        expect(props.shadows).toBe(false);
+        expect(props.dpr).toBe(Math.min(Math.max(1, window.devicePixelRatio), 2));
         expect(fiberMock.rootState.gl).toEqual(r3fDefaultColorState());
     });
 
@@ -2010,6 +2053,101 @@ describe('GameCanvas curated renderer configuration', () => {
         expect(refusal?.['context']).toMatchObject({ changedKeys: ['antialias'] });
     });
 
+    it('lets a player pick below the game ceiling win', () => {
+        setDisplayQuality({ shadowQuality: 'low', renderScale: 0.5 });
+
+        render(
+            <GameCanvas camera="free" shadows="soft" renderScale={2}>
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasProps().shadows).toBe('basic');
+        // The 2 ceiling is a scalar, so no display ratio enters it.
+        expect(latestCanvasProps().dpr).toBe(1);
+    });
+
+    it('clamps a player pick above the game ceiling down to it', () => {
+        setDisplayQuality({ shadowQuality: 'high', renderScale: 1 });
+
+        render(
+            <GameCanvas camera="free" shadows="basic">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasProps().shadows).toBe('basic');
+    });
+
+    it('gives a game that authored no ceiling the player pick unchanged', () => {
+        setDisplayQuality({ shadowQuality: 'medium', renderScale: 0.5 });
+
+        render(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasProps().shadows).toBe('percentage');
+        expect(latestCanvasProps().dpr).toBe(0.5);
+    });
+
+    // R2.3, the live half. r3f re-runs configure() from a layout effect with no
+    // dependency array, and writes gl.shadowMap and the dpr on every pass, so a
+    // store change reaches the canvas through a re-render — no remount, which
+    // is what holding the canvas DOM node across the change asserts.
+    it.each([
+        {
+            knob: 'shadowQuality',
+            before: { shadowQuality: 'off' as const },
+            after: { shadowQuality: 'high' as const },
+            read: (): unknown => latestCanvasProps().shadows,
+            expected: 'soft',
+        },
+        {
+            knob: 'renderScale',
+            before: { renderScale: 1 },
+            after: { renderScale: 0.5 },
+            read: (): unknown => latestCanvasProps().dpr,
+            expected: 0.5,
+        },
+    ])('applies a mid-session $knob change without remounting the canvas', (knobCase) => {
+        setDisplayQuality(knobCase.before);
+        render(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+        const canvasOnMount = screen.getByTestId('r3f-canvas');
+
+        act(() => setDisplayQuality(knobCase.after));
+
+        expect(knobCase.read()).toEqual(knobCase.expected);
+        expect(screen.getByTestId('r3f-canvas')).toBe(canvasOnMount);
+    });
+
+    // R2.3, the other half. A context option cannot be corrected after the
+    // context is built, so the canvas keeps its mount value and says so by
+    // name — the split between the two halves is the thing this asserts, and
+    // it is asserted here rather than only in useFrozenContextOptions because
+    // the canvas root is where a reader looks for it.
+    it('reports a mid-session change to a remount-only knob instead of dropping it', () => {
+        const { rerender } = render(
+            <GameCanvas camera="free" contextOptions={{ antialias: true }}>
+                <mesh />
+            </GameCanvas>,
+        );
+
+        rerender(
+            <GameCanvas camera="free" contextOptions={{ antialias: false }}>
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasProps().gl).toEqual({ antialias: true });
+        expect(loggedErrorNames()).toContain('ContextOptionsAfterMountError');
+    });
+
     // Scoped to the two knobs that ride Canvas PROPS, which is what the name
     // says. The colour trio is per-canvas by construction — each GameCanvas
     // mounts its own <ApplyColorConfig> against its own canvas's root state —
@@ -2017,7 +2155,9 @@ describe('GameCanvas curated renderer configuration', () => {
     // canvas through one hoisted `fiberMock.rootState`, so both appliers write
     // the same renderer and the last one committed wins. Asserting a
     // per-canvas colour value here would be asserting the harness.
-    it('lets an overlay canvas carry different shadow and render-scale configuration from a concurrent main', () => {
+    it('lets an overlay canvas carry a different ceiling from a concurrent main', () => {
+        setDisplayQuality({ shadowQuality: 'high', renderScale: 1 });
+
         render(
             <>
                 <GameCanvas camera="free" role="main" shadows="soft" renderScale={[1, 2]}>
@@ -2034,7 +2174,7 @@ describe('GameCanvas curated renderer configuration', () => {
             .mock.calls.map(([props]) => props as ReturnType<typeof latestCanvasProps>);
 
         expect(mainProps?.shadows).toBe('soft');
-        expect(mainProps?.dpr).toEqual([1, 2]);
+        expect(mainProps?.dpr).toBe(1);
         expect(overlayProps?.shadows).toBe(false);
         expect(overlayProps?.dpr).toBe(1);
     });

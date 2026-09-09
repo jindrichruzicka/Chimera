@@ -292,7 +292,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         ]);
     });
 
-    it('pulls in exactly forty-six modules — four stores, the log bridge, both animation halves, and no clone seam', async () => {
+    it('pulls in exactly forty-seven modules — four stores, the log bridge, both animation halves, and no clone seam', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // EXHAUSTIVE, not a denylist (see the audio sibling for why). The four
@@ -344,6 +344,11 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         // mounted with and reports a later change by name. It adds no edge:
         // rendererLogger was already in this graph, and the enumeration above
         // is not a roll-call of its reporters.
+        // `r3f/selectDisplayQuality.ts` is the player half of the same
+        // configuration — the shadow tier and the render-scale fraction, read
+        // off settingsStore at the canvas root. It is the sibling of
+        // selectTargetFps.ts and adds no store edge: settingsStore was already
+        // here for the frame-rate cap.
         const dirAndFile = inputs.map((input) => input.split('/').slice(-2).join('/')).sort();
         expect(dirAndFile).toEqual([
             'animation/ClipBackend.ts',
@@ -380,6 +385,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'r3f/mainCanvasRegistry.ts',
             'r3f/mixerBindingRegistry.ts',
             'r3f/rendererConfig.ts',
+            'r3f/selectDisplayQuality.ts',
             'r3f/selectTargetFps.ts',
             'r3f/useClipPlayback.ts',
             'r3f/useClipPlayer.ts',

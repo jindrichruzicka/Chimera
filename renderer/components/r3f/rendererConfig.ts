@@ -182,3 +182,114 @@ export function applyColorConfig(gl: ColorConfigurableRenderer, config: Renderer
         gl.outputColorSpace = outputColorSpaceConstants[config.outputColorSpace];
     }
 }
+
+// ── Resolving a player setting against a game's ceiling (§4.13 → §4.22) ──────
+//
+// Two vocabularies meet here, and they are easy to confuse because one word
+// spans both. `display.shadowQuality` is a player TIER (`off` | `low` |
+// `medium` | `high`); `GameCanvasProps.shadows` is a shadow-map NAME and is the
+// game's ceiling. `display.renderScale` is a FRACTION of what would otherwise
+// be drawn; `GameCanvasProps.renderScale` is r3f's `dpr` and is ABSOLUTE.
+//
+// The precedence is one rule in both cases: the player's setting chooses, the
+// game's prop caps. A game therefore cannot spend a player's GPU budget for
+// them, and a player cannot ask for more than the scene supports. A game that
+// authors nothing imposes no cap, so the player's setting stands alone — and at
+// the engine defaults (`off`, `1`) that reproduces what the canvas rendered
+// before either setting existed.
+
+/** The player-facing quality tiers stored in `display.shadowQuality`. */
+export type ShadowQualityTier = 'off' | 'low' | 'medium' | 'high';
+
+/**
+ * Shadow-map names in ascending cost. The ORDER is the clamp: an index
+ * comparison is what makes "at or below the ceiling" mean anything.
+ */
+const SHADOW_QUALITY_ORDER = [
+    'off',
+    'basic',
+    'percentage',
+    'soft',
+    'variance',
+] as const satisfies readonly ShadowQuality[];
+
+/**
+ * The ceiling a game that authored none is treated as having — the top of the
+ * order, so it restricts nothing. It is a real, authorable value rather than a
+ * sentinel, which is why the "no ceiling" and "unrestricted ceiling" paths
+ * resolve identically.
+ */
+export const UNRESTRICTED_SHADOW_QUALITY: ShadowQuality = 'variance';
+
+/** The shadow-map name each player tier asks for, before any ceiling applies. */
+const TIER_SHADOW_QUALITY = {
+    off: 'off',
+    low: 'basic',
+    medium: 'percentage',
+    high: 'soft',
+} as const satisfies Record<ShadowQualityTier, ShadowQuality>;
+
+/**
+ * r3f's own `dpr` default. It is a destructuring default inside `configure()`,
+ * so it applies to a prop passed as `undefined` exactly as to an absent key —
+ * which is why a canvas that authors no ceiling has always drawn at this.
+ */
+export const DEFAULT_RENDER_SCALE: RenderScale = [1, 2];
+
+/**
+ * The smallest ratio a resolved render scale may reach, so a coarse setting
+ * renders coarsely rather than degenerating to a zero-area drawing buffer.
+ */
+const MIN_RENDER_SCALE = 0.01;
+
+/** The effective shadow-map name for a player tier under a game's ceiling. */
+export function resolveShadowQuality(
+    tier: ShadowQualityTier,
+    ceiling: ShadowQuality | undefined,
+): ShadowQuality {
+    const requested = TIER_SHADOW_QUALITY[tier];
+    const capped = ceiling ?? UNRESTRICTED_SHADOW_QUALITY;
+
+    return SHADOW_QUALITY_ORDER.indexOf(requested) <= SHADOW_QUALITY_ORDER.indexOf(capped)
+        ? requested
+        : capped;
+}
+
+/**
+ * The effective `dpr` for a player fraction under a game's authored ceiling —
+ * always a SCALAR, and that is the whole of this function's difficulty.
+ *
+ * A range ceiling cannot simply have its ends scaled. r3f resolves a range by
+ * clamping the DISPLAY's own ratio into it (`calculateDpr`:
+ * `Math.min(Math.max(dpr[0], target), dpr[1])`), so scaling the ends yields
+ * `clamp(target, lo·f, hi·f)` — which is not `f ×` anything, and on a
+ * `devicePixelRatio` of 1 leaves every fraction resolving to the same ratio.
+ * The player's setting would be inert on exactly the displays that need it
+ * most. Resolving the range HERE and scaling the result is what makes the
+ * fraction mean what it says.
+ *
+ * At `fraction === 1` this returns what r3f's own `calculateDpr` returns for
+ * the same ceiling, so the engine default reproduces the ratio the canvas drew
+ * at before the setting existed — asserted against that formula rather than
+ * against a hand-copied number.
+ */
+export function resolveRenderScale(
+    ceiling: RenderScale | undefined,
+    fraction: number,
+    deviceRatio: number,
+): number {
+    const capped = ceiling ?? DEFAULT_RENDER_SCALE;
+    const resolved =
+        typeof capped === 'number' ? capped : Math.min(Math.max(capped[0], deviceRatio), capped[1]);
+
+    return Math.max(resolved * fraction, MIN_RENDER_SCALE);
+}
+
+/**
+ * The display's device-pixel ratio, read the way r3f reads it — including its
+ * fallback of 2 for a context where `window` exists but the ratio does not
+ * (a worker), and 1 where there is no `window` at all.
+ */
+export function readDeviceRatio(): number {
+    return typeof window !== 'undefined' ? (window.devicePixelRatio ?? 2) : 1;
+}

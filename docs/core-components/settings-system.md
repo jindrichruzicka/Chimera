@@ -45,10 +45,14 @@ interface EngineSettings {
         // Shadow-map quality tier; 'off' disables shadow mapping. The stored
         // value is an engine-owned NAME, never a three constant (Invariant #1)
         // — the tier becomes a shadow-map type on the renderer side alone.
+        // Resolved at the canvas root against the game's own GameCanvas
+        // ceiling, the player picking at or below it (§4.22 "Precedence").
         // Never read by the simulation.
         shadowQuality: 'off' | 'low' | 'medium' | 'high';
         // Fraction of the display's own pixel ratio to render at; 1 = native.
-        // Below 1 trades sharpness for fill rate. Never read by the simulation.
+        // Below 1 trades sharpness for fill rate. Multiplies whatever dpr the
+        // canvas would otherwise draw at (§4.22 "Precedence"). Never read by
+        // the simulation.
         renderScale: 0.5 | 0.75 | 1;
     };
     gameplay: {

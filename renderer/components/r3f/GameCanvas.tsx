@@ -16,7 +16,14 @@ import {
 } from './cameraFit';
 import type { CameraFit, CanvasBox } from './cameraFit';
 import { registerMainCanvas } from './mainCanvasRegistry';
-import { applyColorConfig, shadowsProp } from './rendererConfig';
+import {
+    applyColorConfig,
+    readDeviceRatio,
+    resolveRenderScale,
+    resolveShadowQuality,
+    shadowsProp,
+} from './rendererConfig';
+import { selectRenderScaleFraction, selectShadowQualityTier } from './selectDisplayQuality';
 import { useFrozenContextOptions } from './useFrozenContextOptions';
 import type {
     ColorConfigurableRenderer,
@@ -28,6 +35,7 @@ import type {
     WebGLContextOptions,
 } from './rendererConfig';
 import { useEngineFrameloop } from './useEngineFrameloop';
+import { useSettingsStore } from '../../state/settingsStore';
 import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three';
 import type { Vector3Tuple } from '../../types/r3f-types.js';
 
@@ -128,9 +136,16 @@ export type GameCanvasProps = Readonly<{
     /** Forwarded to the r3f `<Canvas>` `onPointerMissed` (deselect-on-empty-click). */
     onPointerMissed?: (event: MouseEvent) => void;
     /**
-     * Shadow-map quality, per canvas. Omitted leaves shadow mapping off, which
-     * is what the canvas has always done — a mesh's `castShadow` is inert until
-     * a game turns this on AND the scene has a light that casts.
+     * The highest shadow-map quality this canvas will run at — a CEILING, not
+     * the value applied. The player's `display.shadowQuality` picks the tier
+     * and this caps how high that pick may go, so a game cannot spend a
+     * player's GPU budget for them and a player cannot ask for more than the
+     * scene supports. Omitted imposes no cap.
+     *
+     * At the engine default tier (`off`) the canvas has shadow mapping
+     * disabled whatever this says, which is what it has always done — a mesh's
+     * `castShadow` is inert until the PLAYER turns shadows on and the scene has
+     * a light that casts.
      *
      * The value is an engine name, never a `three` constant: the mapping lives
      * in `rendererConfig.ts` so a game configuring the renderer imports neither
@@ -152,10 +167,20 @@ export type GameCanvasProps = Readonly<{
     /** Output colour space; omitted keeps r3f's sRGB default. */
     outputColorSpace?: OutputColorSpace;
     /**
-     * Device-pixel ratio to draw at — a fixed multiplier, or a `[min, max]`
-     * range clamped against the display's own ratio. Omitted keeps r3f's
-     * `[1, 2]`. This is r3f's `dpr` under an engine name; `dpr` itself stays
-     * rejected so one spelling owns the concern.
+     * The device-pixel ratio to draw at before the player's scale applies — a
+     * fixed multiplier, or a `[min, max]` range clamped against the display's
+     * own ratio. Omitted uses r3f's `[1, 2]`. This is r3f's `dpr` under an
+     * engine name; `dpr` itself stays rejected so one spelling owns the
+     * concern.
+     *
+     * Note the two `renderScale`s are different quantities and do not mean
+     * the same thing: this one is the CEILING r3f would resolve against, while
+     * the player's `display.renderScale` is a fraction of what that resolution
+     * yields. A range ceiling is resolved by clamping the display's own ratio
+     * into it — r3f's own formula — and the player's fraction scales the
+     * result, so at the engine default fraction the canvas draws at the ratio
+     * r3f itself would have chosen for this ceiling. The FORMULA is r3f's; the
+     * cadence is not, since the ratio is read where this component renders.
      */
     renderScale?: RenderScale;
     /**
@@ -262,6 +287,14 @@ export function GameCanvas({
     const frameloop = useEngineFrameloop();
     // The value r3f built the context from, whatever later renders pass.
     const mountedContextOptions = useFrozenContextOptions(contextOptions);
+    // The player's half of each quality knob. Both are read here, at the canvas
+    // root, for the same reason the frame-rate cap is: it is the one place an
+    // engine-wide display setting can apply to whatever a game renders
+    // (Invariant #127). Both take effect on a store change without remounting
+    // the canvas — r3f re-runs configure() from a layout effect with no
+    // dependency array, and writes the shadow map and the dpr on every pass.
+    const shadowTier = useSettingsStore(selectShadowQualityTier);
+    const renderScaleFraction = useSettingsStore(selectRenderScaleFraction);
 
     const frameRef = React.useRef<HTMLDivElement | null>(null);
     const fit = config.fit ?? DEFAULT_CAMERA_FIT;
@@ -292,12 +325,16 @@ export function GameCanvas({
                 // exactOptionalPropertyTypes the key must be omitted, not set to
                 // undefined.
                 {...(onPointerMissed ? { onPointerMissed } : {})}
-                // Both keys are OMITTED when the game authored nothing, so r3f
-                // applies its own defaults (`shadows = false`, `dpr = [1, 2]`)
-                // and a canvas that configures nothing renders exactly as it
-                // did before these props existed.
-                {...(shadows === undefined ? {} : { shadows: shadowsProp(shadows) })}
-                {...(renderScale === undefined ? {} : { dpr: canvasDpr(renderScale) })}
+                // Resolved, never authored: the player's setting picks and the
+                // game's prop caps. Both keys are always emitted, because the
+                // player's choice has to reach a canvas whose game authored no
+                // ceiling at all. Emitting them changes nothing on its own —
+                // `configure()` destructures `shadows = false` and
+                // `dpr = [1, 2]`, and a destructuring default applies to a key
+                // passed as `undefined` exactly as to an absent one — so at the
+                // engine defaults the canvas resolves to what it always did.
+                shadows={shadowsProp(resolveShadowQuality(shadowTier, shadows))}
+                dpr={resolveRenderScale(renderScale, renderScaleFraction, readDeviceRatio())}
                 // The FROZEN options, so what r3f builds the context from
                 // never changes; the key is omitted entirely when the game
                 // authored nothing, so r3f's own defaults build the context.
@@ -359,15 +396,6 @@ function ApplyColorConfig({
 /** Narrowed at the selector, the way FrameRateLimiter narrows `advance`. */
 function selectRenderer(state: RootState): ColorConfigurableRenderer {
     return state.gl;
-}
-
-/**
- * The authored render scale as r3f's `dpr`. A range is copied rather than cast:
- * `RenderScale` is `readonly` because it is read off a `Readonly` props object,
- * and r3f's own `Dpr` tuple is mutable.
- */
-function canvasDpr(renderScale: RenderScale): number | [number, number] {
-    return typeof renderScale === 'number' ? renderScale : [renderScale[0], renderScale[1]];
 }
 
 /**

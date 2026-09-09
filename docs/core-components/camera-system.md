@@ -178,9 +178,16 @@ export type GameCanvasProps = Readonly<{
     /** Forwarded to the r3f `<Canvas>` `onPointerMissed` (deselect-on-empty-click). */
     onPointerMissed?: (event: MouseEvent) => void;
     /**
-     * Shadow-map quality, per canvas. Omitted leaves shadow mapping off, which
-     * is what the canvas has always done — a mesh's `castShadow` is inert until
-     * a game turns this on AND the scene has a light that casts.
+     * The highest shadow-map quality this canvas will run at — a CEILING, not
+     * the value applied. The player's `display.shadowQuality` picks the tier
+     * and this caps how high that pick may go, so a game cannot spend a
+     * player's GPU budget for them and a player cannot ask for more than the
+     * scene supports. Omitted imposes no cap.
+     *
+     * At the engine default tier (`off`) the canvas has shadow mapping
+     * disabled whatever this says, which is what it has always done — a mesh's
+     * `castShadow` is inert until the PLAYER turns shadows on and the scene has
+     * a light that casts.
      *
      * The value is an engine name, never a `three` constant: the mapping lives
      * in `rendererConfig.ts` so a game configuring the renderer imports neither
@@ -202,10 +209,20 @@ export type GameCanvasProps = Readonly<{
     /** Output colour space; omitted keeps r3f's sRGB default. */
     outputColorSpace?: OutputColorSpace;
     /**
-     * Device-pixel ratio to draw at — a fixed multiplier, or a `[min, max]`
-     * range clamped against the display's own ratio. Omitted keeps r3f's
-     * `[1, 2]`. This is r3f's `dpr` under an engine name; `dpr` itself stays
-     * rejected so one spelling owns the concern.
+     * The device-pixel ratio to draw at before the player's scale applies — a
+     * fixed multiplier, or a `[min, max]` range clamped against the display's
+     * own ratio. Omitted uses r3f's `[1, 2]`. This is r3f's `dpr` under an
+     * engine name; `dpr` itself stays rejected so one spelling owns the
+     * concern.
+     *
+     * Note the two `renderScale`s are different quantities and do not mean
+     * the same thing: this one is the CEILING r3f would resolve against, while
+     * the player's `display.renderScale` is a fraction of what that resolution
+     * yields. A range ceiling is resolved by clamping the display's own ratio
+     * into it — r3f's own formula — and the player's fraction scales the
+     * result, so at the engine default fraction the canvas draws at the ratio
+     * r3f itself would have chosen for this ceiling. The FORMULA is r3f's; the
+     * cadence is not, since the ratio is read where this component renders.
      */
     renderScale?: RenderScale;
     /**
@@ -346,18 +363,47 @@ export type OutputColorSpace = 'srgb' | 'linear';
 export type RenderScale = number | readonly [number, number];
 ```
 
-| Prop                  | Type                  | Omitted ⇒              | Applied by                                                  |
-| --------------------- | --------------------- | ---------------------- | ----------------------------------------------------------- |
-| `shadows`             | `ShadowQuality`       | shadow mapping off     | the `<Canvas shadows>` prop                                 |
-| `renderScale`         | `RenderScale`         | r3f's `[1, 2]`         | the `<Canvas dpr>` prop                                     |
-| `toneMapping`         | `ToneMappingMode`     | ACES filmic            | a null component **inside** the canvas                      |
-| `toneMappingExposure` | `number`              | `1`                    | a null component **inside** the canvas                      |
-| `outputColorSpace`    | `OutputColorSpace`    | sRGB                   | a null component **inside** the canvas                      |
-| `contextOptions`      | `WebGLContextOptions` | r3f's context defaults | the `<Canvas gl>` constructor parameters, **at mount only** |
+| Prop                  | Type                  | Omitted ⇒              | Applied by                                                                |
+| --------------------- | --------------------- | ---------------------- | ------------------------------------------------------------------------- |
+| `shadows`             | `ShadowQuality`       | no ceiling             | the `<Canvas shadows>` prop, **resolved against `display.shadowQuality`** |
+| `renderScale`         | `RenderScale`         | r3f's `[1, 2]` ceiling | the `<Canvas dpr>` prop, **resolved against `display.renderScale`**       |
+| `toneMapping`         | `ToneMappingMode`     | ACES filmic            | a null component **inside** the canvas                                    |
+| `toneMappingExposure` | `number`              | `1`                    | a null component **inside** the canvas                                    |
+| `outputColorSpace`    | `OutputColorSpace`    | sRGB                   | a null component **inside** the canvas                                    |
+| `contextOptions`      | `WebGLContextOptions` | r3f's context defaults | the `<Canvas gl>` constructor parameters, **at mount only**               |
 
 "Omitted ⇒" is the value at **mount**. The three colour fields are written onto the live renderer, so changing one takes effect without remounting the canvas — but a renderer has no unset state, so _removing_ the prop afterwards leaves the last authored value standing rather than restoring r3f's default. Author the value you want rather than dropping the prop.
 
-Every prop is **per canvas**, so an `overlay` (a minimap, a preview) runs its own configuration and can be cheaper than the `main` scene it sits over. Omitting all five reproduces the rendering the canvas had before they existed: the two Canvas keys are omitted rather than defaulted, so r3f applies its own defaults, and the three colour fields are never written.
+Every prop is **per canvas**, so an `overlay` (a minimap, a preview) runs its own configuration and can be cheaper than the `main` scene it sits over. Omitting all five reproduces the rendering the canvas had before they existed: the resolved `shadows` and `dpr` values are r3f's own defaults, and the three colour fields are never written.
+
+### Precedence: the player picks, the game caps
+
+Two of the five knobs are also **player** settings (§4.13), and the precedence between them is one rule in both cases: **the player's setting chooses, the game's prop caps.** A game therefore cannot spend a player's GPU budget for them, and a player cannot ask for more than the scene supports. A game that authors nothing imposes no cap, so the player's setting stands alone.
+
+| Player setting          | Game prop     | Resolved value                                                                      |
+| ----------------------- | ------------- | ----------------------------------------------------------------------------------- |
+| `display.shadowQuality` | `shadows`     | the tier's shadow-map name, clamped down to the prop's name in ascending cost order |
+| `display.renderScale`   | `renderScale` | the ratio the ceiling resolves to, multiplied by the player fraction                |
+
+The two vocabularies are deliberately different words for different quantities, and confusing them is the mistake this section exists to prevent:
+
+- `display.shadowQuality` is a **tier** (`off` | `low` | `medium` | `high`); `shadows` is a **shadow-map name** (`off` | `basic` | `percentage` | `soft` | `variance`). The tier maps to a name (`off`→`off`, `low`→`basic`, `medium`→`percentage`, `high`→`soft`) and the clamp is an index comparison on the ascending order. `variance` is above every tier a player can name, so it is the ceiling a game that authored none is treated as having.
+- `display.renderScale` is a **fraction** of what would otherwise be drawn; `renderScale` is r3f's `dpr` and is **absolute**. A **range** ceiling is not scaled end-for-end: r3f resolves a range by clamping the display's own ratio into it (`calculateDpr`: `Math.min(Math.max(dpr[0], target), dpr[1])`), so scaling the ends would yield `clamp(target, lo·f, hi·f)` — not `f ×` anything, and on a `devicePixelRatio` of 1 the same ratio for every option, leaving the setting inert on exactly the displays that need it. The engine therefore resolves the range itself and scales the **result**, handing the canvas a scalar. At the engine default fraction that scalar equals what r3f's own `calculateDpr` returns for the same ceiling, which is why the defaults reproduce the rendering that preceded either setting.
+
+The resolved ratio is floored just above zero, so a coarse setting renders coarsely rather than degenerating to a zero-area drawing buffer.
+
+Both settings are read at the canvas root by `selectDisplayQuality.ts`, the sibling of `selectTargetFps.ts`. Neither is a barrel export: the canvas root is the one place an engine-wide display setting can apply to whatever a game renders (Invariant #127), and the resolution seam stays engine-internal (Invariant #96).
+
+### Which knobs survive a mid-session change
+
+| Knob                                                     | Mid-session change                      |
+| -------------------------------------------------------- | --------------------------------------- |
+| `shadows` / `display.shadowQuality`                      | applies live, no remount                |
+| `renderScale` / `display.renderScale`                    | applies live, no remount                |
+| `toneMapping`, `toneMappingExposure`, `outputColorSpace` | applies live, no remount                |
+| `contextOptions`                                         | **cannot** — refused by name, see below |
+
+The first three rows hold because r3f re-runs `configure()` from a layout effect with **no dependency array**, and writes `gl.shadowMap` and the `dpr` on every pass; the colour trio is applied from inside the canvas for the reason below. The last row is the one a player must never discover for themselves: a WebGL context's attributes are fixed when the context is built, so a changed `contextOptions` is kept out and reported as `ContextOptionsAfterMountError` rather than ignored.
 
 ### Why the colour knobs are not Canvas props
 
