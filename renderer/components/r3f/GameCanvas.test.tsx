@@ -428,6 +428,42 @@ describe('GameCanvas', () => {
         );
     });
 
+    it('keeps the frozen and mutable halves out of each other at the type level', () => {
+        // The split is held by the API's SHAPE, not by a doc comment, and it
+        // has to hold in BOTH directions or it is only a naming convention:
+        // a construction-time option must not be writable as a flat prop
+        // (where nothing would stop a later render changing it), and a mutable
+        // knob must not be writable inside the frozen object (where it would
+        // stop responding to a change it can serve). One pin per direction.
+        void (
+            <GameCanvas
+                camera="free"
+                // @ts-expect-error: antialias is a context option, not a flat prop
+                antialias
+            >
+                <mesh />
+            </GameCanvas>
+        );
+        void (
+            <GameCanvas
+                camera="free"
+                // @ts-expect-error: shadows is a mutable knob, not a context option
+                contextOptions={{ shadows: 'soft' }}
+            >
+                <mesh />
+            </GameCanvas>
+        );
+        void (
+            <GameCanvas
+                camera="free"
+                // @ts-expect-error: powerPreference takes an engine name, not any string
+                contextOptions={{ powerPreference: 'fastest' }}
+            >
+                <mesh />
+            </GameCanvas>
+        );
+    });
+
     it('mounts one PerfProbe inside the R3F canvas root', () => {
         render(
             <GameCanvas camera="free">
@@ -1925,6 +1961,55 @@ describe('GameCanvas curated renderer configuration', () => {
         expect(fiberMock.rootState.gl.toneMapping).toBe(NoToneMapping);
     });
 
+    it("hands the authored context options to the canvas as r3f's constructor parameters", () => {
+        render(
+            <GameCanvas
+                camera="free"
+                contextOptions={{ antialias: false, powerPreference: 'low-power' }}
+            >
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasProps().gl).toEqual({
+            antialias: false,
+            powerPreference: 'low-power',
+        });
+    });
+
+    it('omits the gl key entirely when the game authored no context options', () => {
+        render(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect('gl' in latestCanvasProps()).toBe(false);
+    });
+
+    // The frozen half's whole contract, at the canvas root: the value r3f
+    // built the context from never changes, and the refusal is observable.
+    it('keeps the mounted context options and refuses a later change by name', () => {
+        const { rerender } = render(
+            <GameCanvas camera="free" contextOptions={{ antialias: true }}>
+                <mesh />
+            </GameCanvas>,
+        );
+
+        rerender(
+            <GameCanvas camera="free" contextOptions={{ antialias: false }}>
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasProps().gl).toEqual({ antialias: true });
+        const refusal = logEmit.mock.calls
+            .map(([entry]) => entry as Record<string, unknown>)
+            .find((entry) => entry['level'] === 'error');
+        expect(refusal?.['error']).toMatchObject({ name: 'ContextOptionsAfterMountError' });
+        expect(refusal?.['context']).toMatchObject({ changedKeys: ['antialias'] });
+    });
+
     // Scoped to the two knobs that ride Canvas PROPS, which is what the name
     // says. The colour trio is per-canvas by construction — each GameCanvas
     // mounts its own <ApplyColorConfig> against its own canvas's root state —
@@ -2080,6 +2165,7 @@ function latestCanvasProps(): Readonly<{
     onPointerMissed?: unknown;
     shadows?: unknown;
     dpr?: unknown;
+    gl?: unknown;
 }> {
     const lastCall = vi.mocked(Canvas).mock.calls.at(-1);
     if (!lastCall) {

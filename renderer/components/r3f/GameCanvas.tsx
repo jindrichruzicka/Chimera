@@ -17,6 +17,7 @@ import {
 import type { CameraFit, CanvasBox } from './cameraFit';
 import { registerMainCanvas } from './mainCanvasRegistry';
 import { applyColorConfig, shadowsProp } from './rendererConfig';
+import { useFrozenContextOptions } from './useFrozenContextOptions';
 import type {
     ColorConfigurableRenderer,
     OutputColorSpace,
@@ -24,6 +25,7 @@ import type {
     RenderScale,
     ShadowQuality,
     ToneMappingMode,
+    WebGLContextOptions,
 } from './rendererConfig';
 import { useEngineFrameloop } from './useEngineFrameloop';
 import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three';
@@ -35,9 +37,11 @@ export type { Vector3Tuple } from '../../types/r3f-types.js';
 export type { CameraFit } from './cameraFit';
 export type {
     OutputColorSpace,
+    PowerPreference,
     RenderScale,
     ShadowQuality,
     ToneMappingMode,
+    WebGLContextOptions,
 } from './rendererConfig';
 
 /**
@@ -154,6 +158,24 @@ export type GameCanvasProps = Readonly<{
      * rejected so one spelling owns the concern.
      */
     renderScale?: RenderScale;
+    /**
+     * WebGL context attributes, fixed when the context is BUILT.
+     *
+     * A nested object rather than flat props, and that shape is the contract:
+     * everything above it can still move, everything inside it cannot. What
+     * that separation is worth at the type level is bounded — TypeScript's
+     * excess-property check bites a fresh object LITERAL, so a widened
+     * variable or a spread reaches through either way. The literal case is
+     * what the `@ts-expect-error` block in `GameCanvas.test.tsx` measures, in
+     * both directions.
+     *
+     * Changing a value after mount cannot take effect, so it is refused
+     * observably rather than ignored: the canvas keeps what it mounted with
+     * and the differing keys are named through the renderer logger. To build a
+     * context with different attributes, remount the canvas under a new React
+     * `key`.
+     */
+    contextOptions?: WebGLContextOptions;
 }>;
 
 // Each preset carries its documented projection mode (camera-system.md preset
@@ -226,6 +248,7 @@ export function GameCanvas({
     toneMappingExposure,
     outputColorSpace,
     renderScale,
+    contextOptions,
 }: GameCanvasProps): React.ReactElement {
     // `resolveCameraConfig` returns either the caller's own object or a
     // module-level preset, so it is already stable per `camera` and needs no
@@ -237,6 +260,8 @@ export function GameCanvas({
     // <FrameRateLimiter /> driver inside; see selectTargetFps.ts for why they
     // must read one cap.
     const frameloop = useEngineFrameloop();
+    // The value r3f built the context from, whatever later renders pass.
+    const mountedContextOptions = useFrozenContextOptions(contextOptions);
 
     const frameRef = React.useRef<HTMLDivElement | null>(null);
     const fit = config.fit ?? DEFAULT_CAMERA_FIT;
@@ -273,6 +298,12 @@ export function GameCanvas({
                 // did before these props existed.
                 {...(shadows === undefined ? {} : { shadows: shadowsProp(shadows) })}
                 {...(renderScale === undefined ? {} : { dpr: canvasDpr(renderScale) })}
+                // The FROZEN options, so what r3f builds the context from
+                // never changes; the key is omitted entirely when the game
+                // authored nothing, so r3f's own defaults build the context.
+                // The engine passes this, never a game — a raw `gl` prop is
+                // the pass-through Invariant #127 keeps out of game files.
+                {...(mountedContextOptions === undefined ? {} : { gl: mountedContextOptions })}
             >
                 {role === 'main' ? <PerfProbe /> : null}
                 <FrameRateLimiter />

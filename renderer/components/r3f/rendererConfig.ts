@@ -67,6 +67,53 @@ export type OutputColorSpace = 'srgb' | 'linear';
  */
 export type RenderScale = number | readonly [number, number];
 
+/**
+ * Power hint the browser weighs when it picks a GPU for the context.
+ *
+ * Spelled out rather than taken from the DOM's `WebGLPowerPreference` so the
+ * whole curated surface reads in one vocabulary — the same reason the tone
+ * mapping and shadow values are engine names.
+ */
+export type PowerPreference = 'default' | 'high-performance' | 'low-power';
+
+/**
+ * The WebGL context attributes, which are fixed when the context is BUILT.
+ *
+ * The frozen half of `<GameCanvas>`'s configuration, and a nested object for
+ * exactly that reason. What the shape does and does not buy is on the
+ * `contextOptions` prop in `GameCanvas.tsx`, which is the copy a guard mirrors
+ * into camera-system.md.
+ */
+export type WebGLContextOptions = Readonly<{
+    antialias?: boolean;
+    alpha?: boolean;
+    powerPreference?: PowerPreference;
+    stencil?: boolean;
+    preserveDrawingBuffer?: boolean;
+}>;
+
+/**
+ * Every key `WebGLContextOptions` carries, for the drift comparison.
+ *
+ * Derived from a `Record<keyof …, true>` rather than written as a tuple,
+ * because the record is what makes the compiler ENFORCE the enumeration: a
+ * literal missing a key is TS2741 and one carrying an extra is TS2353. A
+ * `satisfies readonly (keyof …)[]` on a tuple checks MEMBERSHIP only, so a
+ * sixth option added to the type and forgotten here would compile — and be
+ * silently uncompared, which is a context change accepted without a word.
+ */
+const contextOptionKeyFlags: Record<keyof WebGLContextOptions, true> = {
+    antialias: true,
+    alpha: true,
+    powerPreference: true,
+    stencil: true,
+    preserveDrawingBuffer: true,
+};
+
+export const WEBGL_CONTEXT_OPTION_KEYS = Object.keys(
+    contextOptionKeyFlags,
+) as readonly (keyof WebGLContextOptions)[];
+
 /** The three renderer fields `applyColorConfig` is allowed to write. */
 export type ColorConfigurableRenderer = Pick<
     WebGLRenderer,

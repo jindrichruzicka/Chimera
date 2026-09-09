@@ -208,6 +208,24 @@ export type GameCanvasProps = Readonly<{
      * rejected so one spelling owns the concern.
      */
     renderScale?: RenderScale;
+    /**
+     * WebGL context attributes, fixed when the context is BUILT.
+     *
+     * A nested object rather than flat props, and that shape is the contract:
+     * everything above it can still move, everything inside it cannot. What
+     * that separation is worth at the type level is bounded — TypeScript's
+     * excess-property check bites a fresh object LITERAL, so a widened
+     * variable or a spread reaches through either way. The literal case is
+     * what the `@ts-expect-error` block in `GameCanvas.test.tsx` measures, in
+     * both directions.
+     *
+     * Changing a value after mount cannot take effect, so it is refused
+     * observably rather than ignored: the canvas keeps what it mounted with
+     * and the differing keys are named through the renderer logger. To build a
+     * context with different attributes, remount the canvas under a new React
+     * `key`.
+     */
+    contextOptions?: WebGLContextOptions;
 }>;
 ```
 
@@ -328,13 +346,14 @@ export type OutputColorSpace = 'srgb' | 'linear';
 export type RenderScale = number | readonly [number, number];
 ```
 
-| Prop                  | Type               | Omitted ⇒          | Applied by                             |
-| --------------------- | ------------------ | ------------------ | -------------------------------------- |
-| `shadows`             | `ShadowQuality`    | shadow mapping off | the `<Canvas shadows>` prop            |
-| `renderScale`         | `RenderScale`      | r3f's `[1, 2]`     | the `<Canvas dpr>` prop                |
-| `toneMapping`         | `ToneMappingMode`  | ACES filmic        | a null component **inside** the canvas |
-| `toneMappingExposure` | `number`           | `1`                | a null component **inside** the canvas |
-| `outputColorSpace`    | `OutputColorSpace` | sRGB               | a null component **inside** the canvas |
+| Prop                  | Type                  | Omitted ⇒              | Applied by                                                  |
+| --------------------- | --------------------- | ---------------------- | ----------------------------------------------------------- |
+| `shadows`             | `ShadowQuality`       | shadow mapping off     | the `<Canvas shadows>` prop                                 |
+| `renderScale`         | `RenderScale`         | r3f's `[1, 2]`         | the `<Canvas dpr>` prop                                     |
+| `toneMapping`         | `ToneMappingMode`     | ACES filmic            | a null component **inside** the canvas                      |
+| `toneMappingExposure` | `number`              | `1`                    | a null component **inside** the canvas                      |
+| `outputColorSpace`    | `OutputColorSpace`    | sRGB                   | a null component **inside** the canvas                      |
+| `contextOptions`      | `WebGLContextOptions` | r3f's context defaults | the `<Canvas gl>` constructor parameters, **at mount only** |
 
 "Omitted ⇒" is the value at **mount**. The three colour fields are written onto the live renderer, so changing one takes effect without remounting the canvas — but a renderer has no unset state, so _removing_ the prop afterwards leaves the last authored value standing rather than restoring r3f's default. Author the value you want rather than dropping the prop.
 
@@ -343,6 +362,30 @@ Every prop is **per canvas**, so an `overlay` (a minimap, a preview) runs its ow
 ### Why the colour knobs are not Canvas props
 
 The alternative is handing r3f a raw `gl={…}` object, which is the pass-through shape Invariant #127 keeps out of game files — so the curated props carry the concern, and `GameCanvas` applies these three from a null component mounted inside the `<Canvas>`, where the renderer is R3F root state. That a change to any of them takes effect **without remounting the canvas** is measured by `GameCanvas.test.tsx`'s `applies a changed '<knob>' without remounting the canvas`, one case per knob.
+
+### Construction-time context options
+
+`contextOptions` is the frozen half, and it is a nested object for exactly that reason: everything beside it can still move, everything inside it cannot. WebGL context attributes are fixed when the context is built, so a value written afterwards cannot take effect.
+
+```typescript
+// renderer/components/r3f/rendererConfig.ts (types re-exported from the r3f barrel)
+
+export type PowerPreference = 'default' | 'high-performance' | 'low-power';
+
+export type WebGLContextOptions = Readonly<{
+    antialias?: boolean;
+    alpha?: boolean;
+    powerPreference?: PowerPreference;
+    stencil?: boolean;
+    preserveDrawingBuffer?: boolean;
+}>;
+```
+
+What the separation is worth at the type level is **bounded**, and it is worth knowing where: TypeScript's excess-property check bites a fresh object **literal**, so a widened variable or a spread reaches through either way. The literal case is measured in both directions — a mutable knob written inside `contextOptions`, and a context option written as a flat prop — each with its own `@ts-expect-error` pin in `GameCanvas.test.tsx`.
+
+**A change after mount is refused, not ignored.** Silently disregarding it is the failure this shape exists to prevent, so the canvas keeps the values it mounted with and names the differing keys through the renderer logger as `ContextOptionsAfterMountError` — logged, not thrown, the way a duplicate `role="main"` canvas is. The comparison is by value, so a game writing its options inline (a fresh object every render) reports nothing. To build a context with different attributes, remount the canvas under a new React `key`.
+
+**What stays unexposed, so the omission does not read as an oversight:** r3f's `legacy`, `linear`, `flat`, `orthographic`, `performance`, `raycaster`, `scene`, `events`, `onCreated` and `size`. `orthographic` and `size` are owned by the camera and the fit policy; the rest are engine wiring. Note that `linear` is not merely another spelling of `outputColorSpace`: r3f also gates its automatic sRGB conversion of colour-carrying texture slots on `state.linear`, which `outputColorSpace` does not touch. A raw `gl={…}` pass-through stays unexposed too, and is the one this list exists to keep out — it is the coupling shape Invariant #127 bans from game files.
 
 ### Where a named-mode mapping table may live
 

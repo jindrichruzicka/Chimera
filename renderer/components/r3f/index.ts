@@ -58,10 +58,11 @@
  * `renderer/components/shell/`.
  *
  * The renderer-configuration types (`ShadowQuality`, `ToneMappingMode`,
- * `OutputColorSpace`, `RenderScale`) ship as TYPES only, and that asymmetry is
- * the point: their values are engine-owned NAMES, so a game annotates a
- * variable with one and still imports no `three` constant. The name → constant
- * mapping is renderer-internal (`rendererConfig.ts`) and stays that way.
+ * `OutputColorSpace`, `RenderScale`, plus `WebGLContextOptions` and its
+ * `PowerPreference`) ship as TYPES only, and that asymmetry is the point:
+ * their values are engine-owned NAMES, so a game annotates a variable with one
+ * and still imports no `three` constant. The name → constant mapping is
+ * renderer-internal (`rendererConfig.ts`) and stays that way.
  *
  * GameCanvas is the only canvas root a game mounts. It wires `PerfProbe` (main
  * role only), `FrameRateLimiter`, the `frameloop` prop itself, and the
@@ -121,10 +122,12 @@ export type {
     GameCanvasCamera,
     GameCanvasProps,
     OutputColorSpace,
+    PowerPreference,
     RenderScale,
     ShadowQuality,
     ToneMappingMode,
     Vector3Tuple,
+    WebGLContextOptions,
 } from './GameCanvas';
 // `Vector3Tuple` is NOT re-exported from `useCamera` as well: both it and
 // `GameCanvas` re-export the one declaration in `renderer/types/r3f-types.ts`,

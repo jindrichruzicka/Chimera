@@ -84,6 +84,12 @@ import type {
     CameraAnimationTarget,
     CameraAnimationCancelReason,
     InteractionHandlers,
+    OutputColorSpace,
+    PowerPreference,
+    RenderScale,
+    ShadowQuality,
+    ToneMappingMode,
+    WebGLContextOptions,
 } from '../index';
 
 /** The barrel's TYPE surface — see the audio sibling for why each is named. */
@@ -98,6 +104,18 @@ interface BarrelTypeSurface {
     readonly camera: GameCanvasCamera;
     readonly props: GameCanvasProps;
     readonly vector: Vector3Tuple;
+    // §4.22's curated renderer configuration. Each is named for the same
+    // reason as the camera types: the prop VALUES are engine-owned names, so a
+    // game hoisting one to a module constant has to annotate it, and
+    // `rendererConfig.ts` is not an importable subpath (Invariant #96). Naming
+    // them here is also what makes the header's "removal-only, via typecheck"
+    // true of them — dropping any one from index.ts reds this file.
+    readonly shadowQuality: ShadowQuality;
+    readonly toneMapping: ToneMappingMode;
+    readonly outputColorSpace: OutputColorSpace;
+    readonly renderScale: RenderScale;
+    readonly contextOptions: WebGLContextOptions;
+    readonly powerPreference: PowerPreference;
     // useClipPlayer's own signature: the options it takes, the handle it
     // returns, and the handler surface a game writes against. The marker event
     // types are named because a game that factors a handler out of the options
@@ -274,7 +292,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         ]);
     });
 
-    it('pulls in exactly forty-five modules — four stores, the log bridge, both animation halves, and no clone seam', async () => {
+    it('pulls in exactly forty-six modules — four stores, the log bridge, both animation halves, and no clone seam', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // EXHAUSTIVE, not a denylist (see the audio sibling for why). The four
@@ -321,6 +339,11 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         // adds no edge beyond `three`, which GameCanvas already names for its
         // camera constructors — so it is reached here and, like GameCanvas
         // itself, stays off the shell layout graph the `three` census walks.
+        // `r3f/useFrozenContextOptions.ts` is the frozen half of that
+        // configuration: it holds the WebGL context attributes the canvas
+        // mounted with and reports a later change by name. It adds no edge:
+        // rendererLogger was already in this graph, and the enumeration above
+        // is not a roll-call of its reporters.
         const dirAndFile = inputs.map((input) => input.split('/').slice(-2).join('/')).sort();
         expect(dirAndFile).toEqual([
             'animation/ClipBackend.ts',
@@ -362,6 +385,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'r3f/useClipPlayer.ts',
             'r3f/useEngineFrameloop.ts',
             'r3f/useEntityInterpolation.ts',
+            'r3f/useFrozenContextOptions.ts',
             'r3f/useModelAnimation.ts',
             'r3f/useOwnedMixer.ts',
             'r3f/useSpriteClipPlayer.ts',
