@@ -38,6 +38,44 @@ import { computeBodyChecksum } from '@chimera-engine/simulation/persistence/Save
 /** Extension used for save files. */
 const FILE_EXT = '.chimera';
 
+/** Suffix an in-flight write carries until its rename. */
+const TEMP_EXT = '.tmp';
+
+/**
+ * Matches a temp artefact this repository writes, in either shape an install
+ * can be carrying: `<slot>.chimera.<n>.tmp` is what `save()` writes now, and
+ * `<slot>.chimera.tmp` is what it wrote before the temp path became per-write.
+ * The older shape was self-healing — the next write to that slot truncated it —
+ * and is inert under the current scheme, so the reap owns it too.
+ *
+ * Built from `FILE_EXT` and `TEMP_EXT` rather than spelled out, so a change to
+ * either reaches the writer and the reaper together. `.` is the only regex
+ * metacharacter either constant contains, and the leading `\\` escapes it.
+ */
+const TEMP_FILE_RE = new RegExp(`\\${FILE_EXT}(\\.\\d+)?\\${TEMP_EXT}$`);
+
+/**
+ * How old a temp artefact must be before `reapOrphanTempFiles()` treats it as
+ * abandoned.
+ *
+ * The reaper cannot ask whether an artefact belongs to a write in flight: the
+ * app requests no single-instance lock, so a SECOND instance sharing this
+ * `userData` may be writing one right now, and taking that file would restore
+ * the failure the per-write temp name removed — a rename that finds nothing
+ * and rejects its caller's save. So it decides on age.
+ *
+ * The window is set by what a wrong answer costs in each direction, not by
+ * timing a write: reaping late costs disk the sweep gives back on the next
+ * start, while reaping early costs a save. `FileSaveRepository.reap.test.ts`
+ * measures the property the window buys — a write in flight survives a sweep
+ * that takes an aged artefact in the same pass.
+ *
+ * It is a heuristic, not a proof. A writer suspended past the window — a
+ * laptop asleep mid-save — has its artefact taken, and its rename then fails
+ * the way any interrupted save's does.
+ */
+export const ORPHAN_TEMP_MAX_AGE_MS = 60 * 60 * 1000;
+
 /**
  * Maximum number of save-file entries read in parallel by `list()`.
  *
@@ -68,8 +106,9 @@ const SLOT_COMPONENT_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
  * Distinguishes one in-flight write from another within this process.
  *
  * A counter rather than a timestamp: two writes started in the same
- * millisecond are exactly the case that needs telling apart. Process-local is
- * enough — the save directory belongs to one running app.
+ * millisecond are exactly the case that needs telling apart. It is module
+ * state, so it starts at 1 in every process: the name separates writes within
+ * one process, not writes made by two instances sharing a `userData`.
  */
 let tempWriteCounter = 0;
 
@@ -224,7 +263,7 @@ export class FileSaveRepository implements SaveRepository {
         // rename then failed with ENOENT and whose caller saw its save
         // rejected. With a path of its own, each write is whole before it
         // renames and the rename itself decides the winner.
-        const tmp = `${dest}.${nextTempId()}.tmp`;
+        const tmp = `${dest}.${nextTempId()}${TEMP_EXT}`;
 
         const fh = await fs.open(tmp, 'w');
         try {
@@ -251,6 +290,69 @@ export class FileSaveRepository implements SaveRepository {
             }
             throw err;
         }
+    }
+
+    // ── Maintenance (not part of the SaveRepository contract) ─────────────────
+
+    /**
+     * Delete temp artefacts left by writes that never reached their rename.
+     *
+     * A process killed between the write and the rename leaves a full-size file
+     * that nothing else touches: the temp path belongs to that one write, so no
+     * later `save()` reopens it; `list()` filters on `${FILE_EXT}` so it stays
+     * invisible; and `delete(slotId)` unlinks only the slot's own file. Without
+     * this sweep each crash mid-save costs one save file's worth of disk
+     * forever.
+     *
+     * Only artefacts older than {@link ORPHAN_TEMP_MAX_AGE_MS} are taken — see
+     * that constant for why the decision is age and not ownership. Below the
+     * base directory every filesystem call is best-effort: a name that is not a
+     * directory (`.DS_Store` sits beside the game directories on macOS), a
+     * directory that vanishes under the sweep, a file another reaper already
+     * took, an unlink the OS refuses — each is skipped and left out of the
+     * count, because the sweep's only job is to give back disk.
+     *
+     * Call it once per app start, from the composition root that builds the
+     * repository. It is deliberately NOT on `SaveRepository`: an in-memory
+     * repository has nothing to reap (invariant #41 covers observable contract
+     * behaviour, and this is neither).
+     *
+     * @returns how many artefacts were unlinked.
+     */
+    async reapOrphanTempFiles(): Promise<number> {
+        const gameDirs = await fs.readdir(this.baseDir).catch((err: unknown): string[] => {
+            if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+            throw err;
+        });
+
+        // One cutoff for the whole sweep: a directory read late in the pass must
+        // not use a later "now" than one read early, or the window would widen
+        // as the sweep runs.
+        const cutoff = Date.now() - ORPHAN_TEMP_MAX_AGE_MS;
+        let reaped = 0;
+
+        for (const gameDir of gameDirs) {
+            const dir = path.join(this.baseDir, gameDir);
+            // Reading a plain file as a directory throws ENOTDIR; the same catch
+            // covers a directory removed between the two reads.
+            const names = await fs.readdir(dir).catch((): string[] => []);
+
+            for (const name of names) {
+                if (!TEMP_FILE_RE.test(name)) continue;
+
+                const filePath = path.join(dir, name);
+                const stat = await fs.stat(filePath).catch(() => undefined);
+                if (stat === undefined || stat.mtimeMs > cutoff) continue;
+
+                const unlinked = await fs
+                    .unlink(filePath)
+                    .then(() => true)
+                    .catch(() => false);
+                if (unlinked) reaped += 1;
+            }
+        }
+
+        return reaped;
     }
 
     async has(slotId: string): Promise<boolean> {

@@ -1619,15 +1619,41 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // `registerCrashReporter` above, and reading this very `saveManager`) is:
     // nothing can write a save before `main()` has finished wiring. Should that
     // ever stop being true, the manager reports the failure and keeps the save.
+    const saveRepository = new FileSaveRepository(
+        new JsonSaveSerializer(),
+        createDefaultMigrator(),
+        path.join(userData, 'saves'),
+    );
     const saveManager = new SaveManager(
-        new FileSaveRepository(
-            new JsonSaveSerializer(),
-            createDefaultMigrator(),
-            path.join(userData, 'saves'),
-        ),
+        saveRepository,
         logger.child({ module: 'saves' }),
         refreshAndBroadcastSaveSlots,
     );
+
+    // One reap per app start. A save's temp path belongs to that one write, so
+    // a process killed between the write and the rename leaves a full-size file
+    // no later write reopens, `list()` cannot show, and `delete()` cannot
+    // remove — one save file of disk lost per crash, forever, without this.
+    //
+    // Not awaited: it is a directory sweep over `userData/saves`, and nothing
+    // downstream depends on its result, so making startup wait on the disk buys
+    // nothing. It may overlap this process's own writes: the sweep takes only
+    // artefacts older than `ORPHAN_TEMP_MAX_AGE_MS`, which is also what stands
+    // between it and a SECOND instance's in-flight write — see that constant
+    // for what the threshold does and does not settle.
+    void saveRepository
+        .reapOrphanTempFiles()
+        .then((reaped) => {
+            if (reaped > 0) {
+                logger.info('reaped orphaned save temp files', { module: 'saves', reaped });
+            }
+        })
+        .catch((err: unknown) => {
+            logger.warn('failed to reap orphaned save temp files', {
+                module: 'saves',
+                error: err instanceof Error ? err.message : String(err),
+            });
+        });
 
     // ReplayManager owns live-match recording and replay persistence (§4.28).
     // Concrete repository/serializer/migrator are chosen here at the DIP

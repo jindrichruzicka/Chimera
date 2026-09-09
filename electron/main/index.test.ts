@@ -3,6 +3,8 @@ import type * as nodeFs from 'node:fs';
 import type * as AiEngine from '@chimera-engine/ai/engine';
 
 import path from 'node:path';
+import fsPromises from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type {
     LocalProfileId,
@@ -2531,6 +2533,47 @@ describe('main', () => {
         await main(makeTestContributions());
 
         expect(capturedSaveManagerRepoClassName.value).toBe('FileSaveRepository');
+    });
+
+    it('running main() reaps an abandoned save temp file under its own userData', async () => {
+        // The wiring guard next door parses `index.ts` and can only see that a
+        // call is WRITTEN. Reachability is a different question: a reap moved
+        // behind a condition, or into a callback nothing invokes, still parses.
+        // So drive the real `main()` against a real directory and require the
+        // artefact to actually be gone. `SaveManager` is mocked here, but
+        // `FileSaveRepository` is not — the sweep runs for real.
+        //
+        // Its own `userData`, not the shared fake path: every other `main()` in
+        // this file sweeps that one, and a planted file has to belong to the
+        // test that plants it.
+        const userData = await fsPromises.mkdtemp(path.join(tmpdir(), 'chimera-main-reap-test-'));
+        appGetPath.mockImplementation(() => userData);
+
+        const abandoned = path.join(userData, 'saves', 'tactics', 'autosave.chimera.1.tmp');
+        await fsPromises.mkdir(path.dirname(abandoned), { recursive: true });
+        await fsPromises.writeFile(abandoned, 'bytes a crash left behind');
+        // Older than the sweep's window, which is what makes it abandoned
+        // rather than in flight.
+        const aged = (Date.now() - 6 * 60 * 60 * 1000) / 1000;
+        await fsPromises.utimes(abandoned, aged, aged);
+
+        try {
+            await main(makeTestContributions());
+
+            // The reap is deliberately not awaited by `main()`, so wait for the
+            // effect rather than for a tick count. Polling for a file's ABSENCE
+            // cannot miss a transient value: nothing puts it back.
+            await expect
+                .poll(() =>
+                    fsPromises
+                        .access(abandoned)
+                        .then(() => true)
+                        .catch(() => false),
+                )
+                .toBe(false);
+        } finally {
+            await fsPromises.rm(userData, { recursive: true, force: true });
+        }
     });
 
     it('routes the injected contributions through the scene wiring', async () => {
