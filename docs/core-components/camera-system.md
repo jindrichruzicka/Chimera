@@ -435,14 +435,18 @@ What the separation is worth at the type level is **bounded**, and it is worth k
 
 ### Where a named-mode mapping table may live
 
-Nothing the always-mounted shell layout chunk reaches through a static **value** edge may name `three` — measured by `renderer/__tests__/shell-layout-graph-census.test.ts`, not asserted. A named-mode prop needs an engine-name → `three`-constant table, and a module-scope table in a module that graph reaches will red the census with the file named.
+Nothing the always-mounted shell layout chunk reaches through a static **value** edge may name `three` — measured by `renderer/__tests__/shell-layout-graph-census.test.ts`, not asserted. A module-scope table in a module that graph reaches will red the census with the file named. Which knobs need such a table at all is recorded on the tables themselves in `rendererConfig.ts`.
 
 Two compliant shapes, and the next feature adding such a prop should pick one rather than rediscovering the constraint by failing CI:
 
 - **Off the graph entirely.** `rendererConfig.ts` is reached only from `GameCanvas`, which already imports `three` at module scope for its camera constructors, so neither is on the layout graph. This is where the tone-mapping and colour-space tables live.
 - **Behind a dynamic edge.** `renderer/assets/AssetManager.ts` reaches `TextureLoader` through `await import('three')` for exactly this reason.
 
-A `type`-only import of `three` is not a value edge and is always fine — the census wording is specific about this, so lean on it rather than avoiding `three` types.
+A `type`-only import of `three` is not a value edge, so lean on it rather than avoiding `three` types or reaching for a cast. That holds under this repo's `verbatimModuleSyntax: false`; `shellLayoutGraphCensus.ts`'s header is where the dependence is written out.
+
+That the census still BITES is itself measured, by a guard separate from it: `renderer/__tests__/named-mode-mapping-table-placement.test.ts` runs the real walk from each app's real layout with one real module's source overlaid by that same source plus a `three` import, and asserts the census reports it **by that module's name**. It also pins that the same module unmutated reports nothing, so the report is caused by the mutation rather than by something already there, and that a `type`-only import is not reported. A census whose predicate silently stopped matching would otherwise go on passing, and a rule nothing can fail is a convention rather than a constraint.
+
+The guard mutates a FILE SYSTEM, never the tree, so it needs no manual step and leaves nothing to restore. That is what makes it a standing check rather than a one-off measurement recorded in a comment.
 
 ---
 
