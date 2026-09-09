@@ -104,7 +104,11 @@ const ENGINE_DEFAULT_SETTINGS_DEFINITION: GameSettingsPageDefinition = {
                 {
                     id: 'display',
                     label: SETTINGS_KEYS.tabDisplay,
-                    items: [{ kind: 'engine-field', fieldId: 'display.targetFps' }],
+                    items: [
+                        { kind: 'engine-field', fieldId: 'display.targetFps' },
+                        { kind: 'engine-field', fieldId: 'display.shadowQuality' },
+                        { kind: 'engine-field', fieldId: 'display.renderScale' },
+                    ],
                 },
             ],
         },
@@ -149,6 +153,23 @@ const TARGET_FPS_OPTIONS = [
     { value: '0', label: SETTINGS_KEYS.fpsUncapped },
 ] as const;
 
+// The stored VALUE is an engine-owned tier name, not a `three` shadow-map
+// type: Invariant #1 keeps every `three` symbol out of `simulation/`, and the
+// tier becomes a constant on the renderer side alone.
+const SHADOW_QUALITY_OPTIONS = [
+    { value: 'off', label: SETTINGS_KEYS.shadowsOff },
+    { value: 'low', label: SETTINGS_KEYS.shadowsLow },
+    { value: 'medium', label: SETTINGS_KEYS.shadowsMedium },
+    { value: 'high', label: SETTINGS_KEYS.shadowsHigh },
+] as const;
+
+// A fraction of the display's own pixel ratio, so `1` is native.
+const RENDER_SCALE_OPTIONS = [
+    { value: '0.5', label: SETTINGS_KEYS.renderScaleHalf },
+    { value: '0.75', label: SETTINGS_KEYS.renderScaleThreeQuarters },
+    { value: '1', label: SETTINGS_KEYS.renderScaleNative },
+] as const;
+
 // `label` holds an engine translation TOKEN and `formatKind` names a value
 // formatter — both resolved through `t()` at render; the descriptor carries no
 // English.
@@ -182,6 +203,20 @@ const ENGINE_FIELD_DEFINITIONS: Record<EngineSettingsFieldId, EngineFieldDefinit
         defaultValue: 60,
         label: SETTINGS_KEYS.targetFps,
         parseValue: parseIntegerValue,
+    },
+    'display.shadowQuality': {
+        control: { type: 'select', options: SHADOW_QUALITY_OPTIONS },
+        defaultValue: 'off',
+        label: SETTINGS_KEYS.shadowQuality,
+    },
+    'display.renderScale': {
+        // A <Select> hands back a string, and the stored value is a number —
+        // 0.5 and 0.75 are not integers, so this needs a fractional parse
+        // rather than targetFps's parseIntegerValue.
+        control: { type: 'select', options: RENDER_SCALE_OPTIONS },
+        defaultValue: 1,
+        label: SETTINGS_KEYS.renderScale,
+        parseValue: parseNumericValue,
     },
     // The language field is not rendered from this descriptor — renderSettingsItem
     // special-cases 'gameplay.language' to <SettingsLanguageSelector>, which sources
@@ -1048,6 +1083,15 @@ function formatBinding(t: TranslateFn, binding: KeyBinding | undefined): string 
 
 function parseIntegerValue(value: SettingPrimitive): number {
     return parseInt(String(value), 10);
+}
+
+/**
+ * The fractional twin of {@link parseIntegerValue}. `display.renderScale`
+ * stores 0.5 and 0.75, which `parseInt` would truncate to 0 — a value the
+ * schema rejects, so the override would be refused rather than stored.
+ */
+function parseNumericValue(value: SettingPrimitive): number {
+    return Number(value);
 }
 
 function coerceNumber(value: unknown, fallback: number): number {

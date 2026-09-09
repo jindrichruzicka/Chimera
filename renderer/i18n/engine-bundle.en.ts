@@ -49,6 +49,8 @@ export const engineBundleEn: TranslationBundle = {
     'engine.settings.musicVolume': 'Music Volume',
     'engine.settings.muted': 'Muted',
     'engine.settings.targetFps': 'Target FPS',
+    'engine.settings.shadowQuality': 'Shadow Quality',
+    'engine.settings.renderScale': 'Render Scale',
     'engine.settings.language': 'Language',
     'engine.settings.autoSave': 'Auto Save',
     'engine.settings.autoSaveInterval': 'Auto Save Interval',
@@ -59,6 +61,13 @@ export const engineBundleEn: TranslationBundle = {
     'engine.settings.fps60': '60 FPS',
     'engine.settings.fps120': '120 FPS',
     'engine.settings.fpsUncapped': 'Uncapped',
+    'engine.settings.shadowsOff': 'Off',
+    'engine.settings.shadowsLow': 'Low',
+    'engine.settings.shadowsMedium': 'Medium',
+    'engine.settings.shadowsHigh': 'High',
+    'engine.settings.renderScaleHalf': '50%',
+    'engine.settings.renderScaleThreeQuarters': '75%',
+    'engine.settings.renderScaleNative': '100% (Native)',
     // Language endonyms: accents corrected vs. the ASCII source labels
     // ('Espanol'/'Francais') as a deliberate text fix in this task.
     'engine.settings.langEnUs': 'English (US)',

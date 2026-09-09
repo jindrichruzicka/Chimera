@@ -1674,6 +1674,8 @@ describe('registerSettingsHandlers — with real SettingsManager', () => {
             }),
             display: z.object({
                 targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
+                shadowQuality: z.enum(['off', 'low', 'medium', 'high']),
+                renderScale: z.literal(0.5).or(z.literal(0.75)).or(z.literal(1)),
             }),
             gameplay: z.object({
                 language: z.string(),
@@ -1726,6 +1728,8 @@ describe('registerSettingsHandlers — with real SettingsManager', () => {
             }),
             display: z.object({
                 targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
+                shadowQuality: z.enum(['off', 'low', 'medium', 'high']),
+                renderScale: z.literal(0.5).or(z.literal(0.75)).or(z.literal(1)),
             }),
             gameplay: z.object({
                 language: z.string(),
@@ -1778,6 +1782,8 @@ describe('registerSettingsHandlers — with real SettingsManager', () => {
             }),
             display: z.object({
                 targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
+                shadowQuality: z.enum(['off', 'low', 'medium', 'high']),
+                renderScale: z.literal(0.5).or(z.literal(0.75)).or(z.literal(1)),
             }),
             gameplay: z.object({
                 language: z.string(),
@@ -2250,6 +2256,8 @@ describe('registerSettingsHandlers — BLOCK-4 per-game patch validation at IPC 
             }),
             display: z.object({
                 targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
+                shadowQuality: z.enum(['off', 'low', 'medium', 'high']),
+                renderScale: z.literal(0.5).or(z.literal(0.75)).or(z.literal(1)),
             }),
             gameplay: z.object({
                 language: z.string(),
@@ -2309,6 +2317,8 @@ describe('registerSettingsHandlers — BLOCK-4 per-game patch validation at IPC 
             }),
             display: z.object({
                 targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
+                shadowQuality: z.enum(['off', 'low', 'medium', 'high']),
+                renderScale: z.literal(0.5).or(z.literal(0.75)).or(z.literal(1)),
             }),
             gameplay: z.object({
                 language: z.string(),

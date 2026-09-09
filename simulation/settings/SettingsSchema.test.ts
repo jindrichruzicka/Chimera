@@ -7,7 +7,13 @@
 
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import type { DeepPartial, EngineSettings, GameSettingsSchema } from './SettingsSchema.js';
+import type {
+    DeepPartial,
+    EngineSettings,
+    GameSettingsSchema,
+    UserSettings,
+} from './SettingsSchema.js';
+import { SettingsMerger } from './SettingsMerger.js';
 import {
     ENGINE_DEFAULTS,
     SettingsNamespaceCollisionError,
@@ -42,6 +48,8 @@ describe('engineSettingsZodShape (WARN-1)', () => {
             },
             display: {
                 targetFps: 60,
+                shadowQuality: 'off',
+                renderScale: 1,
             },
             gameplay: {
                 language: 'en-US',
@@ -111,7 +119,7 @@ describe('GameSettingsSchema<T>.schema field', () => {
             gameId: 'test-game',
             defaults: {
                 audio: { masterVolume: 1, sfxVolume: 1, musicVolume: 0.8, muted: false },
-                display: { targetFps: 60 },
+                display: { targetFps: 60, shadowQuality: 'off', renderScale: 1 },
                 gameplay: {
                     language: 'en-US',
                     autoSave: true,
@@ -156,5 +164,72 @@ describe('SettingsNamespaceCollisionError', () => {
     it('has name SettingsNamespaceCollisionError', () => {
         const err = new SettingsNamespaceCollisionError('display');
         expect(err.name).toBe('SettingsNamespaceCollisionError');
+    });
+});
+
+/**
+ * The three halves of a `display` field — the `EngineSettings` interface, the
+ * Zod shape and `ENGINE_DEFAULTS` — have to agree, and only ONE of them is
+ * self-checking. `engineSettingsZodShape` carries no type annotation, so a
+ * field added to the interface and the defaults but forgotten in the Zod shape
+ * compiles: `SettingsMerger.validatePatch` strips any key not in the shape, so
+ * the player's stored override is discarded on every load. A setting that
+ * appears to work and forgets itself.
+ *
+ * Tests written first (TDD — red confirmed: the round trip dropped
+ * `display.shadowQuality` and `display.renderScale` before the Zod half
+ * existed, and `ENGINE_DEFAULTS` did not carry them).
+ */
+describe('display quality settings survive a save/load round trip', () => {
+    const engineSchema = z.object(engineSettingsZodShape) as unknown as z.ZodType<EngineSettings>;
+
+    it.each([
+        { field: 'shadowQuality', stored: 'high' },
+        { field: 'renderScale', stored: 0.75 },
+    ])('keeps a stored display.$field override through validatePatch', ({ field, stored }) => {
+        const patch = { display: { [field]: stored } };
+
+        const validated = SettingsMerger.validatePatch(engineSchema, patch);
+
+        expect(validated).toEqual(patch);
+    });
+
+    it('merges a stored override over the engine default rather than beside it', () => {
+        const merged = SettingsMerger.mergeAll(ENGINE_DEFAULTS, {
+            display: { shadowQuality: 'medium', renderScale: 0.5 },
+        }) as EngineSettings;
+
+        expect(merged.display).toEqual({
+            targetFps: ENGINE_DEFAULTS.display.targetFps,
+            shadowQuality: 'medium',
+            renderScale: 0.5,
+        });
+    });
+
+    // TypeScript already refuses both literals, which is why they are cast
+    // here. The Zod half is the SECOND gate, and the one that matters: a
+    // settings file is on disk and hand-editable, so a value that never went
+    // through the typed page still has to be refused at load.
+    it('rejects a value outside the declared set rather than storing it', () => {
+        const outOfSet = (display: Record<string, unknown>): Partial<UserSettings> => ({
+            display,
+        });
+
+        expect(() =>
+            SettingsMerger.validatePatch(engineSchema, outOfSet({ shadowQuality: 'ultra' })),
+        ).toThrow();
+        expect(() =>
+            SettingsMerger.validatePatch(engineSchema, outOfSet({ renderScale: 4 })),
+        ).toThrow();
+    });
+
+    // The defaults reproduce today's rendering: shadow mapping was off before
+    // this setting existed, and 1 is the display's own pixel ratio.
+    it('defaults to shadows off at the display native scale', () => {
+        expect(ENGINE_DEFAULTS.display).toEqual({
+            targetFps: 60,
+            shadowQuality: 'off',
+            renderScale: 1,
+        });
     });
 });

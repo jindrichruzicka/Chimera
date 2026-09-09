@@ -249,7 +249,7 @@ curated.**
 
 `display.targetFps` already exists, is stored in `EngineSettings.display`, and
 already renders on the shell settings page
-(`renderer/app/settings/page.tsx:180`). Shadow quality and render scale are the
+(`renderer/app/settings/page.tsx`). Shadow quality and render scale are the
 same kind of knob and belong in the same namespace, so the settings UI, the
 persistence layer and the merge policy all come for free.
 

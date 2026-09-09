@@ -89,8 +89,17 @@ describe('tacticsSettingsPageDefinition', () => {
         expect(gameFieldsForTab('audio')).toEqual([]);
     });
 
+    // A game that supplies its own settings-page definition opts OUT of
+    // ENGINE_DEFAULT_SETTINGS_DEFINITION, so a new engine Display field does
+    // not arrive here on its own — it is silently absent, and nothing in the
+    // type system says so. This list is what makes that visible: an engine
+    // field added everywhere else and forgotten here reds exactly one line.
     it('defines display fields using the current EngineSettings field ids', () => {
-        expect(engineFieldsForTab('display')).toEqual(['display.targetFps']);
+        expect(engineFieldsForTab('display')).toEqual([
+            'display.targetFps',
+            'display.shadowQuality',
+            'display.renderScale',
+        ]);
         expect(gameFieldsForTab('display')).toEqual([]);
     });
 

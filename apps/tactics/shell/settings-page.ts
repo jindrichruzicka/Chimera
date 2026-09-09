@@ -44,7 +44,11 @@ export const tacticsSettingsPageDefinition: GameSettingsPageDefinition = {
                 {
                     id: 'display',
                     label: 'game.tactics.settings.tabDisplay',
-                    items: [{ kind: 'engine-field', fieldId: 'display.targetFps' }],
+                    items: [
+                        { kind: 'engine-field', fieldId: 'display.targetFps' },
+                        { kind: 'engine-field', fieldId: 'display.shadowQuality' },
+                        { kind: 'engine-field', fieldId: 'display.renderScale' },
+                    ],
                 },
             ],
         },

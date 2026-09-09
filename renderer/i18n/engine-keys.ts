@@ -64,6 +64,8 @@ export const SETTINGS_KEYS = {
     musicVolume: translationKey('engine.settings.musicVolume'),
     muted: translationKey('engine.settings.muted'),
     targetFps: translationKey('engine.settings.targetFps'),
+    shadowQuality: translationKey('engine.settings.shadowQuality'),
+    renderScale: translationKey('engine.settings.renderScale'),
     language: translationKey('engine.settings.language'),
     autoSave: translationKey('engine.settings.autoSave'),
     autoSaveInterval: translationKey('engine.settings.autoSaveInterval'),
@@ -75,6 +77,17 @@ export const SETTINGS_KEYS = {
     fps60: translationKey('engine.settings.fps60'),
     fps120: translationKey('engine.settings.fps120'),
     fpsUncapped: translationKey('engine.settings.fpsUncapped'),
+    // Shadow-quality tier labels. Engine-owned NAMES throughout: the tier is
+    // stored as a name and becomes a three shadow-map type on the renderer
+    // side alone (Invariant #1).
+    shadowsOff: translationKey('engine.settings.shadowsOff'),
+    shadowsLow: translationKey('engine.settings.shadowsLow'),
+    shadowsMedium: translationKey('engine.settings.shadowsMedium'),
+    shadowsHigh: translationKey('engine.settings.shadowsHigh'),
+    // Render-scale option labels, as a fraction of the display's own ratio.
+    renderScaleHalf: translationKey('engine.settings.renderScaleHalf'),
+    renderScaleThreeQuarters: translationKey('engine.settings.renderScaleThreeQuarters'),
+    renderScaleNative: translationKey('engine.settings.renderScaleNative'),
     // Language option display labels.
     langEnUs: translationKey('engine.settings.langEnUs'),
     langDeDe: translationKey('engine.settings.langDeDe'),

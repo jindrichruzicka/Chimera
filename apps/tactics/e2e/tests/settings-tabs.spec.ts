@@ -72,6 +72,10 @@ test.describe('Settings tabs', () => {
         const settingsPage = await openSettingsPage(mainWindow);
 
         await settingsPage.clickTab('Display');
+        // The ENGINE DEFAULT Display tab — this test takes the plain
+        // `mainWindow` fixture, which opens no game, so the four-tab set the
+        // test above pins is what renders here. The tactics-configured Display
+        // tab is a different surface and is asserted in the tactics test below.
         await expect(settingsPage.getControlByLabel('Target FPS')).toBeVisible();
 
         // Engine-reserved actions are not player-rebindable; with no game
@@ -96,6 +100,16 @@ test.describe('Settings tabs', () => {
                     timeout: 10_000,
                 });
             }
+
+            // The Display tab as TACTICS configures it. A game supplying its
+            // own settings-page definition opts out of
+            // ENGINE_DEFAULT_SETTINGS_DEFINITION, so an engine Display field
+            // added everywhere else does not arrive here — it is silently
+            // absent, and only a definition that names it renders a control.
+            await settingsPage.clickTab('Display');
+            await expect(settingsPage.getControlByLabel('Target FPS')).toBeVisible();
+            await expect(settingsPage.getControlByLabel('Shadow Quality')).toBeVisible();
+            await expect(settingsPage.getControlByLabel('Render Scale')).toBeVisible();
 
             await settingsPage.clickTab('Gameplay');
             await expect(settingsPage.getControlByLabel('Show Grid')).toBeVisible();

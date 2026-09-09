@@ -178,7 +178,7 @@ function makeSettings(
             muted: false,
             ...audioOverrides,
         },
-        display: { targetFps: 60 as const },
+        display: { targetFps: 60 as const, shadowQuality: 'off' as const, renderScale: 1 as const },
         gameplay: {
             language: 'en-US',
             autoSave: true,
@@ -281,6 +281,71 @@ describe('SettingsPage — tabbed definition rendering', () => {
         await renderSettingsPageAndOpenTab('Display');
 
         expect(screen.getByLabelText(/target fps/i)).toBeTruthy();
+        expect(screen.getByLabelText(/shadow quality/i)).toBeTruthy();
+        expect(screen.getByLabelText(/render scale/i)).toBeTruthy();
+    });
+
+    it('hydrates the shadow-quality tier from the store as a name, not a number', async () => {
+        const settings = makeSettings();
+        const displaySettings = (settings['display'] ?? {}) as Record<string, unknown>;
+        useSettingsStore.setState({
+            settings: {
+                [GAME_ID]: { ...settings, display: { ...displaySettings, shadowQuality: 'high' } },
+            },
+            activeGameId: GAME_ID,
+        });
+
+        await renderSettingsPageAndOpenTab('Display');
+
+        expect(screen.getByLabelText<HTMLSelectElement>(/shadow quality/i).value).toBe('high');
+    });
+
+    // The shadow tier's descriptor deliberately carries NO parseValue: the
+    // stored value is a name, and the row directly above it
+    // (display.targetFps) does carry parseIntegerValue — so adding one here is
+    // the likeliest slip on this code. Under parseIntegerValue the dispatched
+    // value would be parseInt('high', 10), i.e. NaN, which the schema rejects:
+    // the player's choice refused on every change. A hydration case reads
+    // coerceSelectValue and never touches parseValue, so only a DISPATCH
+    // assertion can see it.
+    it('dispatches the shadow-quality tier as the name it is', async () => {
+        await renderSettingsPageAndOpenTab('Display');
+
+        fireEvent.change(screen.getByLabelText(/shadow quality/i), {
+            target: { value: 'high' },
+        });
+
+        expect(mockUpdate).toHaveBeenCalledWith(GAME_ID, { display: { shadowQuality: 'high' } });
+    });
+
+    // The render scale is the one display field whose stored value is
+    // FRACTIONAL. `parseInt` would truncate 0.75 to 0, which the schema
+    // rejects — so the dispatched patch, not the rendered option, is what
+    // this has to read.
+    it('dispatches a fractional render scale rather than truncating it', async () => {
+        await renderSettingsPageAndOpenTab('Display');
+
+        fireEvent.change(screen.getByLabelText(/render scale/i), { target: { value: '0.75' } });
+
+        expect(mockUpdate).toHaveBeenCalledWith(GAME_ID, { display: { renderScale: 0.75 } });
+    });
+
+    // The stored value is a NUMBER and the option values are strings, so the
+    // fractional round trip through the option list is the half a whole-number
+    // field never exercises.
+    it('hydrates a fractional render scale from the store', async () => {
+        const settings = makeSettings();
+        const displaySettings = (settings['display'] ?? {}) as Record<string, unknown>;
+        useSettingsStore.setState({
+            settings: {
+                [GAME_ID]: { ...settings, display: { ...displaySettings, renderScale: 0.75 } },
+            },
+            activeGameId: GAME_ID,
+        });
+
+        await renderSettingsPageAndOpenTab('Display');
+
+        expect(screen.getByLabelText<HTMLSelectElement>(/render scale/i).value).toBe('0.75');
     });
 
     it('hydrates numeric select settings from the store', async () => {

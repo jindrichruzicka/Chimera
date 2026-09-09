@@ -42,6 +42,14 @@ interface EngineSettings {
         // fullscreen in packaged builds, so there is no
         // fullscreen/vsync/uiScale setting.
         targetFps: 30 | 60 | 120 | 0;
+        // Shadow-map quality tier; 'off' disables shadow mapping. The stored
+        // value is an engine-owned NAME, never a three constant (Invariant #1)
+        // — the tier becomes a shadow-map type on the renderer side alone.
+        // Never read by the simulation.
+        shadowQuality: 'off' | 'low' | 'medium' | 'high';
+        // Fraction of the display's own pixel ratio to render at; 1 = native.
+        // Below 1 trades sharpness for fill rate. Never read by the simulation.
+        renderScale: 0.5 | 0.75 | 1;
     };
     gameplay: {
         language: string; // BCP 47 locale

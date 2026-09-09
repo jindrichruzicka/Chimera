@@ -18,6 +18,16 @@ export interface EngineSettings {
          *  Applied by the renderer, never read by the simulation; see §4.13/§4.22
          *  for the mechanism. */
         readonly targetFps: 30 | 60 | 120 | 0;
+        /** Shadow-map quality tier; `'off'` disables shadow mapping.
+         *  An engine-owned NAME, never a `three` constant (Invariant #1): the
+         *  tier becomes a shadow-map type on the renderer side alone. Applied
+         *  by the renderer, never read by the simulation. */
+        readonly shadowQuality: 'off' | 'low' | 'medium' | 'high';
+        /** Fraction of the display's own pixel ratio to render at; `1` = native.
+         *  Below 1 trades sharpness for fill rate — the usual lever on an
+         *  integrated GPU. Applied by the renderer, never read by the
+         *  simulation. */
+        readonly renderScale: 0.5 | 0.75 | 1;
     };
     readonly gameplay: {
         readonly language: string; // BCP 47 locale tag, e.g. 'en-US'
@@ -55,7 +65,11 @@ export const ENGINE_DEFAULTS: EngineSettings = {
         muted: false,
     },
     display: {
+        // Shadows off and native scale: what the canvas rendered before either
+        // setting existed, so a player who never opens the page sees no change.
         targetFps: 60,
+        shadowQuality: 'off',
+        renderScale: 1,
     },
     gameplay: {
         language: 'en-US',
@@ -140,6 +154,8 @@ export const engineSettingsZodShape = {
     }),
     display: z.object({
         targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
+        shadowQuality: z.enum(['off', 'low', 'medium', 'high']),
+        renderScale: z.literal(0.5).or(z.literal(0.75)).or(z.literal(1)),
     }),
     gameplay: z.object({
         language: z.string(),

@@ -692,6 +692,8 @@ export type EngineSettingsFieldId =
     | 'audio.musicVolume'
     | 'audio.muted'
     | 'display.targetFps'
+    | 'display.shadowQuality'
+    | 'display.renderScale'
     | 'gameplay.language'
     | 'gameplay.autoSave'
     | 'gameplay.autoSaveIntervalTurns'
@@ -756,6 +758,8 @@ The engine field registry is exhaustive for the current `EngineSettings` interfa
 | `audio.musicVolume`              | Music Volume         | Slider      | `0.8`, formatted as a percentage                                                                                                                                                                                                                                                                                                                             |
 | `audio.muted`                    | Muted                | Toggle      | `false`                                                                                                                                                                                                                                                                                                                                                      |
 | `display.targetFps`              | Target FPS           | Select      | `60`; options `30`, `60`, `120`, `0` (uncapped). Applied by pacing the R3F loop, in two halves both wired by `GameCanvas` — the only canvas root a game mounts (Invariant #127), on every `role`: `frameloop={useEngineFrameloop()}` on the `<Canvas>` plus the `FrameRateLimiter` driver inside it. Both halves are engine wiring, not game surface (§4.22) |
+| `display.shadowQuality`          | Shadow Quality       | Select      | `off`; options `off`, `low`, `medium`, `high`. The stored value is an engine-owned NAME, never a `three` constant (Invariant #1) — the tier becomes a shadow-map type on the renderer side alone                                                                                                                                                             |
+| `display.renderScale`            | Render Scale         | Select      | `1`; options `0.5`, `0.75`, `1`, as a fraction of the display's own pixel ratio. Fractional, so the descriptor parses with `parseNumericValue` — `parseInt` would truncate `0.75` to `0`, a value the schema rejects                                                                                                                                         |
 | `gameplay.language`              | Language             | Select      | `en-US`; options are the game's declared `translations.languages` (endonyms); the row is hidden when the game declares fewer than two languages                                                                                                                                                                                                              |
 | `gameplay.autoSave`              | Auto Save            | Toggle      | `true`                                                                                                                                                                                                                                                                                                                                                       |
 | `gameplay.autoSaveIntervalTurns` | Auto Save Interval   | Slider      | `5`, range `1`-`100`, integer turns                                                                                                                                                                                                                                                                                                                          |
@@ -773,7 +777,7 @@ When no game settings definition is available, the renderer uses the engine defa
 | Tab      | Sections | Engine fields                                                                                                                                                             |
 | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Audio    | Audio    | `audio.masterVolume`, `audio.sfxVolume`, `audio.musicVolume`, `audio.muted`                                                                                               |
-| Display  | Display  | `display.targetFps`                                                                                                                                                       |
+| Display  | Display  | `display.targetFps`, `display.shadowQuality`, `display.renderScale`                                                                                                       |
 | Gameplay | Gameplay | `gameplay.language` (hidden for single-language games — so the default Gameplay tab is empty until a game declares ≥2 languages or contributes its own gameplay settings) |
 | Controls | Controls | `controls.bindings`                                                                                                                                                       |
 

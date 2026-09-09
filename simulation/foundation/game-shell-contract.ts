@@ -302,6 +302,8 @@ export type EngineSettingsFieldId =
     | 'audio.musicVolume'
     | 'audio.muted'
     | 'display.targetFps'
+    | 'display.shadowQuality'
+    | 'display.renderScale'
     | 'gameplay.language'
     | 'gameplay.autoSave'
     | 'gameplay.autoSaveIntervalTurns'
