@@ -255,6 +255,33 @@ describe('bootstrapGameStore()', () => {
         expect(store.getState().snapshot).toBe(newerLiveSnapshot);
     });
 
+    it('keeps the live snapshot when the catch-up lands on the SAME tick', async () => {
+        // The boundary of the newest-wins guard: it is strict, so a catch-up on
+        // the tick already applied does not replace it. The two snapshots are
+        // structurally equal, so only identity says which one the store holds.
+        let captured: SnapshotListener | undefined;
+        let resolveCurrentSnapshot: (snapshot: PlayerSnapshot | null) => void = () => undefined;
+        const currentSnapshotPromise = new Promise<PlayerSnapshot | null>((resolve) => {
+            resolveCurrentSnapshot = resolve;
+        });
+        const { api } = makeApi({ captureSnapshotListener: (cb) => (captured = cb) });
+        (api.getCurrentSnapshot as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+            currentSnapshotPromise,
+        );
+        const store = createGameStore();
+        const liveSnapshot = makeSnapshot(10);
+        const catchUpSnapshot = makeSnapshot(10);
+        expect(catchUpSnapshot).toEqual(liveSnapshot);
+        expect(catchUpSnapshot).not.toBe(liveSnapshot);
+
+        const bootstrapPromise = bootstrapGameStore(api, store.getState());
+        captured!(liveSnapshot);
+        resolveCurrentSnapshot(catchUpSnapshot);
+        await bootstrapPromise;
+
+        expect(store.getState().snapshot).toBe(liveSnapshot);
+    });
+
     it('HOLDS an arrival until the frame runs — the bootstrap builds a paced scheduler', async () => {
         // The scheduler `bootstrapGameStore` constructs, pinned at the only
         // moment the two arms differ: the instant of arrival. Every other case
