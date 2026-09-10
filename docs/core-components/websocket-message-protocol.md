@@ -65,7 +65,7 @@ type ClientMessage =
       };
 
 // Server → Client
-// SNAPSHOT and DELTA carry PlayerSnapshot — GameSnapshot NEVER leaves the host
+// GameSnapshot NEVER leaves the host
 type ServerMessage =
     | {
           type: 'WELCOME';

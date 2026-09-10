@@ -4,15 +4,15 @@
  * Projection fan-out component.  Sits between the ActionPipeline broadcast
  * stage and the HostTransport.  When broadcastWave(snapshot, viewerId) is
  * called (Stage 7 of ActionPipeline.process()), StateBroadcaster projects the
- * full host snapshot and delegates only the resulting PlayerSnapshot to
- * transport.sendSnapshot(viewerId, snapshot), then fans that wave out to any
+ * full host snapshot for the viewer — sendProjection() decides what of that
+ * projection goes to the transport — then fans that wave out to any
  * spectators. Point-sends to a single viewer use broadcast(), which never
  * touches spectator traffic.
  *
  * Architecture: §4.6, §4.14 — StateProjector / StateBroadcaster
  *
  * Invariants upheld:
- *   #3  — Sends only PlayerSnapshot through HostTransport.
+ *   #3  — Never hands GameSnapshot to HostTransport.
  *   #8  — StateProjector.project() is the mandatory outbound snapshot gate;
  *          StateBroadcaster never reads GameSnapshot fields directly.
  *   #47 — Zero imports from networking/provider/local/, ws, or DOM APIs.

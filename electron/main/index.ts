@@ -3963,8 +3963,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // Playback session (§4.28): loads a replay and serves projected
     // per-viewer PlayerSnapshots tick-by-tick to the renderer's replay player.
     // Reuses the shared `gameRegistry` (live ActionPipeline wiring, invariant
-    // #70) and projects via each game's visibility rules; only a PlayerSnapshot
-    // crosses IPC (invariant #3).
+    // #70) and projects via each game's visibility rules.
     const replayPlaybackManager = new ReplayPlaybackManager(
         gameRegistry,
         createVisibilityRulesResolver(visibilityRulesByGameId),

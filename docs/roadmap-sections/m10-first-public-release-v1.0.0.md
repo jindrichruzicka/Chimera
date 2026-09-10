@@ -108,10 +108,7 @@ follow-up.
 Lets a peer **watch a running match** it did not join, fixing the previously
 broken join-in-progress path (a mid-match join used to fabricate a phantom seat).
 A **spectator** is a read-only session viewer: it is never a participant — never
-in `GameSnapshot.players`, the host's seat ledger, saves, or replays — and
-everything it sees crosses the wire as an already-projected `PlayerSnapshot`
-through the single `StateProjector.project()` gate (Invariants #3 / #8 / #98), so
-spectating leaks nothing a seated viewer could not already see.
+in `GameSnapshot.players`, the host's seat ledger, saves, or replays.
 
 Spectating is **opt-in per game and off per match**, reusing the established
 **manifest-declaration → registry-forward → host-toggle** shape: a game declares

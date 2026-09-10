@@ -6,8 +6,7 @@
  * Exercises the production host fan-out path end-to-end with FOUR clients over
  * a 1 000-tick run, wiring the real ActionPipeline (via buildHostSessionPipeline)
  * → DefaultStateProjector → StateBroadcaster → InMemoryMultiplayerProvider. The
- * authoritative GameSnapshot never leaves this process; only the per-viewer
- * PlayerSnapshot reaches each client (Invariants #3 / #8).
+ * authoritative GameSnapshot never leaves this process (Invariants #3 / #8).
  *
  * Covers F48 bullet 1 — "1 000-tick, 4-client soak with checksum convergence at
  * every step" — through two assertions:

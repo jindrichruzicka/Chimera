@@ -24,7 +24,7 @@ tags: [simulation, determinism, reducer, GameSnapshot, FixedPoint, rng, coding-s
 
 ## 7.3 `GameSnapshot` invariants
 
-- `GameSnapshot` must never cross process or network boundaries. Only `PlayerSnapshot` (a projected, filtered view) is transmitted.
+- `GameSnapshot` must never cross process or network boundaries.
 - No DOM imports, Three.js imports, or Node.js platform APIs inside `simulation/` or `ai/engine/`.
 
 ## 7.4 Fixed-point arithmetic

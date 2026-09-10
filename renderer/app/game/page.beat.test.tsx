@@ -12,7 +12,6 @@
 // Architecture reference: §4.4 — Renderer State Stores
 //
 // Invariants upheld:
-//   #3  — Only PlayerSnapshot enters the store.
 //   #4  — Dispatch still goes through the page's `sendAction` wrapper; this
 //          file pins its IDENTITY, never a new write path.
 

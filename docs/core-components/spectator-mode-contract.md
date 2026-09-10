@@ -19,8 +19,7 @@ tags:
 > A **spectator** is a read-only session viewer: it watches a running match from
 > a seated player's perspective without ever joining the match. It is never a
 > participant — not in `GameSnapshot.players`, the host's seat ledger, saves, or
-> replays — and everything it sees crosses the wire as an already-projected
-> `PlayerSnapshot` (Invariants #3 / #8). Spectating is **opt-in per game** and
+> replays. Spectating is **opt-in per game** and
 > **off by default per match**. Ratifies **Invariant #114** (read-only viewers)
 > and **Invariant #115** (out-of-band perspective switch).
 >

@@ -27,4 +27,4 @@ tags: [networking, MultiplayerProvider, WebSocket, Zod, CRC32, StateBroadcaster,
 
 ## 9.3 Snapshot distribution
 
-- `StateBroadcaster` calls `StateProjector.project()` per player before sending. Each client receives only its own `PlayerSnapshot`.
+- `StateBroadcaster` calls `StateProjector.project()` per player before sending.

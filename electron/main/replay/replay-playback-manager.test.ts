@@ -178,7 +178,6 @@ describe('ReplayPlaybackManager', () => {
             const snaps = manager.snapshotRange(0, 3);
 
             expect(snaps.map((s) => s.tick)).toEqual([0, 1, 2, 3]);
-            // Invariant #3: still only projected PlayerSnapshots cross the boundary.
             expect(snaps.every((s) => !('seed' in s))).toBe(true);
         });
 

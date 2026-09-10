@@ -16,7 +16,7 @@
  *
  * Architecture: §4.6 (StateProjector), §8 (Cryptographic Commitment)
  * Invariants verified:
- *   #3  — Only PlayerSnapshot crosses boundaries; GameSnapshot stays in main
+ *   #3  — GameSnapshot stays in main
  *   #8  — StateProjector.project() is the mandatory gate for outbound snapshots
  *   #9  — CommitmentScheme.verify() is called client-side before trusting a REVEAL
  *

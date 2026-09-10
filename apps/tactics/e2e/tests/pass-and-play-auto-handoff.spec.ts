@@ -7,8 +7,7 @@
  * handoff click.
  *
  * Invariants covered:
- *   #3 — GameSnapshot never leaves the host's main process; PlayerSnapshot is
- *        the only cross-boundary state type.
+ *   #3 — GameSnapshot never leaves the host's main process.
  *   #4 — PlayerSnapshot.isMyTurn drives turn ownership at the renderer edge;
  *        the renderer reads state, never writes it.
  *   #8 — Each host-window view is a StateProjector.project() output for the

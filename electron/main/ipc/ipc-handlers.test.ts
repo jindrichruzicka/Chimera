@@ -3406,7 +3406,7 @@ describe('registerReplayHandlers', () => {
             const result = handler?.({}, { from: 2, to: 4 }) as PlayerSnapshot[];
 
             expect(result.map((s) => s.tick)).toEqual([2, 3, 4]);
-            // Invariant #3: every element is a PlayerSnapshot — no raw `seed`.
+            // Invariant #3: every element is a PlayerSnapshot — no raw GameSnapshot `seed`.
             expect(result.every((s) => !('seed' in s))).toBe(true);
             expect(snapshotRange).toHaveBeenCalledWith(2, 4);
         });
@@ -3902,7 +3902,7 @@ describe('registerPerspectiveReplayHandlers', () => {
             const result = handler?.({}, { from: 2, to: 4 }) as PlayerSnapshot[];
 
             expect(result.map((s) => s.tick)).toEqual([2, 3, 4]);
-            // Invariant #3: every element is a PlayerSnapshot — no raw `seed`.
+            // Invariant #3: every element is a PlayerSnapshot — no raw GameSnapshot `seed`.
             expect(result.every((s) => !('seed' in s))).toBe(true);
             expect(snapshotRange).toHaveBeenCalledWith(2, 4);
         });

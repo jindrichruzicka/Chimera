@@ -155,7 +155,6 @@ export type GameResolution =
  * Full authoritative game state.
  *
  * INVARIANT #3: GameSnapshot NEVER leaves the main process.
- * Only `PlayerSnapshot` (produced by StateProjector) crosses any boundary.
  *
  * All arithmetic fields are integers (invariant #44). Floats are reserved
  * for the renderer (camera, animation). `seed` is the base RNG seed; the

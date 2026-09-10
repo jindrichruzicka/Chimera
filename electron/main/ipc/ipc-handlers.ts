@@ -1248,8 +1248,9 @@ export function registerReplayHandlers(options: RegisterReplayHandlersOptions): 
             REPLAY_SNAPSHOT_RANGE_CHANNEL,
             range,
         );
-        // Invariant #3: every element is a projected PlayerSnapshot. The schema
-        // caps the span (MAX_SNAPSHOT_RANGE) so the projection loop is bounded.
+        // Invariant #3: every element is a projected PlayerSnapshot, never a
+        // GameSnapshot. The schema caps the span (MAX_SNAPSHOT_RANGE) so the
+        // projection loop is bounded.
         return playback.snapshotRange(from, to);
     });
 

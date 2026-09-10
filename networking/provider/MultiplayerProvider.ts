@@ -10,8 +10,7 @@
  * Architecture: §4.14 — Pluggable Multiplayer Provider
  *
  * Invariants upheld:
- *   #3 — GameSnapshot never leaves main process; only PlayerSnapshot crosses
- *        wire boundaries through HostTransport.sendSnapshot / onSnapshotReceived.
+ *   #3 — GameSnapshot never leaves main process.
  *   Package boundary — networking/provider/ has zero imports from renderer/ or
  *        electron/. PlayerId and EngineAction are sourced from simulation/.
  *   networking boundary — networking/provider/local/ must not be imported from
@@ -353,11 +352,10 @@ export interface HostTransport {
      * whatever happened, and a provider with a channel back to the host may also
      * ask for one.
      *
-     * Invariants #3/#8: a `PlayerSnapshot` is the only state that crosses this
-     * boundary and `StateProjector.project()` is the gate it crosses through.
-     * The delta is computed from two projections, per viewer, downstream of that
-     * gate — never from a `GameSnapshot` — so it can carry no field the
-     * corresponding {@link sendSnapshot} could not have carried.
+     * Invariants #3/#8: the delta is computed from two projections, per viewer,
+     * downstream of `StateProjector.project()` — never from a `GameSnapshot` —
+     * so it can carry no field the corresponding {@link sendSnapshot} could not
+     * have carried.
      */
     sendSnapshotDelta(playerId: PlayerId, delta: SnapshotDelta): void;
     /** Push an authoritative tick-only clock update to one connected client. */

@@ -11,7 +11,7 @@
  *  - Components subscribe through narrow typed selectors only.
  *  - Do NOT call `applySnapshot` or `applyTick` from components.
  *  - `GameSnapshot` never enters this store; only `PlayerSnapshot` does
- *    (Invariant #1, #3).
+ *    (Invariant #3).
  */
 
 import { createStore, useStore } from 'zustand';

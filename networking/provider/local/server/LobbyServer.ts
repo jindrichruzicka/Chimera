@@ -18,8 +18,7 @@
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
  *
  * Invariants upheld:
- *   #3  — Only PlayerSnapshot crosses wire boundaries; LobbyServer never
- *         serialises GameSnapshot
+ *   #3  — LobbyServer never serialises GameSnapshot
  *   Package boundary — zero imports from renderer/, electron/, or DOM APIs
  *   networking boundary — LobbyServer is internal to networking/provider/local/
  */

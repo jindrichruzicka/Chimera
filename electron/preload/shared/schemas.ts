@@ -406,7 +406,7 @@ export const ReplaySavedPathSchema: z.ZodType<string> = z.string().min(1);
  *
  * The per-tick `PlayerSnapshot` returned by `chimera:replay:snapshot-at` is not
  * schema-validated here: it is projected host-side and handled exactly like
- * `chimera:game:get-current-snapshot` (a trusted cast — invariant #3 guarantees
+ * `chimera:game:get-current-snapshot` (a trusted cast — invariant #95 guarantees
  * only a `PlayerSnapshot` can reach that channel).
  */
 export const ReplayPlaybackInfoSchema = z.object({

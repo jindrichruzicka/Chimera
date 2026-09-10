@@ -44,8 +44,7 @@ import type { ObservedEntityState, ObservedPlayerState, VisibilityRules } from '
 /**
  * Per-viewer safe snapshot produced by `StateProjector.project()`.
  *
- * This is the only state type that crosses any process or network boundary
- * (Invariant #3). It is structurally distinct from `BaseGameSnapshot`:
+ * It is structurally distinct from `BaseGameSnapshot`:
  * - Fog-hidden entities are absent (never null).
  * - Player states are masked for non-owners.
  * - Events are filtered to the viewer.

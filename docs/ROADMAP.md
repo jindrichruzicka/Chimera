@@ -52,7 +52,7 @@ F22–F25. AI plays a full headless match; honest-AI fog-of-war projection verif
 
 ### [M5 — State Projection & Obfuscation (v0.5.0)](roadmap-sections/m5-state-projection-obfuscation-v0.5.0.md)
 
-F26–F29. Every client receives only its authoritative `PlayerSnapshot`; fog of war and commitment scheme verified. Covers: StateProjector/VisibilityRules, Cryptographic Commitment Scheme (SHA-256), Host Renderer Obfuscation, Projection Property Tests.
+F26–F29. Fog of war and commitment scheme verified. Covers: StateProjector/VisibilityRules, Cryptographic Commitment Scheme (SHA-256), Host Renderer Obfuscation, Projection Property Tests.
 
 ### [M6 — End-to-End Testing Layer (v0.6.0)](roadmap-sections/m6-e2e-testing-v0.6.0.md)
 

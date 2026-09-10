@@ -10,7 +10,7 @@
  * Task: F11-T02
  *
  * Invariants covered:
- *   #3  — StateBroadcaster sends only PlayerSnapshot to HostTransport.
+ *   #3  — HostTransport.sendSnapshot receives the projection, never the host snapshot.
  *   #8  — StateProjector.project() is the mandatory outbound snapshot gate.
  *   #67 — Constructed with injected Logger child; no console.* calls.
  */

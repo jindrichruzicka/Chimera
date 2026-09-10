@@ -11,7 +11,7 @@
  *
  * Architecture: §4.6 (StateProjector / VisibilityRules), §4.14 (StateBroadcaster)
  * Invariants verified:
- *   #3  — Only PlayerSnapshot crosses IPC boundary; GameSnapshot stays host-local
+ *   #3  — GameSnapshot stays host-local
  *   #8  — StateProjector.project() is the mandatory gate for outbound snapshots
  *   #67 — Logger and mocks only; no assertion on exact log calls
  *

@@ -805,8 +805,8 @@ export interface PerspectiveReplayAPI
     /**
      * Fetch the stored {@link PlayerSnapshot} at `tick` (floor lookup) from the
      * open perspective playback session. Frames are served verbatim — already
-     * projected for the locked viewer, never re-simulated (invariant #98); only
-     * a `PlayerSnapshot` crosses IPC (invariant #3). Rejects when no playback is open.
+     * projected for the locked viewer, never re-simulated (invariant #98).
+     * Rejects when no playback is open.
      */
     snapshotAt(tick: number): Promise<PlayerSnapshot>;
     /**

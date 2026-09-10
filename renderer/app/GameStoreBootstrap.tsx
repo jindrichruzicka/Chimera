@@ -24,7 +24,7 @@
  * Architecture reference: §4.4 — Renderer State Stores
  *
  * Invariants upheld:
- *   #3  — Only PlayerSnapshot (never GameSnapshot) crosses the IPC boundary.
+ *   #3  — GameSnapshot never crosses the IPC boundary.
  *   #4  — The renderer reads state and never writes it directly: components
  *          never call the store's `apply*` methods.
  */
@@ -123,7 +123,7 @@ export function GameStoreBootstrap(): null {
     // following client — both receive the broadcast lobby snapshot), drop
     // the stale match snapshot and return to /lobby. Reset first so the
     // /lobby → /game effect above does not immediately bounce back to /game on
-    // /lobby. Invariant #1: only PlayerSnapshot.phase drives this decision.
+    // /lobby.
     //
     // The replay player route is included alongside /game: a post-game replay is
     // opened from the live match's summary while the session is still alive, so a

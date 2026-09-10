@@ -11,7 +11,7 @@
  * be LARGER than the snapshot it replaces. The receiver already holds the
  * baseline; `before` is redundant there by construction.
  *
- * Invariant #3 / #8: nothing here reads authoritative state, and nothing here
+ * Invariant #3 / #8: nothing here reads a `GameSnapshot`, and nothing here
  * projects. A delta carries exactly what the two snapshots given to
  * `diffSnapshots` carried, so diffing two projections of one viewer can
  * surface no field a full projection would not have surfaced.

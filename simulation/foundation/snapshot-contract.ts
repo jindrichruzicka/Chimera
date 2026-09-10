@@ -2,8 +2,7 @@
  * simulation/foundation/snapshot-contract.ts
  *
  * Foundation contract types for the two projected-snapshot shapes that cross
- * boundaries (Invariant #1 — only a projected snapshot ever leaves the host;
- * `GameSnapshot` never does).
+ * boundaries (Invariant #3 — `GameSnapshot` never leaves the host).
  *
  * Both shapes live in `@chimera-engine/simulation/foundation` — the zero-dependency foundation leaf —
  * so the foundation can describe the wire protocol (`simulation/foundation/messages.ts`) and
@@ -54,7 +53,7 @@ export interface GameEvent {
  * Projected game state for the active viewer.
  * Canonical: simulation/snapshot.ts.
  *
- * Invariant #3: GameSnapshot never crosses any IPC boundary. Only PlayerSnapshot does.
+ * Invariant #3: GameSnapshot never crosses any IPC boundary.
  */
 export interface PlayerSnapshot {
     readonly tick: number;

@@ -4,10 +4,9 @@
  * Replay Player (§4.28).
  *
  * Plays back a recorded match. The player does NOT run a `ReplayPlayer` itself:
- * it requests {@link PlayerSnapshot}s from the main process over IPC (only
- * `PlayerSnapshot`s ever cross — Invariant #3) and feeds them to the
- * store-agnostic `GameShell`, exactly as the live game route does. Playback
- * state (current tick / playing / speed) lives here; `ReplayControls` is
+ * it requests {@link PlayerSnapshot}s from the main process over IPC and feeds
+ * them to the store-agnostic `GameShell`, exactly as the live game route does.
+ * Playback state (current tick / playing / speed) lives here; `ReplayControls` is
  * display-only.
  *
  * To keep auto-advance cheap, snapshots are fetched in batches via

@@ -15,8 +15,7 @@
  * Architecture: §4.3 — WebSocket Message Protocol
  *
  * Invariants upheld:
- *   #3  — SNAPSHOT / LOBBY_STATE carry PlayerSnapshot, not GameSnapshot.
- *         GameSnapshot never leaves the host process.
+ *   #3  — No frame carries GameSnapshot; it never leaves the host process.
  *   This module has zero runtime imports from electron/, renderer/,
  *         or any DOM API. Import-type-only from simulation/ and networking/.
  */

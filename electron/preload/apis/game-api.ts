@@ -7,9 +7,8 @@
 // Channel names are declared here rather than in the contract package; the
 // reason is stated once, in `electron/preload/api.ts`.
 //
-// Invariant 1: `GameSnapshot` never crosses any IPC boundary. This module
-// deliberately imports only `PlayerSnapshot` — the projected-for-viewer type.
-// There is no import of `GameSnapshot` anywhere in this file.
+// Invariant 3: `GameSnapshot` never crosses any IPC boundary. There is no
+// import of `GameSnapshot` anywhere in this file.
 //
 // Invariant 4: The renderer reads state; it never writes state directly.
 // `sendAction` is the only write path the renderer has.
@@ -112,7 +111,7 @@ export function createGameApi(ipc: GameApiIpcPort): GameAPI {
         sendAction: (action: EngineAction): void => {
             ipc.send(GAME_SEND_ACTION_CHANNEL, action);
         },
-        // invariant 1: main never sends a full GameSnapshot on this channel;
+        // invariant 3: main never sends a full GameSnapshot on this channel;
         // the `subscribePush` cast is the same trust boundary the namespace
         // declared before the shared helper existed.
         onSnapshot: (cb: (snapshot: PlayerSnapshot) => void): Unsubscribe =>
@@ -158,7 +157,7 @@ export function createGameApi(ipc: GameApiIpcPort): GameAPI {
             ipc.invoke(GAME_GET_CURRENT_SNAPSHOT_CHANNEL).then((value) => {
                 if (value === null || value === undefined) return null;
                 // Trust the main process — it only stores snapshots it
-                // projected itself (Invariant #1: PlayerSnapshot only).
+                // projected itself (Invariant #95).
                 return value as PlayerSnapshot;
             }),
     };

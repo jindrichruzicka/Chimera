@@ -71,7 +71,7 @@ The simulation core is designed around three foundational patterns that every ga
 
 - **Invariant #1** — `simulation/` has zero runtime dependencies on React, DOM, or networking.
 - **Invariant #2** — `applyAction`/`definition.reduce` are pure functions — same input, same output, always.
-- **Invariant #3** — `GameSnapshot` never leaves the host's main process. `PlayerSnapshot` is the only state type that crosses any process or network boundary.
+- **Invariant #3** — `GameSnapshot` never leaves the host's main process.
 - **Invariant #4** — The renderer reads state; it never writes state directly.
 
 ---

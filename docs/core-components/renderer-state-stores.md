@@ -187,7 +187,7 @@ This keeps lobby writes consistent with the typed-hook pattern and makes bridge-
 
 ## Key Invariants
 
-- **Invariant #3** — `GameSnapshot` never leaves main process; `PlayerSnapshot` is what the renderer receives.
+- **Invariant #3** — `GameSnapshot` never leaves main process.
 - **Invariant #4** — The renderer reads state; it never writes state directly.
 
 ---

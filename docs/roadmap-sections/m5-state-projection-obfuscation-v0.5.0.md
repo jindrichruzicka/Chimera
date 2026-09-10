@@ -1,6 +1,6 @@
 ---
 title: 'M5 — State Projection & Obfuscation (v0.5.0)'
-description: 'F26–F29: StateProjector/VisibilityRules, Cryptographic Commitment Scheme (SHA-256), Host Renderer Obfuscation Enforcement, and Projection Property Tests (fast-check). Every client receives only its authoritative PlayerSnapshot; fog of war and commitment scheme are verified.'
+description: 'F26–F29: StateProjector/VisibilityRules, Cryptographic Commitment Scheme (SHA-256), Host Renderer Obfuscation Enforcement, and Projection Property Tests (fast-check). Fog of war and commitment scheme are verified.'
 tags:
     [
         milestone,
@@ -16,7 +16,7 @@ tags:
 
 # M5 — State Projection & Obfuscation (v0.5.0)
 
-> **Goal**: Every client — including the host renderer — receives only its authoritative `PlayerSnapshot`; fog of war and commitment scheme are verified.
+> **Goal**: Fog of war and commitment scheme are verified.
 > Architecture sections: §4.6, §8, §10.1
 
 ---

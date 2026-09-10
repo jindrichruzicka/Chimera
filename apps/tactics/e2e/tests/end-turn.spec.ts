@@ -13,8 +13,8 @@
  * the spec verifies button state and history clearing, proving the implementation
  * follows the deterministic state machine.
  *
- * Invariant #3: PlayerSnapshot.isMyTurn computed from turnClock; button disabled
- * when isMyTurn === false (non-active players cannot end turn).
+ * PlayerSnapshot.isMyTurn computed from turnClock; button disabled when
+ * isMyTurn === false (non-active players cannot end turn).
  */
 import { test, expect } from '../fixtures/direct-game.fixture';
 import { GamePage } from '../pages/GamePage';

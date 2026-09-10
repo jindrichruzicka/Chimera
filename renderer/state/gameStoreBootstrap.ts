@@ -13,7 +13,7 @@
  * Architecture reference: §4.4 — Renderer State Stores
  *
  * Invariants upheld:
- *   #3  — GameSnapshot never crosses any IPC boundary; only PlayerSnapshot.
+ *   #3  — GameSnapshot never crosses any IPC boundary.
  *   #4  — Renderer never writes simulation state directly.
  *          Components must never call `applySnapshot` or `applyTick` directly.
  */
