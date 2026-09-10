@@ -265,6 +265,37 @@ export function testMultiplayerProviderContract(
                 provider.dispose();
             });
 
+            it('isReachable is true exactly for a client a sendSnapshot would reach', async () => {
+                const provider = factory();
+                const hosted = await provider.hostLobby({
+                    gameId: 'contract-test',
+                    maxPlayers: 4,
+                });
+                const joined = await provider.joinLobby({ address: hosted.lobbyCode });
+                const received: PlayerSnapshot[] = [];
+                joined.transport.onSnapshotReceived((s) => received.push(s));
+
+                // The host's own seat is served in-process, never over the transport.
+                expect(hosted.transport.isReachable(hosted.lobbyInfo.hostId)).toBe(false);
+                expect(hosted.transport.isReachable(toPlayerId('never-joined'))).toBe(false);
+
+                expect(hosted.transport.isReachable(joined.localPlayerId)).toBe(true);
+                hosted.transport.sendSnapshot(
+                    joined.localPlayerId,
+                    makeSnapshot(joined.localPlayerId),
+                );
+                expect(received).toHaveLength(1);
+
+                await joined.disconnect();
+                expect(hosted.transport.isReachable(joined.localPlayerId)).toBe(false);
+                hosted.transport.sendSnapshot(
+                    joined.localPlayerId,
+                    makeSnapshot(joined.localPlayerId),
+                );
+                expect(received).toHaveLength(1);
+                provider.dispose();
+            });
+
             it('unsubscribing from onSnapshotReceived stops further delivery', async () => {
                 const provider = factory();
                 const hosted = await provider.hostLobby({

@@ -130,6 +130,52 @@ describe('WsHostTransport — implements HostTransport', () => {
     });
 });
 
+// ─── isReachable ──────────────────────────────────────────────────────────────
+
+describe('WsHostTransport — isReachable', () => {
+    it('is true for a client with an open socket and false for a seat served in-process', async () => {
+        const { server, transport } = makeTransport();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+
+        expect(transport.isReachable(playerId)).toBe(true);
+        expect(transport.isReachable(toPlayerId('host-seat-served-in-process'))).toBe(false);
+        ws.close();
+    });
+
+    it('turns false once the client has disconnected', async () => {
+        const { server, transport } = makeTransport();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+        const gone = new Promise<void>((resolve) => {
+            transport.onPlayerLeft((pid) => {
+                if (pid === playerId) resolve();
+            });
+        });
+
+        ws.close();
+        await gone;
+
+        expect(transport.isReachable(playerId)).toBe(false);
+    });
+
+    it("answers with the server's open-socket check, in both directions", async () => {
+        // The same predicate, not a second one that agrees on the easy cases: a
+        // closing socket is still in the roster, and only the open-socket check
+        // turns false for it.
+        const { server, transport } = makeTransport();
+        await server.ready();
+        const hasOpenSocket = vi.spyOn(server, 'hasOpenSocket');
+        const asked = toPlayerId('asked');
+
+        hasOpenSocket.mockReturnValueOnce(true);
+        expect(transport.isReachable(asked)).toBe(true);
+        hasOpenSocket.mockReturnValueOnce(false);
+        expect(transport.isReachable(asked)).toBe(false);
+        expect(hasOpenSocket.mock.calls).toEqual([[asked], [asked]]);
+    });
+});
+
 // ─── sendSnapshot ─────────────────────────────────────────────────────────────
 
 describe('WsHostTransport — sendSnapshot', () => {

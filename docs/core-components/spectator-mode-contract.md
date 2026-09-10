@@ -114,8 +114,7 @@ single `StateProjector.project()` gate (Invariant #8):
   touches spectator traffic.
 - `broadcastWave(snapshot, viewerId)` — the Stage-7 wave: the seated point-send
   **plus** a fan-out to every spectator, deduped on snapshot-reference identity
-  so each spectator receives exactly one perspective send per wave regardless of
-  the seated-viewer count.
+  so it runs once per wave regardless of the seated-viewer count.
 - `broadcastSpectator(snapshot, spectatorId)` — unicast one spectator the
   followed seat's projection; used for the join-time first push and the
   perspective switch, so a spectator sees the match immediately rather than

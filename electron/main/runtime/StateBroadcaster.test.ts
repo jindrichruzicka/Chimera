@@ -41,6 +41,7 @@ import type { SnapshotDelta } from '@chimera-engine/simulation/foundation/snapsh
 
 function makeTransport(): HostTransport {
     return {
+        isReachable: vi.fn(() => true),
         sendSnapshot: vi.fn(),
         sendSnapshotDelta: vi.fn(),
         sendTick: vi.fn(),
@@ -1126,5 +1127,191 @@ describe('StateBroadcaster — outbound snapshot deltas', () => {
 
         const deltas = vi.mocked(transport.sendSnapshotDelta).mock.calls;
         expect(deltas.map(([viewerId]) => viewerId)).toEqual([PLAYER_A, spectatorId]);
+    });
+});
+
+// ── A recipient nothing will receive ───────────────────────────────────────────
+
+/**
+ * Wraps a projection so every walk over its keys is counted. A diff and a
+ * serialisation both enumerate the object; handing the reference on does not.
+ */
+function countWalks(projection: PlayerSnapshot): {
+    projection: PlayerSnapshot;
+    walks: () => number;
+} {
+    let walks = 0;
+    const counted = new Proxy(projection, {
+        ownKeys(target) {
+            walks += 1;
+            return Reflect.ownKeys(target);
+        },
+    });
+    return { projection: counted, walks: () => walks };
+}
+
+/** A transport double whose reachability each case can move between beats. */
+function makeTransportReaching(reachable: Set<PlayerId>): HostTransport {
+    const transport = makeTransport();
+    vi.mocked(transport.isReachable).mockImplementation((id) => reachable.has(id));
+    return transport;
+}
+
+describe('StateBroadcaster — a recipient nothing will receive', () => {
+    it('diffs, serialises and sends nothing for a recipient the transport cannot reach and no renderer is bound to', () => {
+        // An AI seat, or a seat whose socket has closed: `broadcastWave` reaches
+        // it every beat, the transport would drop whatever it was handed, and
+        // there is no renderer on the host to consume a delta either.
+        const transport = makeTransportReaching(new Set());
+        const { projector, set } = makeScriptedProjector();
+        const beat1 = countWalks(makeMovingProjection(PLAYER_A, 1, 0));
+        const beat2 = countWalks(makeMovingProjection(PLAYER_A, 2, 1));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        const stringify = vi.spyOn(JSON, 'stringify');
+
+        set(PLAYER_A, beat1.projection);
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+        set(PLAYER_A, beat2.projection);
+        broadcaster.broadcastWave(wave(2), PLAYER_A);
+
+        expect(beat1.walks()).toBe(0);
+        expect(beat2.walks()).toBe(0);
+        expect(stringify).not.toHaveBeenCalled();
+        expect(transport.sendSnapshot).not.toHaveBeenCalled();
+        expect(transport.sendSnapshotDelta).not.toHaveBeenCalled();
+        expect(broadcaster.deltaMetrics()).toEqual({ keyframes: 0, deltas: 0, sizeFallbacks: 0 });
+    });
+
+    it('stops diffing a recipient once the transport can no longer reach it', () => {
+        // The case a never-reached recipient does not exercise: this one HAS a
+        // baseline, so the beat after its socket closes is a delta beat, not a
+        // keyframe beat.
+        const reachable = new Set([PLAYER_A]);
+        const transport = makeTransportReaching(reachable);
+        const { projector, set } = makeScriptedProjector();
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+
+        reachable.delete(PLAYER_A);
+        const beat2 = countWalks(makeMovingProjection(PLAYER_A, 2, 1));
+        set(PLAYER_A, beat2.projection);
+        const stringify = vi.spyOn(JSON, 'stringify');
+        broadcaster.broadcastWave(wave(2), PLAYER_A);
+
+        expect(beat2.walks()).toBe(0);
+        expect(stringify).not.toHaveBeenCalled();
+        expect(transport.sendSnapshotDelta).not.toHaveBeenCalled();
+    });
+
+    it('sends a keyframe, not a delta, to a recipient reachable again after a beat it missed', () => {
+        // The host cannot vouch for what a recipient holds across a beat it was
+        // not sent, so the baseline goes with the reachability.
+        const reachable = new Set([PLAYER_A]);
+        const transport = makeTransportReaching(reachable);
+        const { projector, set } = makeScriptedProjector();
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+
+        reachable.delete(PLAYER_A);
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 2, 1));
+        broadcaster.broadcastWave(wave(2), PLAYER_A);
+
+        reachable.add(PLAYER_A);
+        const beat3 = makeMovingProjection(PLAYER_A, 3, 2);
+        set(PLAYER_A, beat3);
+        broadcaster.broadcastWave(wave(3), PLAYER_A);
+
+        expect(transport.sendSnapshotDelta).not.toHaveBeenCalled();
+        expect(vi.mocked(transport.sendSnapshot).mock.calls).toEqual([
+            [PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0)],
+            [PLAYER_A, beat3],
+        ]);
+    });
+
+    it('serialises nothing on a point-send to a recipient nothing will receive', () => {
+        const transport = makeTransportReaching(new Set());
+        const { projector, set } = makeScriptedProjector();
+        const counted = countWalks(makeMovingProjection(PLAYER_A, 1, 0));
+        set(PLAYER_A, counted.projection);
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger(), {
+            spectators: makeSpectatorSource([[SPEC_1, PLAYER_A]]),
+        });
+        const stringify = vi.spyOn(JSON, 'stringify');
+
+        broadcaster.broadcast(wave(1), PLAYER_A);
+        broadcaster.broadcastSpectator(wave(1), SPEC_1);
+
+        expect(counted.walks()).toBe(0);
+        expect(stringify).not.toHaveBeenCalled();
+        expect(transport.sendSnapshot).not.toHaveBeenCalled();
+    });
+
+    it('keeps the renderer leg on deltas for a seat the transport cannot reach', () => {
+        // The local host seat: served in-process, never reachable over the
+        // transport, and the one seat whose delta the renderer leg consumes.
+        const transport = makeTransportReaching(new Set());
+        const { projector, set } = makeScriptedProjector();
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 1, 0));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        const rendererSends = collectRendererDeltas(broadcaster, PLAYER_A);
+
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+        set(PLAYER_A, makeMovingProjection(PLAYER_A, 2, 1));
+        broadcaster.broadcastWave(wave(2), PLAYER_A);
+
+        expect(rendererSends).toEqual([
+            null,
+            {
+                fromTick: 1,
+                toTick: 2,
+                entries: [
+                    { path: 'tick', kind: 'changed', after: 2 },
+                    { path: 'entities.unit-1.x', kind: 'changed', after: 1 },
+                ],
+            },
+        ]);
+    });
+
+    it('judges each recipient by its own reachability — a closed spectator costs nothing while its seat is still sent to', () => {
+        const transport = makeTransportReaching(new Set([PLAYER_A]));
+        // A fresh projection per call, so the seat's and the spectator's are
+        // separate objects: per wave the seat is projected first, then the
+        // spectator fan-out projects the seat it follows.
+        const projected: ReturnType<typeof countWalks>[] = [];
+        const projector: StateProjector<BaseGameSnapshot> = {
+            project: (snapshot, viewerId) => {
+                const counted = countWalks(
+                    makeMovingProjection(viewerId, snapshot.tick, snapshot.tick),
+                );
+                projected.push(counted);
+                return counted.projection;
+            },
+        };
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger(), {
+            spectators: makeSpectatorSource([[SPEC_1, PLAYER_A]]),
+        });
+        const stringify = vi.spyOn(JSON, 'stringify');
+
+        broadcaster.broadcastWave(wave(1), PLAYER_A);
+        broadcaster.broadcastWave(wave(2), PLAYER_A);
+
+        expect(projected).toHaveLength(4);
+        const [seat1, spectator1, seat2, spectator2] = projected;
+        const serialised = stringify.mock.calls.map(([value]) => value as unknown);
+        // The spectator's projections are neither walked nor serialised...
+        expect(spectator1?.walks()).toBe(0);
+        expect(spectator2?.walks()).toBe(0);
+        expect(serialised).not.toContain(spectator1?.projection);
+        expect(serialised).not.toContain(spectator2?.projection);
+        // ...while its seat's are: a keyframe, then a delta against it.
+        expect(serialised).toContain(seat1?.projection);
+        expect(seat2?.walks()).toBeGreaterThan(0);
+        expect(vi.mocked(transport.sendSnapshot).mock.calls.map(([id]) => id)).toEqual([PLAYER_A]);
+        expect(vi.mocked(transport.sendSnapshotDelta).mock.calls.map(([id]) => id)).toEqual([
+            PLAYER_A,
+        ]);
+        expect(transport.isReachable).toHaveBeenCalledWith(SPEC_1);
     });
 });

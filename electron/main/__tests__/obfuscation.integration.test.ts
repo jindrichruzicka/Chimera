@@ -82,6 +82,7 @@ function makeTestSnapshot(): TestGameSnapshot {
 
 function makeTransport(): HostTransport {
     return {
+        isReachable: vi.fn(() => true),
         sendSnapshot: vi.fn(),
         sendSnapshotDelta: vi.fn(),
         sendTick: vi.fn(),

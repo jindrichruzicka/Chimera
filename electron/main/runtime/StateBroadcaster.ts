@@ -143,8 +143,8 @@ export class StateBroadcaster {
      * Last snapshot object fanned out to spectators. Stage 7 calls
      * `broadcast()` once per seated viewer with the SAME snapshot object and
      * guarantees a changed reference whenever state changed — so reference
-     * identity marks a new wave, and spectators get exactly one perspective
-     * send per wave instead of one per seated viewer.
+     * identity marks a new wave, and the spectator fan-out runs once per wave
+     * instead of once per seated viewer.
      */
     private lastSpectatorSnapshot: Readonly<BaseGameSnapshot> | null = null;
     /** Last tick value forwarded to spectators (ticks advance monotonically). */
@@ -220,9 +220,9 @@ export class StateBroadcaster {
         if (this.disposed) return;
         const playerSnapshot = this.projector.project(snapshot, viewerId);
         this.log.trace('broadcast', { viewerId, tick: playerSnapshot.tick });
-        // A point-send is always a KEYFRAME. Every caller of it is asking for
-        // the whole thing by definition — a viewer whose baseline the host
-        // cannot vouch for, or one whose projection was just replaced wholesale.
+        // Every caller of a point-send is asking for the whole thing by
+        // definition — a viewer whose baseline the host cannot vouch for, or
+        // one whose projection was just replaced wholesale.
         this.sendKeyframe(viewerId, playerSnapshot);
         // A point-send is a keyframe for the renderer leg too: whatever made the
         // caller ask for a whole projection applies on both sides of it.
@@ -234,10 +234,9 @@ export class StateBroadcaster {
      * Stage-7 wave broadcast: the per-viewer send plus a single spectator
      * fan-out per wave. `ActionPipeline` calls this once per seated viewer
      * with the same snapshot reference; the spectator fan-out is deduped on
-     * that reference (see `lastSpectatorSnapshot`) so each spectator receives
-     * exactly one perspective snapshot per wave (Invariant #114). Only this
-     * Stage-7 path drives spectator snapshot traffic — a point-send
-     * `broadcast()` never does.
+     * that reference (see `lastSpectatorSnapshot`) so the fan-out runs once
+     * per wave (Invariant #114). Only this Stage-7 path drives spectator
+     * snapshot traffic — a point-send `broadcast()` never does.
      *
      * No-ops silently if `dispose()` has already been called.
      */
@@ -292,9 +291,9 @@ export class StateBroadcaster {
     }
 
     /**
-     * Send each spectator the projection of its followed seat, once per
-     * broadcast wave (see `lastSpectatorSnapshot`). Spectators are remote by
-     * definition, so renderer recipients and E2E host hooks are not involved.
+     * The spectator fan-out (see `lastSpectatorSnapshot`). Spectators are
+     * remote by definition, so renderer recipients and E2E host hooks are not
+     * involved.
      */
     private fanOutToSpectators(snapshot: Readonly<BaseGameSnapshot>, forceFull: boolean): void {
         const spectators = this.options.spectators;
@@ -324,7 +323,8 @@ export class StateBroadcaster {
 
     /**
      * Put this beat's projection on the wire as a delta where that is both
-     * possible and cheaper, and as a whole snapshot otherwise.
+     * possible and cheaper, and as a whole snapshot otherwise — or nowhere, for
+     * a recipient nothing will receive (see {@link skipUnreceived}).
      *
      * Five conditions owe a keyframe, each for its own reason:
      *  - the pipeline forced the wave (`engine:sync_request`) — the viewer that
@@ -332,7 +332,7 @@ export class StateBroadcaster {
      *    vouch for, so a delta against that baseline is the one thing it must
      *    not be sent. Nothing observable identifies this case: a re-sync after a
      *    run of clock-only beats has a projection that genuinely DID change;
-     *  - no baseline — this recipient has been sent nothing to difference from;
+     *  - no baseline — nothing to difference from;
      *  - the periodic interval elapsed;
      *  - the projection did not change, so a delta would carry no entries;
      *  - the delta is not smaller than the last keyframe, so the delta path
@@ -349,19 +349,20 @@ export class StateBroadcaster {
         projection: PlayerSnapshot,
         forceFull: boolean,
     ): SnapshotDelta | null {
+        if (this.skipUnreceived(recipientId)) return null;
         const state = this.deltaState.get(recipientId);
         if (
             forceFull ||
             state === undefined ||
             state.beatsSinceKeyframe + 1 >= this.keyframeIntervalBeats
         ) {
-            this.sendKeyframe(recipientId, projection);
+            this.putKeyframe(recipientId, projection);
             return null;
         }
 
         const delta = toSnapshotDelta(diffSnapshots(state.lastProjection, projection));
         if (delta.entries.length === 0) {
-            this.sendKeyframe(recipientId, projection);
+            this.putKeyframe(recipientId, projection);
             return null;
         }
 
@@ -373,7 +374,7 @@ export class StateBroadcaster {
                 keyframeBytes: state.keyframeBytes,
             });
             this.metrics.sizeFallbacks += 1;
-            this.sendKeyframe(recipientId, projection);
+            this.putKeyframe(recipientId, projection);
             return null;
         }
 
@@ -384,8 +385,33 @@ export class StateBroadcaster {
         return delta;
     }
 
-    /** Send the whole projection and make it this recipient's new baseline. */
+    /**
+     * True, with the recipient's baseline forgotten, when nothing will receive
+     * a frame for it: the transport cannot reach it and no renderer recipient
+     * is bound to it.
+     *
+     * The diff, the size test and a keyframe's serialisation all exist to shape
+     * a frame, so a recipient no frame will reach is spared them; the transport
+     * would drop the frame anyway. The baseline goes because the host cannot
+     * vouch for what a recipient holds across a beat it was not sent — the
+     * first frame it is sent afterwards is a keyframe.
+     */
+    private skipUnreceived(recipientId: PlayerId): boolean {
+        if (this.rendererRecipients.has(recipientId) || this.transport.isReachable(recipientId)) {
+            return false;
+        }
+        this.deltaState.delete(recipientId);
+        return true;
+    }
+
+    /** A point-send's keyframe, for a recipient anything will receive. */
     private sendKeyframe(recipientId: PlayerId, projection: PlayerSnapshot): void {
+        if (this.skipUnreceived(recipientId)) return;
+        this.putKeyframe(recipientId, projection);
+    }
+
+    /** Send the whole projection and make it this recipient's new baseline. */
+    private putKeyframe(recipientId: PlayerId, projection: PlayerSnapshot): void {
         this.metrics.keyframes += 1;
         this.deltaState.set(recipientId, {
             lastProjection: projection,

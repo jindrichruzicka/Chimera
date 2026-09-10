@@ -234,6 +234,8 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
         this.sessions.set(lobbyCode, channel);
 
         const transport: HostTransport = {
+            isReachable: (playerId: PlayerId): boolean => channel.clients.has(playerId),
+
             sendSnapshot: (playerId: PlayerId, snapshot: PlayerSnapshot): void => {
                 const client = channel.clients.get(playerId);
                 if (client) {

@@ -52,6 +52,10 @@ export class WsHostTransport implements HostTransport {
 
     // ─── Outbound ─────────────────────────────────────────────────────────────
 
+    isReachable(playerId: PlayerId): boolean {
+        return this.server.hasOpenSocket(playerId);
+    }
+
     sendSnapshot(playerId: PlayerId, snapshot: PlayerSnapshot): void {
         // The checksum costs a full serialisation plus a per-byte CRC walk, and
         // the server drops a unicast for a seat with no open socket — the local

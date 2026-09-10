@@ -326,6 +326,16 @@ export interface HostedSession {
 
 /** Transport surface exposed to the server-side (simulation host) logic. */
 export interface HostTransport {
+    /**
+     * Whether a snapshot sent to `playerId` now would reach a client — the
+     * check {@link sendSnapshot} makes before dropping a frame. False for a
+     * player with no connected client, the host's own seat among them: it is
+     * served in-process, never over the transport.
+     *
+     * Lets a caller with per-frame work above the transport — a diff, a size
+     * test — skip it for a recipient the frame would never reach.
+     */
+    isReachable(playerId: PlayerId): boolean;
     /** Push a projected PlayerSnapshot to one connected client. */
     sendSnapshot(playerId: PlayerId, snapshot: PlayerSnapshot): void;
     /**

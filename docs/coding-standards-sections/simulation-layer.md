@@ -65,3 +65,12 @@ The same file measures the DELTA arm beside it — project per viewer, diff agai
 The moved counts are what each run measured: `measureDeltaWave` counts the entities that differ. The byte percentages are of the whole-snapshot row at the same grid, and reproduce exactly. The p95 column is not given as a percentage — the bench measures its own baseline in the same run, and the ratio moves with the machine.
 
 Read the two rows per grid as the two ends they are: at a realtime beat's motion the payload is about a twentieth, and when nearly everything moves the delta is LARGER than the snapshot it would replace — which is why `StateBroadcaster` measures each delta against the last keyframe and sends the snapshot when the delta does not beat it. Neither delta row is gated: they are the recorded measurement, and a ratio asserted here would gate the runner rather than the code.
+
+Which of that work a seat is made to pay for is the broadcaster's decision, and [`electron/main/__tests__/BroadcasterPerBeatPerf.bench.test.ts`](../../electron/main/__tests__/BroadcasterPerBeatPerf.bench.test.ts) measures it on the real `StateBroadcaster`: every seat reachable over the transport, no seat reachable and no renderer bound to any, and `project()` alone. A twentieth of the arena moves each beat, and the transport double does no work, so the two seat columns are the broadcaster's own milliseconds:
+
+| Grid     | Reachable seats | Seats nothing receives | `project()` alone |
+| -------- | --------------- | ---------------------- | ----------------- |
+| 500 × 4  | 0.617 ms        | 0.085 ms               | 0.085 ms          |
+| 2000 × 8 | 4.759 ms        | 0.693 ms               | 0.686 ms          |
+
+Wave medians, one run of `vitest run` on that file (Node v25.9.0). For a seat the transport cannot reach (`HostTransport.isReachable`) and no renderer is bound to, `StateBroadcaster` skips the diff, the size test and the keyframe serialisation.

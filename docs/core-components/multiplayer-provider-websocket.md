@@ -38,6 +38,8 @@ interface HostedSession {
 }
 
 interface HostTransport {
+    /** Whether a snapshot sent to playerId now would reach a client; false for the host's own seat. */
+    isReachable(playerId: PlayerId): boolean;
     sendSnapshot(playerId: PlayerId, snapshot: PlayerSnapshot): void;
     sendSnapshotDelta(playerId: PlayerId, delta: SnapshotDelta): void;
     broadcastLobbyState(state: LobbyState): void;

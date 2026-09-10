@@ -126,7 +126,7 @@ A corrupt `SNAPSHOT_DELTA` is the more damaging of the two, which is why `Server
 
 ## Snapshot Deltas
 
-`StateBroadcaster` keeps the last projection it sent each recipient and sends the changed paths instead of the whole projection. Where it sends a whole `SNAPSHOT` — a **keyframe** — instead is `StateBroadcaster.sendProjection`'s to say, and `StateBroadcaster.test.ts`'s outbound-delta block to measure. Point-sends are always keyframes.
+`StateBroadcaster` keeps the last projection it sent each recipient and sends the changed paths instead of the whole projection. Where it sends a whole `SNAPSHOT` — a **keyframe** — instead is `StateBroadcaster.sendProjection`'s to say, and `StateBroadcaster.test.ts`'s outbound-delta block to measure.
 
 `engine:sync_request` is the forced wave, and `BroadcastContext.broadcast` carries `{ forceFull }` from Stage 7 to say so. Nothing observable identifies it: a re-sync arriving after a run of clock-only beats has a projection that genuinely DID change, so an empty diff is not the signal — and the viewer that asked to be re-synced is precisely the one whose baseline the host cannot vouch for, so a delta against that baseline is the one thing it must not be sent.
 
