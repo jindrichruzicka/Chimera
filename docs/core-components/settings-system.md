@@ -203,7 +203,7 @@ User Changes Volume
      → IPC → SettingsManager.updateSettings('<game>', patch)
      → validatePatch → merge into user OVERRIDES only (never the defaults tree)
      → SettingsRepository.save('<game>', newOverrides)   ← atomic write
-     → broadcast onChange → renderer → settingsStore.applySettings(resolved)
+     → broadcast onChange → renderer → settingsStore._applySettings('<game>', resolved)
 
 Settings UI Reset
   1. window.__chimera.settings.reset('<game>')
@@ -217,10 +217,10 @@ Settings UI Reset
 ## settingsStore
 
 ```typescript
-// renderer/state/settingsStore.ts (IPC mirror)
-interface SettingsStore {
-    settings: ResolvedSettings | null;
-    applySettings(settings: ResolvedSettings): void; // called by ipcClient only
+// renderer/state/settingsStore.ts (IPC mirror) — excerpt
+interface SettingsStoreState {
+    readonly settings: Record<string, ResolvedSettings>;
+    _applySettings(gameId: string, settings: ResolvedSettings): void; // do NOT call from components
 }
 ```
 

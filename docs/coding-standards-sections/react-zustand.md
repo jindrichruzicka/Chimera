@@ -50,7 +50,7 @@ useEffect(() => {
 
 ## 5.5 Store mutation ownership
 
-- Store mutation methods marked `// ipcClient only` must never be called from a component. They are called exclusively by `ipcClient` when a new `PlayerSnapshot` arrives from main process.
+- Store `apply*` mutators must never be called from a component.
 
 ## 5.6 `useEffect` usage
 

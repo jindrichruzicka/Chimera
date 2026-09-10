@@ -2,8 +2,8 @@
 //
 // Post-IPC-ACK helper that refreshes profileStore.localProfileId from the
 // main-process-confirmed profile.  Lives in `renderer/state/` so that the
-// `setLocalProfileId` store mutation (marked "ipcClient only") is called from
-// the state layer, not from a component-side file.
+// `setLocalProfileId` store mutation is called from the state layer, not from
+// a component-side file.
 //
 // Usage: call after a successful `profile.updateLocal(patch)` to drive the
 // store update from the confirmed main-process state rather than optimistically.

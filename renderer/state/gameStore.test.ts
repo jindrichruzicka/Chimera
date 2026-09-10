@@ -10,8 +10,7 @@
  *
  * Rules:
  *  - No real Electron IPC — all tests use the `createGameStore()` factory.
- *  - `applySnapshot` and `applyTick` are marked
- *    `// ipcClient only` and must not be called from components.
+ *  - `applySnapshot` and `applyTick` must not be called from components.
  */
 
 import { describe, it, expect } from 'vitest';

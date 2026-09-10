@@ -67,7 +67,7 @@ export interface SaveStoreState {
      * Called by `bootstrapSaveStore` after `list()` resolves and on every
      * `onSlotUpdate` push event.
      *
-     * ipcClient / bootstrap only — do NOT call from components directly.
+     * Do NOT call from components directly.
      */
     applySaveSlots(slots: readonly SaveSlotMeta[]): void;
 
@@ -75,7 +75,7 @@ export interface SaveStoreState {
      * Apply an incoming restore-status transition.
      * Called by `bootstrapSaveStore` on every `onRestoreStatus` push event.
      *
-     * ipcClient / bootstrap only — do NOT call from components directly.
+     * Do NOT call from components directly.
      */
     applyRestoreStatus(this: void, event: RestoreStatusEvent): void;
 

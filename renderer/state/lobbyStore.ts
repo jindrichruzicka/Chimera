@@ -5,7 +5,7 @@
  *
  * Rules:
  *  - Components subscribe through narrow typed selectors only.
- *  - _applyLobbyState() is called by IPC listeners; do NOT call from components
+ *  - applyLobbyState() is called by IPC listeners; do NOT call from components
  *  - This store mirrors authoritative lobby state from IPC only
  */
 
@@ -24,7 +24,7 @@ export interface LobbyStoreState {
 
     /**
      * Apply incoming lobby state from IPC (chimera:lobby-update push).
-     * ipcClient only — do NOT call from components directly.
+     * Do NOT call from components directly.
      */
     applyLobbyState(state: LobbyState | null): void;
 

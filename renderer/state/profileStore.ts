@@ -19,13 +19,13 @@ export interface ProfileStoreState {
 
     /**
      * Apply incoming profile directory from IPC.
-     * ipcClient only — do NOT call from components directly.
+     * Do NOT call from components directly.
      */
     applyProfileDirectory(directory: Readonly<Record<PlayerId, PlayerProfile>>): void;
 
     /**
      * Set the local profile id used by useLocalProfile().
-     * ipcClient only — do NOT call from components directly.
+     * Do NOT call from components directly.
      */
     setLocalProfileId(localProfileId: string | null): void;
 }

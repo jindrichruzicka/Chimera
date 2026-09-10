@@ -9,8 +9,7 @@
  *
  * Rules:
  *  - Components subscribe through narrow typed selectors only.
- *  - `applySnapshot` and `applyTick` are `// ipcClient only` — do NOT call
- *    from components.
+ *  - Do NOT call `applySnapshot` or `applyTick` from components.
  *  - `GameSnapshot` never enters this store; only `PlayerSnapshot` does
  *    (Invariant #1, #3).
  */
@@ -26,7 +25,6 @@ import type {
 
 /**
  * Authoritative snapshot mirror — receives `PlayerSnapshot` from IPC.
- * Only `ipcClient` may call `applySnapshot`.
  */
 export interface SnapshotStore {
     /** Projected per-viewer snapshot; null before the first IPC push. */
@@ -40,7 +38,7 @@ export interface SnapshotStore {
 
     /**
      * Apply incoming `PlayerSnapshot` from IPC.
-     * ipcClient only — do NOT call from components.
+     * Do NOT call from components.
      */
     applySnapshot(snapshot: PlayerSnapshot): void;
     /** Apply an authoritative tick-only update without replacing snapshot. */
@@ -50,7 +48,7 @@ export interface SnapshotStore {
      * Drop the current match snapshot and all derived in-match state back to
      * initial. Routing/lifecycle only — called by navigation effects on a
      * match → lobby or match → main-menu transition, NOT from render. Distinct
-     * from the `// ipcClient only` mutators above.
+     * from the `apply*` mutators above.
      */
     reset(): void;
 }
@@ -82,8 +80,7 @@ export interface RevealStore {
     /** The most recently received verified reveal, or null before any arrives. */
     readonly lastReveal: CommitmentReveal | null;
     /**
-     * Record a verified reveal. ipcClient/bootstrap only — do NOT call from
-     * components.
+     * Record a verified reveal. Do NOT call from components.
      */
     applyReveal(reveal: CommitmentReveal): void;
 }

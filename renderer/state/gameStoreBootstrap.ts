@@ -14,9 +14,8 @@
  *
  * Invariants upheld:
  *   #3  — GameSnapshot never crosses any IPC boundary; only PlayerSnapshot.
- *   #4  — Renderer never writes simulation state directly; writes go via ipcClient.
- *          `applySnapshot` and `applyTick` are ipcClient only — components must
- *          never call them directly.
+ *   #4  — Renderer never writes simulation state directly.
+ *          Components must never call `applySnapshot` or `applyTick` directly.
  */
 
 import type {

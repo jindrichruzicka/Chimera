@@ -35,9 +35,8 @@
  * Invariants upheld:
  *  #3  — `GameSnapshot` never crosses the IPC boundary; only `PlayerSnapshot`.
  *  #4  — Renderer never writes simulation state directly; all writes go
- *          through `sendAction()` → IPC → `ActionPipeline`. `applySnapshot`
- *          and `applyTick` are `// ipcClient only`; components never call
- *          them.
+ *          through `sendAction()` → IPC → `ActionPipeline`. Components never
+ *          call `applySnapshot` or `applyTick`.
  */
 
 import type {
@@ -78,9 +77,9 @@ export interface IpcGamePort {
  * Components must never call these methods directly.
  */
 export interface IpcSnapshotStore {
-    /** ipcClient only — applies authoritative snapshot from host. */
+    /** Applies authoritative snapshot from host. */
     applySnapshot(snapshot: PlayerSnapshot): void;
-    /** ipcClient only — applies authoritative tick-only updates from host. */
+    /** Applies authoritative tick-only updates from host. */
     applyTick(tick: number): void;
 }
 
@@ -205,7 +204,7 @@ export function defaultFrameScheduler(): FrameScheduler {
  * Create a typed IPC client.
  *
  * @param port          - Narrow `GameAPI` surface (`window.__chimera.game`).
- * @param store         - `GameStore` snapshot write surface (ipcClient only).
+ * @param store         - `GameStore` snapshot write surface.
  * @param scheduler     - What snapshot application is paced against. Defaults to
  *                        application on arrival, the behaviour every game had
  *                        before the pacing existed: pacing is opted into, never

@@ -127,7 +127,7 @@ describe('bootstrapLobbyStore()', () => {
         expect(unsubscribeSystem).toHaveBeenCalledOnce();
     });
 
-    it('routes onUpdate lobby state push event into the store via _applyLobbyState', () => {
+    it('routes onUpdate lobby state push event into the store', () => {
         let capturedLobbyUpdate: ((lobby: LobbyState) => void) | undefined;
         const unsubLobby = vi.fn();
         const lobbyApi = makeLobbyApi((cb) => {

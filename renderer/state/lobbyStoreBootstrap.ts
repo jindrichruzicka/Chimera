@@ -94,9 +94,9 @@ async function hydrateSessionRoleFromMain(
 
 /**
  * Register the `onUpdate` push listener on the supplied lobby API and route
- * incoming lobby state events into the lobbyStore via `_applyLobbyState`.
+ * incoming lobby state events into the lobbyStore via `applyLobbyState`.
  * Also register the `onConnectionStatus` listener on the system API and
- * call `_applyLobbyState(null)` when status is 'disconnected'.
+ * call `applyLobbyState(null)` when status is 'disconnected'.
  *
  * Returns the unsubscribe function from the lobby API so the caller can clean
  * up when the component unmounts or the bridge is replaced.
