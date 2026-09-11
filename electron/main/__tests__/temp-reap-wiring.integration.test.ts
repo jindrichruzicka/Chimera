@@ -1,22 +1,20 @@
 /**
- * electron/main/__tests__/save-temp-reap-wiring.integration.test.ts
+ * electron/main/__tests__/temp-reap-wiring.integration.test.ts
  *
- * Pins the RECEIVER of `FileSaveRepository.reapOrphanTempFiles()` in the
- * composition root: the repository the `SaveManager` is built on, not another
- * instance.
+ * Pins the RECEIVER of every `reapOrphanTempFiles()` call in the composition
+ * root: for saves, replays and perspective replays alike, the repository the
+ * manager is built on, not another instance.
  *
  * Parsed, not grepped: a needle in a comment or in dead code would satisfy a
  * text search, and the identity of the receiver is not something a regex can
  * see at all.
  *
- * What a source parse cannot see is whether `main()` reaches the call — a reap
+ * What a source parse cannot see is whether `main()` reaches the calls — a reap
  * moved behind a condition still parses. That half is measured at runtime by
- * `running main() reaps an abandoned save temp file under its own userData`
- * in `electron/main/index.test.ts`, which plants an aged artefact and requires
- * it to be gone.
+ * the `running main() reaps …` cases in `electron/main/index.test.ts`.
  *
- * Architecture: §4.11 — save/load persistence, composition root wiring.
- * Issue: #1269
+ * Architecture: §4.11 / §4.28 — save and replay persistence, composition root
+ * wiring.
  *
  * Invariants verified:
  *   #37 — the concrete repository is chosen once, in `electron/main/index.ts`.
@@ -69,10 +67,19 @@ function boundNameOf(className: string): string {
             declaration.initializer.expression.text === className,
     );
 
-    expect(declarations).toHaveLength(1);
+    expect(declarations, className).toHaveLength(1);
     const name = declarations[0]?.name;
-    expect(name && ts.isIdentifier(name)).toBe(true);
+    expect(name && ts.isIdentifier(name), className).toBe(true);
     return (name as ts.Identifier).text;
+}
+
+/** The identifier `new <managerClass>(...)` is given as its first argument. */
+function repositoryInjectedInto(managerClass: string): string {
+    const managers = constructionsOf(managerClass);
+    expect(managers, managerClass).toHaveLength(1);
+    const injected = managers[0]?.arguments?.[0];
+    expect(injected !== undefined && ts.isIdentifier(injected), managerClass).toBe(true);
+    return (injected as ts.Identifier).text;
 }
 
 /** Every `<receiver>.<method>(...)` call in the file, by receiver identifier. */
@@ -90,21 +97,32 @@ function receiversCalling(method: string): string[] {
         );
 }
 
-describe('save temp reap — composition root wiring', () => {
-    it('constructs exactly one FileSaveRepository, bound to a name', () => {
-        expect(constructionsOf('FileSaveRepository')).toHaveLength(1);
-        expect(boundNameOf('FileSaveRepository')).not.toHaveLength(0);
+/** Each repository whose temp artefacts are reaped, and the manager built on it. */
+const REAPED = [
+    { repository: 'FileSaveRepository', manager: 'SaveManager' },
+    { repository: 'FileReplayRepository', manager: 'ReplayManager' },
+    { repository: 'FilePerspectiveReplayRepository', manager: 'PerspectiveReplayManager' },
+] as const;
+
+describe('temp reap — composition root wiring', () => {
+    it.each(REAPED)('constructs exactly one $repository, bound to a name', ({ repository }) => {
+        expect(constructionsOf(repository)).toHaveLength(1);
+        expect(boundNameOf(repository)).not.toHaveLength(0);
     });
 
-    it('names the SAME repository instance the SaveManager is built on as the reap receiver', () => {
-        const repository = boundNameOf('FileSaveRepository');
+    it.each(REAPED)(
+        'builds the $manager on the bound $repository instance',
+        ({ repository, manager }) => {
+            expect(repositoryInjectedInto(manager)).toBe(boundNameOf(repository));
+        },
+    );
 
-        const managers = constructionsOf('SaveManager');
-        expect(managers).toHaveLength(1);
-        const injected = managers[0]?.arguments?.[0];
-        expect(injected !== undefined && ts.isIdentifier(injected)).toBe(true);
-        expect((injected as ts.Identifier).text).toBe(repository);
+    // One call per repository, each on that repository's own binding: a reap
+    // on a second instance, a repeated one, or one on any other receiver all
+    // change this list.
+    it('reaps on exactly those instances, once each', () => {
+        const expected = REAPED.map(({ repository }) => boundNameOf(repository)).sort();
 
-        expect(receiversCalling('reapOrphanTempFiles')).toStrictEqual([repository]);
+        expect([...receiversCalling('reapOrphanTempFiles')].sort()).toStrictEqual(expected);
     });
 });

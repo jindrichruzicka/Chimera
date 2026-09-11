@@ -34,6 +34,7 @@ import {
     SaveIntegrityError,
 } from '@chimera-engine/simulation/persistence/SaveMigrator.js';
 import { computeBodyChecksum } from '@chimera-engine/simulation/persistence/SaveChecksum.js';
+import { sweepOrphanTempFiles } from '../orphan-temp-reap.js';
 
 /** Extension used for save files. */
 const FILE_EXT = '.chimera';
@@ -53,28 +54,6 @@ const TEMP_EXT = '.tmp';
  * metacharacter either constant contains, and the leading `\\` escapes it.
  */
 const TEMP_FILE_RE = new RegExp(`\\${FILE_EXT}(\\.\\d+)?\\${TEMP_EXT}$`);
-
-/**
- * How old a temp artefact must be before `reapOrphanTempFiles()` treats it as
- * abandoned.
- *
- * The reaper cannot ask whether an artefact belongs to a write in flight: the
- * app requests no single-instance lock, so a SECOND instance sharing this
- * `userData` may be writing one right now, and taking that file would restore
- * the failure the per-write temp name removed — a rename that finds nothing
- * and rejects its caller's save. So it decides on age.
- *
- * The window is set by what a wrong answer costs in each direction, not by
- * timing a write: reaping late costs disk the sweep gives back on the next
- * start, while reaping early costs a save. `FileSaveRepository.reap.test.ts`
- * measures the property the window buys — a write in flight survives a sweep
- * that takes an aged artefact in the same pass.
- *
- * It is a heuristic, not a proof. A writer suspended past the window — a
- * laptop asleep mid-save — has its artefact taken, and its rename then fails
- * the way any interrupted save's does.
- */
-export const ORPHAN_TEMP_MAX_AGE_MS = 60 * 60 * 1000;
 
 /**
  * Maximum number of save-file entries read in parallel by `list()`.
@@ -304,13 +283,9 @@ export class FileSaveRepository implements SaveRepository {
      * this sweep each crash mid-save costs one save file's worth of disk
      * forever.
      *
-     * Only artefacts older than {@link ORPHAN_TEMP_MAX_AGE_MS} are taken — see
-     * that constant for why the decision is age and not ownership. Below the
-     * base directory every filesystem call is best-effort: a name that is not a
-     * directory (`.DS_Store` sits beside the game directories on macOS), a
-     * directory that vanishes under the sweep, a file another reaper already
-     * took, an unlink the OS refuses — each is skipped and left out of the
-     * count, because the sweep's only job is to give back disk.
+     * What is taken, and on what evidence, is `sweepOrphanTempFiles()` in
+     * `electron/main/orphan-temp-reap.ts`; this repository supplies only which
+     * names are its temp files.
      *
      * Call it once per app start, from the composition root that builds the
      * repository. It is deliberately NOT on `SaveRepository`: an in-memory
@@ -320,39 +295,7 @@ export class FileSaveRepository implements SaveRepository {
      * @returns how many artefacts were unlinked.
      */
     async reapOrphanTempFiles(): Promise<number> {
-        const gameDirs = await fs.readdir(this.baseDir).catch((err: unknown): string[] => {
-            if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
-            throw err;
-        });
-
-        // One cutoff for the whole sweep: a directory read late in the pass must
-        // not use a later "now" than one read early, or the window would widen
-        // as the sweep runs.
-        const cutoff = Date.now() - ORPHAN_TEMP_MAX_AGE_MS;
-        let reaped = 0;
-
-        for (const gameDir of gameDirs) {
-            const dir = path.join(this.baseDir, gameDir);
-            // Reading a plain file as a directory throws ENOTDIR; the same catch
-            // covers a directory removed between the two reads.
-            const names = await fs.readdir(dir).catch((): string[] => []);
-
-            for (const name of names) {
-                if (!TEMP_FILE_RE.test(name)) continue;
-
-                const filePath = path.join(dir, name);
-                const stat = await fs.stat(filePath).catch(() => undefined);
-                if (stat === undefined || stat.mtimeMs > cutoff) continue;
-
-                const unlinked = await fs
-                    .unlink(filePath)
-                    .then(() => true)
-                    .catch(() => false);
-                if (unlinked) reaped += 1;
-            }
-        }
-
-        return reaped;
+        return sweepOrphanTempFiles(this.baseDir, (name) => TEMP_FILE_RE.test(name));
     }
 
     async has(slotId: string): Promise<boolean> {

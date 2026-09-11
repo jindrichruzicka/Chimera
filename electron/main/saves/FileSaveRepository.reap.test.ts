@@ -11,6 +11,7 @@
  * whether a temp belongs to a write in flight in a SECOND instance sharing the
  * same `userData` — so these tests drive both sides of that decision: an aged
  * artefact must go, and a write still in flight must survive the same pass.
+ * The sweep's other cases are in `orphan-temp-reap.test.ts`.
  *
  * Tests written FIRST (red); implementation in `FileSaveRepository.ts`.
  *
@@ -29,7 +30,7 @@ import {
     createDefaultMigrator,
 } from '@chimera-engine/simulation/persistence/index.js';
 import { makeFile } from '@chimera-engine/simulation/persistence/__test-support__/saveRepositoryContractTests.js';
-import { FileSaveRepository, ORPHAN_TEMP_MAX_AGE_MS } from './FileSaveRepository.js';
+import { FileSaveRepository } from './FileSaveRepository.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -88,20 +89,13 @@ async function plantTemp(dir: string, name: string, ageMs: number): Promise<stri
     return filePath;
 }
 
-const MINUTE_MS = 60 * 1000;
-const HOUR_MS = 60 * MINUTE_MS;
-
 /**
- * Fixture ages are ABSOLUTE, not derived from `ORPHAN_TEMP_MAX_AGE_MS`.
- *
- * Deriving them would make every fixture scale with the constant, leaving its
- * magnitude unmeasured — a window shrunk to a minute would keep the whole suite
- * green while taking any write in flight for sixty seconds. Fixed durations
- * straddling one hour fail in both directions instead: shrink the window and
- * the fresh artefact is taken, widen it and the aged one survives.
+ * Absolute ages straddling the sweep's one-hour window, never derived from it:
+ * a write in flight for half an hour must survive, an artefact six hours old
+ * must go.
  */
-const AGED = 6 * HOUR_MS;
-const FRESH = 30 * MINUTE_MS;
+const AGED = 6 * 60 * 60 * 1000;
+const IN_FLIGHT = 30 * 60 * 1000;
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
@@ -119,10 +113,6 @@ describe('FileSaveRepository — reapOrphanTempFiles()', () => {
     function makeRepo(serializer: SaveSerializer = new JsonSaveSerializer()): FileSaveRepository {
         return new FileSaveRepository(serializer, createDefaultMigrator(), baseDir);
     }
-
-    it('sets the orphan window to one hour', () => {
-        expect(ORPHAN_TEMP_MAX_AGE_MS).toBe(HOUR_MS);
-    });
 
     it('reaps an artefact carrying the exact name save() gives its temp file', async () => {
         // No temp spelling is written down here. The name comes from a real
@@ -164,24 +154,26 @@ describe('FileSaveRepository — reapOrphanTempFiles()', () => {
         const pending = repo.save(makeFile('tactics', 'autosave'));
         await entered.promise;
 
-        // The in-flight write's temp file is on disk right now, and its mtime
-        // is seconds old. Reaping must skip it and take the aged one.
-        const reaped = await repo.reapOrphanTempFiles();
+        // The write's temp file is on disk now. Backdated half an hour it is
+        // still inside the window — and a window shrunk below that would take
+        // it out from under the rename, which then rejects the save. Released
+        // in `finally`, so a reap that throws does not strand the write's open
+        // file handle.
+        const inFlight = (await fs.readdir(dir)).filter((name) => path.join(dir, name) !== orphan);
+        expect(inFlight).toHaveLength(1);
+        await ageFile(path.join(dir, inFlight[0]!), IN_FLIGHT);
 
-        release.resolve(undefined);
+        let reaped: number;
+        try {
+            reaped = await repo.reapOrphanTempFiles();
+        } finally {
+            release.resolve(undefined);
+        }
         await expect(pending).resolves.toBeUndefined();
 
         expect(reaped).toBe(1);
         expect(await exists(orphan)).toBe(false);
         await expect(repo.load('tactics/autosave')).resolves.toBeDefined();
-    });
-
-    it('leaves an artefact younger than the window in place', async () => {
-        const dir = path.join(baseDir, 'tactics');
-        const fresh = await plantTemp(dir, 'autosave.chimera.4.tmp', FRESH);
-
-        await expect(makeRepo().reapOrphanTempFiles()).resolves.toBe(0);
-        expect(await exists(fresh)).toBe(true);
     });
 
     it('reaps the older per-slot temp name as well as the per-write one', async () => {
@@ -221,75 +213,5 @@ describe('FileSaveRepository — reapOrphanTempFiles()', () => {
         expect(await exists(backup)).toBe(true);
         expect(await exists(renamed)).toBe(true);
         await expect(repo.load('tactics/autosave')).resolves.toBeDefined();
-    });
-
-    it('sweeps every game directory under the base, not just the first', async () => {
-        const tactics = await plantTemp(
-            path.join(baseDir, 'tactics'),
-            'autosave.chimera.1.tmp',
-            AGED,
-        );
-        const action = await plantTemp(path.join(baseDir, 'action'), 'slot-1.chimera.2.tmp', AGED);
-
-        await expect(makeRepo().reapOrphanTempFiles()).resolves.toBe(2);
-        expect(await exists(tactics)).toBe(false);
-        expect(await exists(action)).toBe(false);
-    });
-
-    // chmod cannot stop root from unlinking, so the refusal below is not
-    // reachable there. Skipped rather than silently vacuous.
-    it.skipIf(typeof process.getuid === 'function' && process.getuid() === 0)(
-        'leaves an unlink the OS refuses out of the count, and does not throw',
-        async () => {
-            // A read-only game directory is the reachable stand-in for every
-            // reason an unlink can fail — a permission the user changed, a file
-            // another reaper took first. The sweep reports what it actually
-            // removed, so a refused unlink must not be counted, and must not end
-            // the pass either: the aged artefact in the OTHER directory still
-            // has to go.
-            const locked = path.join(baseDir, 'tactics');
-            const kept = await plantTemp(locked, 'autosave.chimera.1.tmp', AGED);
-            const reachable = await plantTemp(
-                path.join(baseDir, 'action'),
-                'slot-1.chimera.1.tmp',
-                AGED,
-            );
-
-            await fs.chmod(locked, 0o555);
-            try {
-                await expect(makeRepo().reapOrphanTempFiles()).resolves.toBe(1);
-                expect(await exists(kept)).toBe(true);
-                expect(await exists(reachable)).toBe(false);
-            } finally {
-                // Restore before the afterEach rm, which cannot remove a file
-                // from a directory it may not write to.
-                await fs.chmod(locked, 0o755);
-            }
-        },
-    );
-
-    it('resolves 0 when the saves directory does not exist yet', async () => {
-        const repo = new FileSaveRepository(
-            new JsonSaveSerializer(),
-            createDefaultMigrator(),
-            path.join(baseDir, 'never-created'),
-        );
-
-        await expect(repo.reapOrphanTempFiles()).resolves.toBe(0);
-    });
-
-    it('ignores a plain file sitting directly in the saves directory', async () => {
-        // `.DS_Store` is the everyday case on macOS: readdir returns it beside
-        // the game directories, and reading it as one throws ENOTDIR. The sweep
-        // has to carry on past it to the directory that does hold an artefact.
-        await fs.writeFile(path.join(baseDir, '.DS_Store'), 'finder');
-        const orphan = await plantTemp(
-            path.join(baseDir, 'tactics'),
-            'autosave.chimera.1.tmp',
-            AGED,
-        );
-
-        await expect(makeRepo().reapOrphanTempFiles()).resolves.toBe(1);
-        expect(await exists(orphan)).toBe(false);
     });
 });

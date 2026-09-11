@@ -130,6 +130,8 @@ The manager owns only the `ReplayFile` / repository / migrator contracts — no 
 
 **Atomic write.** `FileReplayRepository.save()` writes to `<dest>.tmp`, `fsync`s, then `rename`s atomically. Each file gets a fresh UUID, so an existing replay is never overwritten; a crash between write and rename leaves only a `.tmp` artefact, never a half-written `.chimera-replay`.
 
+**Orphaned temp files.** That `.tmp` path belongs to one write, so no later write reopens or truncates an artefact a crash leaves. `reapOrphanTempFiles()` gives the disk back: once per app start the composition root sweeps `userData/replays/*/`, and `userData/perspective-replays/*/` through `FilePerspectiveReplayRepository`'s method of the same name, taking only temp artefacts at least `ORPHAN_TEMP_MAX_AGE_MS` old. Why the decision is age rather than ownership is on that constant, in `electron/main/orphan-temp-reap.ts`.
+
 **Version-compatibility guard.** `load()` calls `migrator.ensureCompatible(file, { engineVersion, gameVersion })`; it throws `ReplayVersionError` when the file's `(engineVersion, gameId, gameVersion)` triple mismatches the running engine and no registered migration covers it. `listItems()` deliberately **skips** the guard so a replay the current engine can no longer play still appears in the browser for deletion — and it projects only non-gameplay scalars, so neither a `GameSnapshot` nor the action log leaves the main process (invariants #3/#71).
 
 ---

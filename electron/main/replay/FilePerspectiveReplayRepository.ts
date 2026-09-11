@@ -12,10 +12,11 @@
  *
  * `save()` writes to a `.tmp` file first, fsyncs, then renames atomically to the
  * final path (invariant #23). The repository assigns a fresh UUID per replay, so
- * it never overwrites an existing file. Containment and gameId validation are
- * shared with `FileReplayRepository` (its `ReplayPathError`, `InvalidGameIdError`,
- * and `LIST_CONCURRENCY` are reused) so the two persistence-layer guards cannot
- * drift.
+ * it never overwrites an existing file — and no later write reopens a temp
+ * path, which is why `reapOrphanTempFiles()` exists. Containment and gameId
+ * validation are shared with `FileReplayRepository` (its `ReplayPathError`,
+ * `InvalidGameIdError`, and `LIST_CONCURRENCY` are reused) so the two
+ * persistence-layer guards cannot drift.
  *
  * Architecture reference: §4.28
  *
@@ -37,11 +38,19 @@ import type {
 } from '@chimera-engine/simulation/replay/index.js';
 import { ReplayNotFoundError } from '@chimera-engine/simulation/replay/index.js';
 import type { Logger } from '../logging/logger.js';
+import { sweepOrphanTempFiles } from '../orphan-temp-reap.js';
 import { isInsidePath } from '../path-containment.js';
 import { InvalidGameIdError, LIST_CONCURRENCY, ReplayPathError } from './FileReplayRepository.js';
 
 /** Extension used for stored perspective replay files (distinct from `.chimera-replay`). */
 const FILE_EXT = '.chimera-perspective-replay';
+
+/**
+ * How every temp file `save()` writes ends:
+ * `<uuid>.chimera-perspective-replay.tmp`. The writer and the reaper both read
+ * it, so a change reaches the two together.
+ */
+const TEMP_SUFFIX = `${FILE_EXT}.tmp`;
 
 /** Allowlist pattern for the `<gameId>` path component (anti path-traversal). */
 const GAME_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
@@ -91,8 +100,9 @@ export class FilePerspectiveReplayRepository implements PerspectiveReplayReposit
         const dir = path.join(this.resolvedBase, file.gameId);
         await fs.mkdir(dir, { recursive: true });
 
-        const dest = path.join(dir, `${randomUUID()}${FILE_EXT}`);
-        const tmp = `${dest}.tmp`;
+        const id = randomUUID();
+        const dest = path.join(dir, `${id}${FILE_EXT}`);
+        const tmp = path.join(dir, `${id}${TEMP_SUFFIX}`);
 
         const fh = await fs.open(tmp, 'w');
         try {
@@ -200,5 +210,26 @@ export class FilePerspectiveReplayRepository implements PerspectiveReplayReposit
             throw err;
         }
         this.log.debug('delete', { path: resolved });
+    }
+
+    // ── Maintenance (not part of the PerspectiveReplayRepository contract) ────
+
+    /**
+     * Delete temp artefacts left by writes that never reached their rename.
+     *
+     * A temp path belongs to one write, so a process killed between the write
+     * and the rename leaves a full-size file that no later `save()` reopens
+     * and `list()` does not show. What is taken, and on what evidence, is
+     * `sweepOrphanTempFiles()` in `electron/main/orphan-temp-reap.ts`; this
+     * repository supplies only which names are its temp files.
+     *
+     * Call it once per app start, from the composition root that builds the
+     * repository. It is deliberately NOT on `PerspectiveReplayRepository`: an
+     * in-memory repository has nothing to reap.
+     *
+     * @returns how many artefacts were unlinked.
+     */
+    async reapOrphanTempFiles(): Promise<number> {
+        return sweepOrphanTempFiles(this.resolvedBase, (name) => name.endsWith(TEMP_SUFFIX));
     }
 }

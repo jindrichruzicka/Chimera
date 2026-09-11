@@ -418,10 +418,16 @@ vi.mock('@chimera-engine/simulation/host', () => ({
 // persists at finalise, without touching disk. The manager itself is exercised
 // for real so these tests cover the egress wiring + manager together (start /
 // recordSnapshot lock-to-seat / finalise / abort), asserting on the saved file.
-const { perspectiveSaves, mockFilePerspectiveReplayRepoCtor } = vi.hoisted(() => {
+const { perspectiveSaves, perspectiveReap, mockFilePerspectiveReplayRepoCtor } = vi.hoisted(() => {
     const perspectiveSaves: { value: unknown[] } = { value: [] };
+    // What the startup reap on the mocked repository settles to. A case may
+    // swap it before `main()` to drive the composition root's report of it.
+    const perspectiveReap: { outcome: () => Promise<number> } = {
+        outcome: () => Promise.resolve(0),
+    };
     return {
         perspectiveSaves,
+        perspectiveReap,
         mockFilePerspectiveReplayRepoCtor: vi.fn(() => ({
             save: vi.fn((file: unknown) => {
                 perspectiveSaves.value.push(file);
@@ -432,6 +438,7 @@ const { perspectiveSaves, mockFilePerspectiveReplayRepoCtor } = vi.hoisted(() =>
             load: vi.fn(() => Promise.reject(new Error('load not used in T5 wiring tests'))),
             list: vi.fn<(gameId: string) => Promise<string[]>>(() => Promise.resolve([])),
             delete: vi.fn<(filePath: string) => Promise<void>>(() => Promise.resolve()),
+            reapOrphanTempFiles: vi.fn<() => Promise<number>>(() => perspectiveReap.outcome()),
         })),
     };
 });
@@ -2535,6 +2542,16 @@ describe('main', () => {
         expect(capturedSaveManagerRepoClassName.value).toBe('FileSaveRepository');
     });
 
+    /**
+     * The entries with `message` that reached the mocked Pino destination —
+     * the file sink `main()`'s root logger writes through.
+     */
+    function loggedEntries(message: string): LogEntry[] {
+        return fakeDest.write.mock.calls
+            .map(([data]) => JSON.parse(data) as LogEntry)
+            .filter((entry) => entry.message === message);
+    }
+
     it('running main() reaps an abandoned save temp file under its own userData', async () => {
         // The wiring guard next door parses `index.ts` and can only see that a
         // call is WRITTEN. Reachability is a different question: a reap moved
@@ -2556,6 +2573,7 @@ describe('main', () => {
         // rather than in flight.
         const aged = (Date.now() - 6 * 60 * 60 * 1000) / 1000;
         await fsPromises.utimes(abandoned, aged, aged);
+        fakeDest.write.mockClear();
 
         try {
             await main(makeTestContributions());
@@ -2571,8 +2589,99 @@ describe('main', () => {
                         .catch(() => false),
                 )
                 .toBe(false);
+            // And the call site reports it under the root it swept.
+            await expect
+                .poll(() => loggedEntries('reaped orphaned save temp files'))
+                .toEqual([
+                    expect.objectContaining({
+                        level: 'info',
+                        context: expect.objectContaining({ module: 'saves', reaped: 1 }) as unknown,
+                    }),
+                ]);
         } finally {
             await fsPromises.rm(userData, { recursive: true, force: true });
+        }
+    });
+
+    it('running main() reaps an abandoned replay temp file under its own userData', async () => {
+        // The replay half of the case above, for the same reason: the wiring
+        // guard sees that a reap is written, not that `main()` reaches it.
+        // `FileReplayRepository` is the real class here (the spy subclass
+        // delegates to it), so the sweep runs for real.
+        const userData = await fsPromises.mkdtemp(
+            path.join(tmpdir(), 'chimera-main-replay-reap-test-'),
+        );
+        appGetPath.mockImplementation(() => userData);
+
+        const abandoned = path.join(
+            userData,
+            'replays',
+            'tactics',
+            '0b5e8f7a-3c1d-4e2f-9a6b-7c8d9e0f1a2b.chimera-replay.tmp',
+        );
+        await fsPromises.mkdir(path.dirname(abandoned), { recursive: true });
+        await fsPromises.writeFile(abandoned, 'bytes a crash left behind');
+        const aged = (Date.now() - 6 * 60 * 60 * 1000) / 1000;
+        await fsPromises.utimes(abandoned, aged, aged);
+        fakeDest.write.mockClear();
+
+        try {
+            await main(makeTestContributions());
+
+            await expect
+                .poll(() =>
+                    fsPromises
+                        .access(abandoned)
+                        .then(() => true)
+                        .catch(() => false),
+                )
+                .toBe(false);
+            await expect
+                .poll(() => loggedEntries('reaped orphaned replay temp files'))
+                .toEqual([
+                    expect.objectContaining({
+                        level: 'info',
+                        context: expect.objectContaining({
+                            module: 'replays',
+                            reaped: 1,
+                        }) as unknown,
+                    }),
+                ]);
+        } finally {
+            await fsPromises.rm(userData, { recursive: true, force: true });
+        }
+    });
+
+    it('running main() reaps on the perspective replay repository it builds, and reports a failed reap', async () => {
+        // The perspective repository is mocked in this file, so what is
+        // measured here is the composition root's side: that `main()` REACHES
+        // the reap on the instance it constructed, and that a reap which fails
+        // arrives as a warning under its own root rather than as an unhandled
+        // rejection. What the sweep does on disk is pinned in
+        // `FilePerspectiveReplayRepository.reap.test.ts`.
+        perspectiveReap.outcome = () => Promise.reject(new Error('EACCES: permission denied'));
+        fakeDest.write.mockClear();
+
+        try {
+            await main(makeTestContributions());
+
+            const repository = mockFilePerspectiveReplayRepoCtor.mock.results.at(-1)?.value as
+                | { reapOrphanTempFiles: ReturnType<typeof vi.fn> }
+                | undefined;
+            expect(repository?.reapOrphanTempFiles).toHaveBeenCalledOnce();
+            await expect
+                .poll(() => loggedEntries('failed to reap orphaned perspective replay temp files'))
+                .toEqual([
+                    expect.objectContaining({
+                        level: 'warn',
+                        context: expect.objectContaining({
+                            module: 'perspective-replays',
+                            error: 'EACCES: permission denied',
+                        }) as unknown,
+                    }),
+                ]);
+        } finally {
+            perspectiveReap.outcome = () => Promise.resolve(0);
         }
     });
 

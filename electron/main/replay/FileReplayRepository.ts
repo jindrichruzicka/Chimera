@@ -11,7 +11,8 @@
  * the final path. A crash between the `.tmp` write and the rename therefore
  * leaves only a `.tmp` artefact — never a half-written `.chimera-replay` (which
  * `list()` would surface). The repository assigns a fresh UUID per replay, so
- * it never overwrites an existing file.
+ * it never overwrites an existing file — and no later write reopens a temp
+ * path, which is why `reapOrphanTempFiles()` exists.
  *
  * `baseDir` is `app.getPath('userData')/replays` in production; pass an explicit
  * temp directory in tests to avoid touching the real user directory.
@@ -33,10 +34,17 @@ import type {
     ReplaySerializer,
 } from '@chimera-engine/simulation/replay/index.js';
 import { ReplayNotFoundError } from '@chimera-engine/simulation/replay/index.js';
+import { sweepOrphanTempFiles } from '../orphan-temp-reap.js';
 import { isInsidePath } from '../path-containment.js';
 
 /** Extension used for stored replay files. */
 const FILE_EXT = '.chimera-replay';
+
+/**
+ * How every temp file `save()` writes ends: `<uuid>.chimera-replay.tmp`. The
+ * writer and the reaper both read it, so a change reaches the two together.
+ */
+const TEMP_SUFFIX = `${FILE_EXT}.tmp`;
 
 /**
  * Maximum number of replay files read in parallel by `list()`. Caps
@@ -119,8 +127,9 @@ export class FileReplayRepository implements ReplayRepository {
         const dir = path.join(this.resolvedBase, file.gameId);
         await fs.mkdir(dir, { recursive: true });
 
-        const dest = path.join(dir, `${randomUUID()}${FILE_EXT}`);
-        const tmp = `${dest}.tmp`;
+        const id = randomUUID();
+        const dest = path.join(dir, `${id}${FILE_EXT}`);
+        const tmp = path.join(dir, `${id}${TEMP_SUFFIX}`);
 
         const fh = await fs.open(tmp, 'w');
         try {
@@ -231,5 +240,26 @@ export class FileReplayRepository implements ReplayRepository {
             }
             throw err;
         }
+    }
+
+    // ── Maintenance (not part of the ReplayRepository contract) ───────────────
+
+    /**
+     * Delete temp artefacts left by writes that never reached their rename.
+     *
+     * A temp path belongs to one write, so a process killed between the write
+     * and the rename leaves a full-size file that no later `save()` reopens
+     * and `list()` does not show. What is taken, and on what evidence, is
+     * `sweepOrphanTempFiles()` in `electron/main/orphan-temp-reap.ts`; this
+     * repository supplies only which names are its temp files.
+     *
+     * Call it once per app start, from the composition root that builds the
+     * repository. It is deliberately NOT on `ReplayRepository`: an in-memory
+     * repository has nothing to reap.
+     *
+     * @returns how many artefacts were unlinked.
+     */
+    async reapOrphanTempFiles(): Promise<number> {
+        return sweepOrphanTempFiles(this.resolvedBase, (name) => name.endsWith(TEMP_SUFFIX));
     }
 }
