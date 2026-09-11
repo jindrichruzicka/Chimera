@@ -109,7 +109,7 @@ import { SpectatorRegistry } from './lobby/SpectatorRegistry.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { RealtimeTicker } from './runtime/RealtimeTicker.js';
 import { resolveE2eForcedTickerHz } from './runtime/e2e-realtime-seam.js';
-import { restampForHeartbeatHost } from './runtime/realtime-input.js';
+import { envelopeToApply } from './runtime/realtime-input.js';
 import { startHostMetricsPush } from './runtime/host-metrics-push.js';
 import {
     buildHostSessionPipeline,
@@ -2646,10 +2646,13 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // call, so the stamp is behind whenever the hop spanned a beat and
             // the pipeline's `StaleActionError` would refuse the input; the
             // re-stamp leaves a host with no ticker's envelope untouched, where
-            // that refusal is right. Every envelope entering here takes the same
-            // road — the host's renderer, a remote client, an AI seat.
+            // that refusal is right. The exception is
+            // `engine:sync_request`, re-stamped on every host: a client sends
+            // it after refusing a delta, stamped with the tick it holds, which
+            // need not be the host's. Every envelope entering here takes the
+            // same road — the host's renderer, a remote client, an AI seat.
             const runHostAction = (received: ActionEnvelope): void => {
-                const action = restampForHeartbeatHost(received, {
+                const action = envelopeToApply(received, {
                     heartbeatDriven: realtimeTicker !== null,
                     hostTick: sessionRuntime.getSnapshot().tick,
                 });

@@ -28,7 +28,9 @@ import type {
     PlayerId,
 } from '@chimera-engine/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
-import { ReplayMigrator } from '@chimera-engine/simulation/replay/index.js';
+import { ReplayMigrator, ReplayPlayer } from '@chimera-engine/simulation/replay/index.js';
+import type { ReplayFile } from '@chimera-engine/simulation/replay/index.js';
+import { makeReplayFile } from '@chimera-engine/simulation/replay/__test-support__/replayRepositoryContractTests.js';
 import { CompressedReplaySerializer } from '../replay/CompressedReplaySerializer.js';
 import type { ReplayHeader } from '@chimera-engine/simulation/replay/index.js';
 import { FileReplayRepository } from '../replay/FileReplayRepository.js';
@@ -317,5 +319,46 @@ describe('replay wiring — end-to-end persistence', () => {
         const entries = await readdir(path.join(tmpDir, 'tactics'));
         expect(entries.filter((n) => n.endsWith('.chimera-replay'))).toHaveLength(1);
         expect(entries.filter((n) => n.endsWith('.tmp'))).toHaveLength(0);
+    });
+});
+
+// ── A re-sync request is not recorded ─────────────────────────────────────────
+
+describe('buildHostSessionPipeline — engine:sync_request and the recording', () => {
+    const P2 = toPlayerId('player-2');
+
+    it('records the actions around a re-sync request, and the recording replays to its end', () => {
+        // A re-sync changes nothing, and `ReplayPlayer.step()` refuses a
+        // recorded action that does not advance the tick by exactly one.
+        const { port, recordAction } = makeFakeReplayPort();
+        const { processAction } = buildHostSessionPipeline(makeRegistry(), vi.fn(), {
+            gameId: 'tactics',
+            savePort: noopSavePort,
+            replayPort: port,
+        });
+
+        const s0 = makeBaseSnapshot(0, [P1, P2]);
+        const s1 = processAction(s0, advanceEnvelope(0));
+        const afterResync = processAction(s1, {
+            type: 'engine:sync_request',
+            playerId: P2,
+            tick: s1.tick,
+            payload: {},
+        });
+        processAction(afterResync, advanceEnvelope(afterResync.tick));
+
+        const recorded = recordAction.mock.calls.map((c) => c[0] as ReplayFile['actions'][number]);
+        expect(recorded.map((entry) => [entry.tick, entry.action.type])).toStrictEqual([
+            [0, 'game:advance'],
+            [1, 'game:advance'],
+        ]);
+
+        const player = new ReplayPlayer(
+            makeReplayFile('tactics', undefined, { actions: recorded }),
+            buildHostSessionPipeline(makeRegistry(), vi.fn()).pipeline,
+            () => makeBaseSnapshot(0, [P1, P2]),
+        );
+        player.initialize();
+        expect(player.playSync().tick).toBe(2);
     });
 });

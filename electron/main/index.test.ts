@@ -3832,6 +3832,107 @@ describe('main', () => {
         }
     });
 
+    // ── A delta re-sync request on a turn-based host ─────────────────────────
+    // A client whose delta would not apply asks for a keyframe with
+    // `engine:sync_request`, stamped with the tick of the last snapshot it
+    // HOLDS. A host with no ticker applies it at its own tick and Stage 7
+    // forces a whole snapshot for the asker; the stale renderer action above
+    // is still refused.
+
+    it("answers a remote client's sync request stamped behind the clock with a forced wave on a turn-based host", async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterCtor.mockClear();
+        ipcMainOn.mockClear();
+        let teardown: (() => void) | void = undefined;
+        try {
+            await main(makeTestContributions());
+
+            const { transport, options, capturedJoinRef, capturedActionRef } =
+                makeSpectatorSessionHarness();
+            const hostId = playerId('host-resync-remote');
+            const clientId = playerId('client-resync-remote');
+            teardown = options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+            capturedJoinRef.current?.({ playerId: clientId });
+            options?.onGameStartRequested?.({
+                info: { sessionId: 'session-resync-remote', hostId, gameId: 'tactics' },
+                players: [
+                    { playerId: hostId, displayName: 'Host', ready: true },
+                    { playerId: clientId, displayName: 'Client', ready: true },
+                ],
+            });
+
+            // The host acts, taking the clock from 1 to 2. The client's copy
+            // of that change is the delta it could not apply, so what it holds
+            // is still tick 1.
+            mockSimulationHostInstance.afterTick.mockClear();
+            capturedActionRef.current?.(hostId, {
+                type: 'engine:end_turn',
+                playerId: hostId,
+                tick: 1,
+                payload: {},
+            });
+            expect(mockSimulationHostInstance.afterTick).toHaveBeenLastCalledWith(
+                expect.objectContaining({ tick: 2 }),
+            );
+
+            mockStateBroadcasterInstance.broadcastWave.mockClear();
+            capturedActionRef.current?.(clientId, {
+                type: 'engine:sync_request',
+                playerId: clientId,
+                tick: 1,
+                payload: {},
+            });
+
+            // Stage 7 ran on the host's live tick and told the broadcaster the
+            // asker gets a whole snapshot, not a delta against the baseline it
+            // lost.
+            expect(mockStateBroadcasterInstance.broadcastWave).toHaveBeenCalledWith(
+                expect.objectContaining({ tick: 2 }),
+                clientId,
+                { forceFull: true },
+            );
+        } finally {
+            teardown?.();
+        }
+    });
+
+    it("answers the host renderer's sync request stamped behind the clock with a forced wave on a turn-based host", async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterCtor.mockClear();
+        ipcMainOn.mockClear();
+        let teardown: (() => void) | void = undefined;
+        try {
+            await main(makeTestContributions());
+
+            const { transport, options } = makeSpectatorSessionHarness();
+            const hostId = playerId('host-resync-renderer');
+            teardown = options?.onSessionHosted?.(transport, { hostId, maxPlayers: 1 });
+            options?.onGameStartRequested?.({
+                info: { sessionId: 'session-resync-renderer', hostId, gameId: 'tactics' },
+                players: [{ playerId: hostId, displayName: 'Host', ready: true }],
+            });
+
+            mockStateBroadcasterInstance.broadcastWave.mockClear();
+            // `engine:start_game` took the clock to 1; the renderer's request
+            // carries the 0 of a store that never adopted that snapshot.
+            const senderSend = sendRendererAction({
+                type: 'engine:sync_request',
+                playerId: hostId,
+                tick: 0,
+                payload: {},
+            });
+
+            expect(senderSend).not.toHaveBeenCalled();
+            expect(mockStateBroadcasterInstance.broadcastWave).toHaveBeenCalledWith(
+                expect.objectContaining({ tick: 1 }),
+                hostId,
+                { forceFull: true },
+            );
+        } finally {
+            teardown?.();
+        }
+    });
+
     it('removes a spectator from the viewer registry when it disconnects', async () => {
         mockLobbyManagerCtor.mockClear();
         mockStateBroadcasterCtor.mockClear();

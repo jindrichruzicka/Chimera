@@ -428,13 +428,18 @@ export function buildHostSessionPipeline(
         }
 
         // ── Replay recording ──────────────────────────────────────────────────
-        // Record every successfully applied action while the match is live.
+        // Record each successfully applied action while the match is live,
+        // except `engine:sync_request` (below).
         // After resolution the recording is already finalised, so the
         // `!wasResolved` guard both records the match-ending action and prevents
         // a record-after-finalise.  Side-channel traffic never reaches here, so
         // it is excluded by construction (invariant #71).  A recording failure
         // must never break the live pipeline (invariant #25 spirit).
-        if (!wasResolved && replayPort !== undefined) {
+        //
+        // `engine:sync_request` changes nothing, and
+        // `ReplayPlayer.step()` refuses a recorded action that does not advance
+        // the tick by exactly one (invariant #42).
+        if (!wasResolved && replayPort !== undefined && action.type !== 'engine:sync_request') {
             try {
                 replayPort.recordAction({
                     tick: action.tick, // invariant #42: tick at the time of the action

@@ -232,9 +232,7 @@ describe('sustained-match retention — per-beat working state', () => {
 describe('sustained-match retention — what is deliberately NOT bounded', () => {
     it('lets the deterministic recording grow, which is the format and not a leak', () => {
         // Stated so the gates above are not read as "nothing the host holds
-        // grows". A deterministic replay must retain EVERY action or it cannot
-        // reproduce the match, so this buffer is bounded by match length alone.
-        // Measured rather than gated, so a future cap on it — which would
+        // grows". Measured rather than gated, so a future cap on it — which would
         // silently break replay — shows up as this expectation failing.
         const { atN, at2N } = sampleAtNand2N(BEAT_N, true);
 

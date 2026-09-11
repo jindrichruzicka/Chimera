@@ -69,9 +69,7 @@ export interface PerspectiveReplayEngineIdentity {
  *
  * The number matches `MAX_ACTION_HISTORY_ENTRIES` — the engine's existing
  * order of magnitude for a per-match retained buffer — and nothing more is
- * claimed for it: the two fill at different rates, because the action history
- * appends on every depth-0 dispatch while a frame is retained only when the
- * beat changed something.
+ * claimed for it.
  *
  * The retained cost is a whole projected snapshot per frame, so it scales with
  * the game's entity count rather than with this number alone.

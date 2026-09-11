@@ -376,3 +376,41 @@ describe('buildHostSessionPipeline — AC3: engine:undo Stage 3 intercept', () =
         expect(undoMetaOf(p2snap!).canUndo).toBe(false);
     });
 });
+
+// ── A re-sync request leaves no undo step ────────────────────────────────────
+
+describe('buildHostSessionPipeline — engine:sync_request and undo', () => {
+    const syncRequestEnvelope = (tick: number, from: PlayerId): ActionEnvelope => ({
+        type: 'engine:sync_request',
+        playerId: from,
+        tick,
+        payload: {},
+    });
+
+    it("an undo after another seat's re-sync request undoes the player's own last action", () => {
+        // `undo(steps)` replays the history since the memento minus its last
+        // `steps` entries, whoever appended them. A re-sync changes nothing, so
+        // an entry for it would be the step the player's undo removes.
+        const { pipeline, undoManager } = buildHostSessionPipeline(makeRegistry(), vi.fn());
+        const s0 = makeBaseSnapshot(0, [P1, P2]);
+        undoManager.saveTurnMemento(s0, P1);
+
+        const s1 = pipeline.process(s0, advanceEnvelope(0));
+        const afterResync = pipeline.process(s1, syncRequestEnvelope(s1.tick, P2));
+        expect(afterResync).toBe(s1);
+
+        const afterUndo = pipeline.process(afterResync, undoEnvelope(afterResync.tick));
+
+        expect(afterUndo.tick).toBe(s0.tick);
+    });
+
+    it("a re-sync request does not make the requester's undo available", () => {
+        const { pipeline, undoManager } = buildHostSessionPipeline(makeRegistry(), vi.fn());
+        const s0 = makeBaseSnapshot(0, [P1, P2]);
+        undoManager.saveTurnMemento(s0, P2);
+
+        pipeline.process(s0, syncRequestEnvelope(s0.tick, P2));
+
+        expect(undoManager.canUndo(P2)).toBe(false);
+    });
+});

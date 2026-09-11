@@ -20,6 +20,11 @@
  * applied action — and the recorded envelope carries the tick it was applied
  * at, which is the one a replay reproduces.
  *
+ * `engine:sync_request` is re-stamped on EVERY host. A client sends it after
+ * refusing a delta, stamped with the tick of the last snapshot it holds, which
+ * need not be the host's. Refused as stale, the request would leave that
+ * client waiting for the next keyframe.
+ *
  * Pure: no clock, no I/O. Which kind of host this is comes from the caller,
  * read off the ticker the composition root built.
  *
@@ -38,16 +43,20 @@ export interface HostInputTimebase {
 /**
  * The envelope to hand `applyAction` for `action`.
  *
- * On a heartbeat-driven host a stamp that is not `hostTick` — behind it or
- * ahead of it — is replaced with `hostTick`; every other field is the sender's,
- * verbatim, and the input is never mutated. On a turn-based host, and for a
- * stamp already at `hostTick`, the input reference is returned as is.
+ * On a heartbeat-driven host, and for an `engine:sync_request` on any host, a
+ * stamp that is not `hostTick` — behind it or ahead of it — is replaced with
+ * `hostTick`; every other field is the sender's, verbatim, and the input is
+ * never mutated. Otherwise, and for a stamp already at `hostTick`, the input
+ * reference is returned as is.
  */
-export function restampForHeartbeatHost(
+export function envelopeToApply(
     action: ActionEnvelope,
     timebase: HostInputTimebase,
 ): ActionEnvelope {
-    if (!timebase.heartbeatDriven || action.tick === timebase.hostTick) {
+    if (action.tick === timebase.hostTick) {
+        return action;
+    }
+    if (!timebase.heartbeatDriven && action.type !== 'engine:sync_request') {
         return action;
     }
     return { ...action, tick: timebase.hostTick };

@@ -542,7 +542,12 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         // Skipped for nested dispatches (this.#depth > 0): ActionHistory records
         // only the outer engine:tick frame. Replays re-derive timer fires from
         // TimerRegistry state (§4.20, Invariant #55).
-        if (this.#depth === 0) {
+        //
+        // Skipped for `engine:sync_request`: it changes nothing, and undo
+        // replays the history since the memento minus its last `steps` entries
+        // whoever appended them, so an entry for it would be the step a
+        // player's undo removes.
+        if (this.#depth === 0 && action.type !== 'engine:sync_request') {
             this.#context?.history?.append({
                 tickApplied: snapshot.tick,
                 turnNumber: snapshot.turnNumber,

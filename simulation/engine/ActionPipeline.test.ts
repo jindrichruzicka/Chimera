@@ -1524,6 +1524,72 @@ describe('ActionPipeline — Stage 6: history record for normal actions', () => 
         expect(appendSpy.mock.calls[0]![0].action).toBe(action);
     });
 
+    it('does not append engine:sync_request to history, and still forces its wave', () => {
+        // Undo replays the history since the memento minus its last `steps`
+        // entries, whoever appended them, so an entry for a request that
+        // changed nothing would be the step a player's undo removes.
+        const syncRegistry = new ActionRegistry();
+        syncRegistry.registerEngineAction(engineSyncRequestDefinition);
+        const appendSpy = vi.fn();
+        const broadcast = vi.fn();
+        const p = new ActionPipeline(syncRegistry, {
+            context: { history: { append: appendSpy, pruneTo: vi.fn() }, broadcast },
+        });
+        const snapshot: BaseGameSnapshot = { ...makeSnapshot(9), players: { [PID]: { id: PID } } };
+
+        p.process(snapshot, makeEnvelope(9, 'engine:sync_request', {}));
+
+        expect(appendSpy).not.toHaveBeenCalled();
+        expect(broadcast).toHaveBeenCalledWith(snapshot, PID, { forceFull: true });
+    });
+
+    it('still appends an engine action other than engine:sync_request to history', () => {
+        const endTurnRegistry = new ActionRegistry();
+        endTurnRegistry.registerEngineAction(engineEndTurnDefinition);
+        const appendSpy = vi.fn();
+        const p = new ActionPipeline(endTurnRegistry, {
+            context: { history: { append: appendSpy, pruneTo: vi.fn() } },
+        });
+        const action = makeEnvelope(9, 'engine:end_turn', {});
+
+        p.process(makeSnapshot(9), action);
+
+        expect(appendSpy).toHaveBeenCalledWith(expect.objectContaining({ action }));
+    });
+
+    it('appends only the outer engine:tick, not the timer-fired actions it dispatches', () => {
+        const markDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:mark',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state) => ({ ...state, tick: state.tick + 1 }),
+        };
+        const tickRegistry = new ActionRegistry<BaseGameSnapshot>();
+        tickRegistry.registerEngineAction(engineTickDefinition);
+        tickRegistry.register(markDef);
+        const appendSpy = vi.fn();
+        const p = new ActionPipeline(tickRegistry, {
+            context: { history: { append: appendSpy, pruneTo: vi.fn() } },
+        });
+        const snapshot: BaseGameSnapshot = {
+            ...makeSnapshot(0),
+            timers: {
+                ['tmr-mark' as TimerId]: {
+                    id: 'tmr-mark' as TimerId,
+                    remainingTicks: 1,
+                    intervalTicks: 0,
+                    actionType: 'game:mark',
+                    payload: {},
+                    active: true,
+                },
+            },
+        };
+
+        p.process(snapshot, makeEnvelope(0, 'engine:tick', { seed: 1 }));
+
+        expect(appendSpy.mock.calls.map((call) => call[0].action.type)).toEqual(['engine:tick']);
+    });
+
     it('silently skips history record when context.history is absent', () => {
         const p = new ActionPipeline(registry, { context: {} });
 

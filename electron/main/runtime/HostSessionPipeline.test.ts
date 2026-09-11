@@ -289,8 +289,8 @@ describe('buildHostSessionPipeline — injected action-history bound', () => {
 
     /**
      * What the report claims follows the resolved policy, not the bound
-     * (Invariant #45). `ActionPipeline` appends every depth-0 dispatch,
-     * `engine:tick` included, and a game dispatching no `engine:end_turn` never
+     * (Invariant #45). `ActionPipeline` appends each depth-0
+     * `engine:tick`, and a game dispatching no `engine:end_turn` never
      * reaches `pruneTo` — so such a history saturates once and never recovers,
      * and a `warn` there names steady-state behaviour as a fault.
      */
