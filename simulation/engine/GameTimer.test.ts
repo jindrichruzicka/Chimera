@@ -8,11 +8,25 @@
  *
  * Invariants upheld:
  *   #54 — GameTimer lives in GameSnapshot.timers; remainingTicks is tick-based.
+ *   #44/#75 — a timer payload is JSON-persistable with integer numbers: `create()`
+ *          refuses a bigint, a float and the shapes the refusal cases below
+ *          list, naming the field. The type-level pins below fail
+ *          `tsc -p simulation/tsconfig.json`, not vitest, when the type widens.
  *   #55 — TimerManager.advance() is pure; only engine:tick may call it.
  */
 
-import { describe, expect, it } from 'vitest';
-import { TimerManager, type GameTimer, type TimerId, type TimerRegistry } from './GameTimer.js';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import type { FixedPoint } from './FixedPoint.js';
+import { fromInt } from './FixedPoint.js';
+import {
+    TimerManager,
+    type FiredTimerAction,
+    type GameTimer,
+    type TimerId,
+    type TimerPayload,
+    type TimerPayloadValue,
+    type TimerRegistry,
+} from './GameTimer.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -93,6 +107,182 @@ describe('TimerManager.create', () => {
 
         expect(Object.keys(next)).toHaveLength(2);
         expect(next['timer-a' as TimerId]).toEqual(registry['timer-a' as TimerId]);
+    });
+});
+
+// ─── GameTimer.payload — the persistable shape ───────────────────────────────
+
+describe('GameTimer.payload', () => {
+    it('is the same persistable shape on the stored timer and on the fired action', () => {
+        expectTypeOf<GameTimer['payload']>().toEqualTypeOf<TimerPayload>();
+        expectTypeOf<FiredTimerAction['payload']>().toEqualTypeOf<TimerPayload>();
+    });
+
+    it('admits strings, integers, booleans, null, arrays and nested plain objects', () => {
+        const timer: GameTimer = makeTimer({
+            payload: {
+                targetId: 'e-2',
+                damage: 10,
+                crit: false,
+                note: null,
+                pos: { x: 1, y: -2 },
+                tags: ['burn', 'stack'],
+                mixed: [1, { z: 0 }],
+            },
+        });
+
+        expect(timer.payload['targetId']).toBe('e-2');
+    });
+
+    it('rejects a FixedPoint payload value — a bigint cannot be saved', () => {
+        const reach: FixedPoint = fromInt(2);
+        const timer: GameTimer = makeTimer({
+            // @ts-expect-error payload values are JSON-persistable with integer
+            //                  numbers (#44/#75): the registry is saved through
+            //                  `JSON.stringify`, which throws on a bigint.
+            payload: { reach },
+        });
+
+        expect(timer.payload['reach']).toBe(reach);
+    });
+
+    it('rejects a FixedPoint nested inside a payload value — the depth does not matter', () => {
+        const reach: FixedPoint = fromInt(2);
+        const timer: GameTimer = makeTimer({
+            // @ts-expect-error a bigint is refused at any depth (#44/#75) —
+            //                  `JSON.stringify` walks the whole payload.
+            payload: { hit: { reach } },
+        });
+
+        expect(timer.payload['hit']).toEqual({ reach });
+    });
+});
+
+// ─── TimerManager.create — payload guard ─────────────────────────────────────
+
+describe('TimerManager.create — payload guard', () => {
+    /** A payload built through the cast a stale caller would use. */
+    function unchecked(payload: Record<string, unknown>): TimerPayload {
+        return payload as unknown as TimerPayload;
+    }
+
+    it.each([
+        ['a FixedPoint', fromInt(2), '8589934592n'],
+        ['a float', 1.5, '1.5'],
+        ['NaN', Number.NaN, 'NaN'],
+        ['Infinity', Number.POSITIVE_INFINITY, 'Infinity'],
+        ['undefined', undefined, 'undefined'],
+        ['a function', () => 1, 'a function'],
+        ['a symbol', Symbol('reach'), 'Symbol(reach)'],
+        ['a Date', new Date(0), '[object Date]'],
+        ['a Map', new Map(), '[object Map]'],
+    ])(
+        'throws RangeError naming the field on a payload value that is %s',
+        (_label, value, rendered) => {
+            // Why each shape is refused is in `assertPersistablePayload`'s doc
+            // comment in GameTimer.ts; the rendered column pins what the error
+            // names. A frozen registry proves nothing is written before the
+            // refusal.
+            const registry: TimerRegistry = Object.freeze({});
+
+            expect(() =>
+                TimerManager.create(registry, {
+                    id: 'dot-e2' as TimerId,
+                    remainingTicks: 3,
+                    intervalTicks: 0,
+                    actionType: 'game:apply_dot_damage',
+                    payload: unchecked({ damage: 10, reach: value }),
+                }),
+            ).toThrow(RangeError);
+            expect(() =>
+                TimerManager.create(registry, {
+                    id: 'dot-e2' as TimerId,
+                    remainingTicks: 3,
+                    intervalTicks: 0,
+                    actionType: 'game:apply_dot_damage',
+                    payload: unchecked({ damage: 10, reach: value }),
+                }),
+            ).toThrow(`payload field "reach" of timer "dot-e2" is ${rendered} `);
+            expect(registry).toEqual({});
+        },
+    );
+
+    it('names the path of a float nested in an object', () => {
+        expect(() =>
+            TimerManager.create(
+                {},
+                {
+                    id: 'timer-1' as TimerId,
+                    remainingTicks: 3,
+                    intervalTicks: 0,
+                    actionType: 'game:a',
+                    payload: unchecked({ pos: { x: 1, y: 2.5 } }),
+                },
+            ),
+        ).toThrow(/payload field "pos\.y" of timer "timer-1" is 2\.5/);
+    });
+
+    it('names the path of a bigint nested in an array', () => {
+        expect(() =>
+            TimerManager.create(
+                {},
+                {
+                    id: 'timer-1' as TimerId,
+                    remainingTicks: 3,
+                    intervalTicks: 0,
+                    actionType: 'game:a',
+                    payload: unchecked({ hits: [1, fromInt(3)] }),
+                },
+            ),
+        ).toThrow(/payload field "hits\[1\]" of timer "timer-1" is 12884901888n /);
+    });
+
+    it('accepts every persistable value shape and stores the payload as given', () => {
+        const payload: TimerPayload = {
+            targetId: 'e-2',
+            zero: 0,
+            negative: -7,
+            largest: Number.MAX_SAFE_INTEGER,
+            crit: false,
+            note: null,
+            pos: { x: 1, y: -2 },
+            tags: ['burn', 'stack'],
+            mixed: [1, { z: 0 }, [true, null]],
+            empty: {},
+            none: [],
+        };
+        const next = TimerManager.create(
+            {},
+            {
+                id: 'timer-1' as TimerId,
+                remainingTicks: 3,
+                intervalTicks: 0,
+                actionType: 'game:a',
+                payload,
+            },
+        );
+
+        expect(next['timer-1' as TimerId]?.payload).toBe(payload);
+    });
+
+    it('accepts a null-prototype object — JSON.stringify serialises it like any plain object', () => {
+        const bare: Record<string, TimerPayloadValue> = Object.create(null) as Record<
+            string,
+            TimerPayloadValue
+        >;
+        bare['x'] = 1;
+        const next = TimerManager.create(
+            {},
+            {
+                id: 'timer-1' as TimerId,
+                remainingTicks: 3,
+                intervalTicks: 0,
+                actionType: 'game:a',
+                payload: { bare },
+            },
+        );
+
+        expect(JSON.stringify(next['timer-1' as TimerId]?.payload)).toBe('{"bare":{"x":1}}');
     });
 });
 

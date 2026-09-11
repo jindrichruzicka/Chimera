@@ -116,7 +116,14 @@ export {
     cos,
 } from './FixedPoint.js';
 
-export type { TimerId, GameTimer, TimerRegistry, FiredTimerAction } from './GameTimer.js';
+export type {
+    TimerId,
+    GameTimer,
+    TimerPayload,
+    TimerPayloadValue,
+    TimerRegistry,
+    FiredTimerAction,
+} from './GameTimer.js';
 export { TimerManager } from './GameTimer.js';
 
 export type {

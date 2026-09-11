@@ -12,7 +12,7 @@
  * Tests written first (red) before the barrel export was added.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, expectTypeOf } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +28,7 @@ import {
     clearTimeScale,
 } from './index.js';
 import * as engineBarrel from './index.js';
+import type { TimerPayload, TimerPayloadValue } from './index.js';
 import type { AnimationWindowId } from './AnimationWindow.js';
 import type { BaseGameSnapshot } from './types.js';
 import { entityId, gamePhase } from './types.js';
@@ -151,5 +152,15 @@ describe('simulation/engine barrel — animation-window and time-scale verbs', (
         expect('applyTimeScale' in engineBarrel).toBe(true);
         expect('clearTimeScale' in engineBarrel).toBe(true);
         expect('AnimationWindowManager' in engineBarrel).toBe(true);
+    });
+});
+
+// ─── Timer payload types ──────────────────────────────────────────────────────
+
+describe('simulation/engine barrel — timer payload types', () => {
+    it('re-exports TimerPayload and TimerPayloadValue', () => {
+        // A type-only pin: `import type` is erased, so a dropped re-export reds
+        // `tsc -p simulation/tsconfig.json` on the import above, not vitest.
+        expectTypeOf<TimerPayload>().toEqualTypeOf<Readonly<Record<string, TimerPayloadValue>>>();
     });
 });

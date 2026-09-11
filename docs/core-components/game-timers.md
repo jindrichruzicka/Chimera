@@ -24,6 +24,22 @@ Tick-based, deterministic timers that live entirely inside `GameSnapshot` and tr
 
 export type TimerId = string & { readonly __brand: 'TimerId' };
 
+/**
+ * A value a timer payload may carry: integer numbers, strings, booleans, null,
+ * arrays and plain objects, nested as the fired action needs. A fractional
+ * quantity goes in as a scaled integer in a declared unit; a FixedPoint (a
+ * bigint) never does, because the save's JSON.stringify throws on one.
+ */
+export type TimerPayloadValue =
+    | string
+    | number
+    | boolean
+    | null
+    | readonly TimerPayloadValue[]
+    | { readonly [field: string]: TimerPayloadValue };
+
+export type TimerPayload = Readonly<Record<string, TimerPayloadValue>>;
+
 export interface GameTimer {
     readonly id: TimerId;
     /** Ticks remaining until next fire. Decremented by TimerManager.advance(). */
@@ -35,7 +51,8 @@ export interface GameTimer {
      */
     readonly intervalTicks: number;
     readonly actionType: string;
-    readonly payload: Record<string, unknown>;
+    /** What the fired action re-enters the pipeline with. */
+    readonly payload: TimerPayload;
     readonly active: boolean;
 }
 
@@ -44,11 +61,11 @@ export type TimerRegistry = Record<TimerId, GameTimer>;
 export interface FiredTimerAction {
     readonly timerId: TimerId;
     readonly actionType: string;
-    readonly payload: Record<string, unknown>;
+    readonly payload: TimerPayload;
 }
 ```
 
-`TimerRegistry` is stored as `snapshot.timers: TimerRegistry`. Serialises naturally in saves and replays deterministically (all counters are integer ticks).
+`TimerRegistry` is stored as `snapshot.timers: TimerRegistry`. Serialises naturally in saves and replays deterministically (all counters are integer ticks). `TimerManager.create` refuses a `FixedPoint`, a float, an `undefined` or a `Date` in a payload with a `RangeError` naming the field, so the failure surfaces in the reducer that authored the timer rather than at the next autosave.
 
 ---
 
@@ -56,7 +73,11 @@ export interface FiredTimerAction {
 
 ```typescript
 export const TimerManager = {
-    /** Add or replace a timer. Pure — returns new registry. */
+    /**
+     * Add or replace a timer. Pure — returns new registry.
+     * @throws RangeError when a payload value is a non-integer number or a bigint,
+     *         at any depth; see the refusal cases in GameTimer.test.ts.
+     */
     create(registry: TimerRegistry, timer: Omit<GameTimer, 'active'>): TimerRegistry,
 
     /** Mark a timer inactive. Pure — returns new registry. */
@@ -163,6 +184,7 @@ return { ...state, timers: newTimers };
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | #54 | `GameTimer` lives in `GameSnapshot.timers`. Serialised, loaded, and replayed. `remainingTicks` must never be derived from wall-clock time.                                                                       |
 | #55 | `TimerManager.advance()` is a pure function. The `engine:tick` reducer is the ONLY consumer of `advance()`. Game reducers may create or cancel timers via `create()` / `cancel()` but must NOT call `advance()`. |
+| #75 | A timer payload is JSON-persistable with integer numbers; `FixedPoint` is arithmetic, never stored. `TimerManager.create` refuses a violating value at the write — see [Fixed-Point Math](fixed-point-math.md).  |
 
 ---
 
