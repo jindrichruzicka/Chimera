@@ -13,12 +13,14 @@ import {
     SRGBColorSpace,
 } from 'three';
 import type { WebGLRenderer } from 'three';
+import { installFakeDisplay } from './__test-support__/fakeDisplay';
 import {
     applyColorConfig,
     readDeviceRatio,
     resolveRenderScale,
     resolveShadowQuality,
     shadowsProp,
+    subscribeToDeviceRatio,
     UNRESTRICTED_SHADOW_QUALITY,
     type OutputColorSpace,
     type ShadowQuality,
@@ -228,6 +230,86 @@ describe('readDeviceRatio', () => {
         vi.stubGlobal('devicePixelRatio', undefined);
 
         expect(readDeviceRatio()).toBe(2);
+    });
+});
+
+describe('subscribeToDeviceRatio', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it('notifies when the display ratio changes, and not on subscribing', () => {
+        const display = installFakeDisplay(1);
+        const onChange = vi.fn();
+
+        subscribeToDeviceRatio(onChange);
+        expect(onChange).not.toHaveBeenCalled();
+
+        display.setRatio(2);
+
+        expect(onChange).toHaveBeenCalledTimes(1);
+    });
+
+    // A `(resolution: Ndppx)` query is built for one ratio and fires as the
+    // ratio leaves it. Hearing the SECOND change is what shows the listener
+    // moved to a query for the ratio the display moved to.
+    it('keeps notifying across successive changes', () => {
+        const display = installFakeDisplay(1);
+        const onChange = vi.fn();
+
+        subscribeToDeviceRatio(onChange);
+        display.setRatio(2);
+        display.setRatio(1.5);
+
+        expect(onChange).toHaveBeenCalledTimes(2);
+    });
+
+    it('notifies a subscription made at a fractional ratio', () => {
+        const display = installFakeDisplay(1.25);
+        const onChange = vi.fn();
+
+        subscribeToDeviceRatio(onChange);
+        display.setRatio(1.75);
+
+        expect(onChange).toHaveBeenCalledTimes(1);
+    });
+
+    it('holds one listener, not one per change it has heard', () => {
+        const display = installFakeDisplay(1);
+
+        subscribeToDeviceRatio(vi.fn());
+        display.setRatio(2);
+        display.setRatio(1.5);
+
+        expect(display.liveListenerCount()).toBe(1);
+    });
+
+    // After a change the live listener is on a query the subscription built
+    // LATER than the first one, so an unsubscribe holding only the first
+    // would leave it behind.
+    it('removes the listener it moved to when unsubscribed after a change', () => {
+        const display = installFakeDisplay(1);
+        const onChange = vi.fn();
+
+        const unsubscribe = subscribeToDeviceRatio(onChange);
+        display.setRatio(2);
+        unsubscribe();
+        display.setRatio(1.5);
+
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(display.liveListenerCount()).toBe(0);
+    });
+
+    it('does not throw where there is no matchMedia', () => {
+        expect(typeof window.matchMedia).toBe('undefined');
+
+        expect(() => subscribeToDeviceRatio(vi.fn())()).not.toThrow();
+    });
+
+    it('does not throw where there is no window', () => {
+        vi.stubGlobal('window', undefined);
+
+        expect(() => subscribeToDeviceRatio(vi.fn())()).not.toThrow();
     });
 });
 

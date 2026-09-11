@@ -424,6 +424,25 @@ describe('SettingsManager.getSettings()', () => {
         const extSettings = settings as unknown as ExtSettings;
         expect(extSettings.showGrid).toBe(true);
     });
+
+    // What a game that needs shadows to read has instead of a floor on the
+    // canvas's shadow clamp (camera-system.md §4.22 "Precedence"): the value
+    // its defaults give an ENGINE sub-key is where the player starts.
+    it("returns a game's own default for an engine sub-key the player has not changed", async () => {
+        const mgr2 = makeManager();
+        mgr2.registerSchema({
+            ...engineSettingsSchema,
+            gameId: 'tiered-game',
+            defaults: {
+                ...ENGINE_DEFAULTS,
+                display: { ...ENGINE_DEFAULTS.display, shadowQuality: 'high' },
+            },
+        });
+
+        const settings = await mgr2.getSettings('tiered-game');
+
+        expect(settings.display.shadowQuality).toBe('high');
+    });
 });
 
 // ── updateSettings ────────────────────────────────────────────────────────────

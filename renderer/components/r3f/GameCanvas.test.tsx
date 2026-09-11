@@ -19,6 +19,7 @@ import {
 } from 'three';
 import type { WebGLRenderer } from 'three';
 import { Canvas } from '@react-three/fiber';
+import { installFakeDisplay } from './__test-support__/fakeDisplay';
 import { GameCanvas } from './GameCanvas';
 import type {
     CameraFit,
@@ -1892,6 +1893,45 @@ describe('GameCanvas curated renderer configuration', () => {
         );
 
         expect(latestCanvasProps().dpr).toBe(1);
+    });
+
+    // The ratio moves with nothing else re-rendering the canvas root — this
+    // camera pins no aspect, so no fit subscribes to resizes. Two changes,
+    // because a subscription that heard only the first would pass on one.
+    it('re-resolves the dpr on a display ratio change without remounting the canvas', () => {
+        const display = installFakeDisplay(1);
+        setDisplayQuality({ renderScale: 1 });
+
+        render(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+        const canvasOnMount = screen.getByTestId('r3f-canvas');
+        // r3f's [1, 2] default ceiling, clamping the display's ratio into it.
+        expect(latestCanvasProps().dpr).toBe(1);
+
+        act(() => display.setRatio(2));
+        expect(latestCanvasProps().dpr).toBe(2);
+
+        act(() => display.setRatio(1.5));
+        expect(latestCanvasProps().dpr).toBe(1.5);
+        expect(screen.getByTestId('r3f-canvas')).toBe(canvasOnMount);
+    });
+
+    it('releases its display ratio subscription when the canvas unmounts', () => {
+        const display = installFakeDisplay(1);
+
+        const { unmount } = render(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+        expect(display.liveListenerCount()).toBe(1);
+
+        unmount();
+
+        expect(display.liveListenerCount()).toBe(0);
     });
 
     it('writes tone mapping, exposure and output colour space onto the live renderer', () => {

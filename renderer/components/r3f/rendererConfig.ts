@@ -196,7 +196,8 @@ export function applyColorConfig(gl: ColorConfigurableRenderer, config: Renderer
 // them, and a player cannot ask for more than the scene supports. A game that
 // authors nothing imposes no cap, so the player's setting stands alone — and at
 // the engine defaults (`off`, `1`) that reproduces what the canvas rendered
-// before either setting existed.
+// before either setting existed. The shadow clamp has no floor, deliberately —
+// camera-system.md §4.22 "Precedence" says why.
 
 /** The player-facing quality tiers stored in `display.shadowQuality`. */
 export type ShadowQualityTier = 'off' | 'low' | 'medium' | 'high';
@@ -292,4 +293,36 @@ export function resolveRenderScale(
  */
 export function readDeviceRatio(): number {
     return typeof window !== 'undefined' ? (window.devicePixelRatio ?? 2) : 1;
+}
+
+/**
+ * Calls `onChange` when the display's device-pixel ratio changes, and returns
+ * the unsubscribe — the `useSyncExternalStore` subscription whose snapshot is
+ * `readDeviceRatio`.
+ *
+ * A `(resolution: Ndppx)` query is built for one ratio and reports a change as
+ * the ratio leaves it; the listener then moves to a query for the ratio the
+ * display moved to.
+ *
+ * Where there is no `matchMedia` — jsdom, which a scaffolded game's own
+ * component tests render in — nothing is subscribed.
+ */
+export function subscribeToDeviceRatio(onChange: () => void): () => void {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+        return () => undefined;
+    }
+
+    const queryCurrentRatio = (): MediaQueryList =>
+        window.matchMedia(`(resolution: ${readDeviceRatio()}dppx)`);
+
+    let query = queryCurrentRatio();
+    const handleChange = (): void => {
+        query.removeEventListener('change', handleChange);
+        query = queryCurrentRatio();
+        query.addEventListener('change', handleChange);
+        onChange();
+    };
+    query.addEventListener('change', handleChange);
+
+    return () => query.removeEventListener('change', handleChange);
 }

@@ -22,6 +22,7 @@ import {
     resolveRenderScale,
     resolveShadowQuality,
     shadowsProp,
+    subscribeToDeviceRatio,
 } from './rendererConfig';
 import { selectRenderScaleFraction, selectShadowQualityTier } from './selectDisplayQuality';
 import { useFrozenContextOptions } from './useFrozenContextOptions';
@@ -143,9 +144,7 @@ export type GameCanvasProps = Readonly<{
      * scene supports. Omitted imposes no cap.
      *
      * At the engine default tier (`off`) the canvas has shadow mapping
-     * disabled whatever this says, which is what it has always done — a mesh's
-     * `castShadow` is inert until the PLAYER turns shadows on and the scene has
-     * a light that casts.
+     * disabled whatever this says, which is what it has always done.
      *
      * The value is an engine name, never a `three` constant: the mapping lives
      * in `rendererConfig.ts` so a game configuring the renderer imports neither
@@ -179,8 +178,7 @@ export type GameCanvasProps = Readonly<{
      * yields. A range ceiling is resolved by clamping the display's own ratio
      * into it — r3f's own formula — and the player's fraction scales the
      * result, so at the engine default fraction the canvas draws at the ratio
-     * r3f itself would have chosen for this ceiling. The FORMULA is r3f's; the
-     * cadence is not, since the ratio is read where this component renders.
+     * r3f itself would have chosen for this ceiling.
      */
     renderScale?: RenderScale;
     /**
@@ -295,6 +293,15 @@ export function GameCanvas({
     // dependency array, and writes the shadow map and the dpr on every pass.
     const shadowTier = useSettingsStore(selectShadowQualityTier);
     const renderScaleFraction = useSettingsStore(selectRenderScaleFraction);
+    // The display's own ratio, which a range ceiling is resolved against.
+    // Subscribed as well as read, so a ratio change that re-renders nothing
+    // else here still reaches the dpr. The server snapshot is the same read,
+    // which is 1 where there is no window.
+    const deviceRatio = React.useSyncExternalStore(
+        subscribeToDeviceRatio,
+        readDeviceRatio,
+        readDeviceRatio,
+    );
 
     const frameRef = React.useRef<HTMLDivElement | null>(null);
     const fit = config.fit ?? DEFAULT_CAMERA_FIT;
@@ -334,7 +341,7 @@ export function GameCanvas({
                 // passed as `undefined` exactly as to an absent one — so at the
                 // engine defaults the canvas resolves to what it always did.
                 shadows={shadowsProp(resolveShadowQuality(shadowTier, shadows))}
-                dpr={resolveRenderScale(renderScale, renderScaleFraction, readDeviceRatio())}
+                dpr={resolveRenderScale(renderScale, renderScaleFraction, deviceRatio)}
                 // The FROZEN options, so what r3f builds the context from
                 // never changes; the key is omitted entirely when the game
                 // authored nothing, so r3f's own defaults build the context.

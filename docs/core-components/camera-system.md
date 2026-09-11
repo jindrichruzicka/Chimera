@@ -185,9 +185,7 @@ export type GameCanvasProps = Readonly<{
      * scene supports. Omitted imposes no cap.
      *
      * At the engine default tier (`off`) the canvas has shadow mapping
-     * disabled whatever this says, which is what it has always done — a mesh's
-     * `castShadow` is inert until the PLAYER turns shadows on and the scene has
-     * a light that casts.
+     * disabled whatever this says, which is what it has always done.
      *
      * The value is an engine name, never a `three` constant: the mapping lives
      * in `rendererConfig.ts` so a game configuring the renderer imports neither
@@ -221,8 +219,7 @@ export type GameCanvasProps = Readonly<{
      * yields. A range ceiling is resolved by clamping the display's own ratio
      * into it — r3f's own formula — and the player's fraction scales the
      * result, so at the engine default fraction the canvas draws at the ratio
-     * r3f itself would have chosen for this ceiling. The FORMULA is r3f's; the
-     * cadence is not, since the ratio is read where this component renders.
+     * r3f itself would have chosen for this ceiling.
      */
     renderScale?: RenderScale;
     /**
@@ -385,6 +382,8 @@ Two of the five knobs are also **player** settings (§4.13), and the precedence 
 | `display.shadowQuality` | `shadows`     | the tier's shadow-map name, clamped down to the prop's name in ascending cost order |
 | `display.renderScale`   | `renderScale` | the ratio the ceiling resolves to, multiplied by the player fraction                |
 
+**The shadow clamp has no floor, and that is deliberate.** A game's `shadows` can hold the player's tier down but never lift it, so at the tier `off` the canvas has shadow mapping disabled whatever the game authored. Lifting the tier would spend the GPU budget this rule leaves to the player. A game whose scene needs shadows to read says so with a default instead: its settings `defaults` give `display.shadowQuality` a value like every other engine sub-key (§4.13), so a player who has not changed the setting plays at the game's tier and can still lower it.
+
 The two vocabularies are deliberately different words for different quantities, and confusing them is the mistake this section exists to prevent:
 
 - `display.shadowQuality` is a **tier** (`off` | `low` | `medium` | `high`); `shadows` is a **shadow-map name** (`off` | `basic` | `percentage` | `soft` | `variance`). The tier maps to a name (`off`→`off`, `low`→`basic`, `medium`→`percentage`, `high`→`soft`) and the clamp is an index comparison on the ascending order. `variance` is above every tier a player can name, so it is the ceiling a game that authored none is treated as having.
@@ -404,6 +403,8 @@ Both settings are read at the canvas root by `selectDisplayQuality.ts`, the sibl
 | `contextOptions`                                         | **cannot** — refused by name, see below |
 
 The first three rows hold because r3f re-runs `configure()` from a layout effect with **no dependency array**, and writes `gl.shadowMap` and the `dpr` on every pass; the colour trio is applied from inside the canvas for the reason below. The last row is the one a player must never discover for themselves: a WebGL context's attributes are fixed when the context is built, so a changed `contextOptions` is kept out and reported as `ContextOptionsAfterMountError` rather than ignored.
+
+The display's own device-pixel ratio can change mid-session too. The canvas root subscribes to it through `matchMedia` rather than reading it only when it renders, so a range `renderScale` — r3f's `[1, 2]` default included — re-resolves on a ratio change without a remount.
 
 ### Why the colour knobs are not Canvas props
 
