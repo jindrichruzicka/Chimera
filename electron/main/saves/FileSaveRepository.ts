@@ -43,17 +43,19 @@ const FILE_EXT = '.chimera';
 const TEMP_EXT = '.tmp';
 
 /**
- * Matches a temp artefact this repository writes, in either shape an install
- * can be carrying: `<slot>.chimera.<n>.tmp` is what `save()` writes now, and
- * `<slot>.chimera.tmp` is what it wrote before the temp path became per-write.
- * The older shape was self-healing — the next write to that slot truncated it —
- * and is inert under the current scheme, so the reap owns it too.
+ * Matches a temp artefact this repository writes, in every shape an install can
+ * be carrying: `<slot>.chimera.<pid>.<n>.tmp` is what `save()` writes now,
+ * `<slot>.chimera.<n>.tmp` is what it wrote while the discriminator was the
+ * write counter alone, and `<slot>.chimera.tmp` is what it wrote before the
+ * temp path became per-write. The oldest shape was self-healing — the next
+ * write to that slot truncated it — and neither older shape is written or
+ * reopened now, so the reap owns them too.
  *
  * Built from `FILE_EXT` and `TEMP_EXT` rather than spelled out, so a change to
  * either reaches the writer and the reaper together. `.` is the only regex
  * metacharacter either constant contains, and the leading `\\` escapes it.
  */
-const TEMP_FILE_RE = new RegExp(`\\${FILE_EXT}(\\.\\d+)?\\${TEMP_EXT}$`);
+const TEMP_FILE_RE = new RegExp(`\\${FILE_EXT}(\\.\\d+){0,2}\\${TEMP_EXT}$`);
 
 /**
  * Maximum number of save-file entries read in parallel by `list()`.
@@ -85,15 +87,30 @@ const SLOT_COMPONENT_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
  * Distinguishes one in-flight write from another within this process.
  *
  * A counter rather than a timestamp: two writes started in the same
- * millisecond are exactly the case that needs telling apart. It is module
- * state, so it starts at 1 in every process: the name separates writes within
- * one process, not writes made by two instances sharing a `userData`.
+ * millisecond are exactly the case that needs telling apart.
  */
 let tempWriteCounter = 0;
 
+/**
+ * Distinguishes this process's writes from a second instance's.
+ *
+ * The counter is module state, so it restarts at 1 in every process. On its own
+ * it gave two instances sharing one `userData` the same temp path for the first
+ * save of a slot — both writing that file, the first rename moving it away and
+ * the second failing with `ENOENT`, which is the failure the per-write name
+ * exists to remove. No two live processes carry the same process id, so
+ * prefixing it separates the two counters wherever the process ids come from
+ * one operating system. Read once: a process's id does not change while it
+ * runs.
+ *
+ * A second instance is possible at all because nothing refuses one — no
+ * production call requests Electron's single-instance lock.
+ */
+const processTempId = process.pid;
+
 function nextTempId(): string {
     tempWriteCounter += 1;
-    return String(tempWriteCounter);
+    return `${processTempId}.${tempWriteCounter}`;
 }
 
 /**
@@ -234,8 +251,9 @@ export class FileSaveRepository implements SaveRepository {
         };
 
         const dest = this.slotPath(file.header.gameId, file.header.slotId);
-        // Per-WRITE, not per-slot. One slot has more than one writer and they
-        // are not serialised against each other — the fire-and-forget autosave
+        // Per-WRITE, not per-slot — and per process, which is `nextTempId`'s
+        // other half. One slot has more than one writer and they are not
+        // serialised against each other — the fire-and-forget autosave
         // after `engine:end_turn`, and an explicit `saves.save()` that names no
         // slot and so defaults onto the autosave slot. Sharing one temp path
         // let the first rename move the file out from under the second, whose

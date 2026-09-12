@@ -176,17 +176,22 @@ describe('FileSaveRepository — reapOrphanTempFiles()', () => {
         await expect(repo.load('tactics/autosave')).resolves.toBeDefined();
     });
 
-    it('reaps the older per-slot temp name as well as the per-write one', async () => {
-        // An install upgrading from the per-slot scheme can be carrying
-        // `<slot>.chimera.tmp`. It was self-healing then — the next write to
-        // that slot truncated it — and is inert now, so the reap owns it too.
+    it('reaps both superseded temp shapes as well as the current one', async () => {
+        // An install upgrading can be carrying two superseded shapes:
+        // `<slot>.chimera.tmp` from the per-slot scheme, which was self-healing
+        // then — the next write to that slot truncated it — and
+        // `<slot>.chimera.<n>.tmp` from before the discriminator carried the
+        // process id. Neither is written or reopened now, so the reap owns them
+        // alongside the current shape.
         const dir = path.join(baseDir, 'tactics');
-        const legacy = await plantTemp(dir, 'autosave.chimera.tmp', AGED);
-        const perWrite = await plantTemp(dir, 'autosave.chimera.12.tmp', AGED);
+        const perSlot = await plantTemp(dir, 'autosave.chimera.tmp', AGED);
+        const counterOnly = await plantTemp(dir, 'autosave.chimera.12.tmp', AGED);
+        const current = await plantTemp(dir, 'autosave.chimera.4242.12.tmp', AGED);
 
-        await expect(makeRepo().reapOrphanTempFiles()).resolves.toBe(2);
-        expect(await exists(legacy)).toBe(false);
-        expect(await exists(perWrite)).toBe(false);
+        await expect(makeRepo().reapOrphanTempFiles()).resolves.toBe(3);
+        expect(await exists(perSlot)).toBe(false);
+        expect(await exists(counterOnly)).toBe(false);
+        expect(await exists(current)).toBe(false);
     });
 
     it('leaves aged save files and aged foreign files alone', async () => {
@@ -205,6 +210,13 @@ describe('FileSaveRepository — reapOrphanTempFiles()', () => {
         // what it matches, so matching a substring would destroy them.
         const backup = await plantTemp(dir, 'autosave.chimera.1.tmp.bak', AGED);
         const renamed = await plantTemp(dir, 'autosave.chimera.tmp.old', AGED);
+        // Just OUTSIDE what the writer has ever produced, on both axes of the
+        // discriminator: three numeric segments where there have only ever been
+        // a process id and a counter, and a segment that is not a number at
+        // all. The reaper unlinks what it matches, so a pattern loose on either
+        // axis destroys a file belonging to someone else.
+        const threeSegments = await plantTemp(dir, 'autosave.chimera.1.2.3.tmp', AGED);
+        const notANumber = await plantTemp(dir, 'autosave.chimera.beta.tmp', AGED);
 
         await expect(repo.reapOrphanTempFiles()).resolves.toBe(0);
         expect(await exists(save)).toBe(true);
@@ -212,6 +224,8 @@ describe('FileSaveRepository — reapOrphanTempFiles()', () => {
         expect(await exists(note)).toBe(true);
         expect(await exists(backup)).toBe(true);
         expect(await exists(renamed)).toBe(true);
+        expect(await exists(threeSegments)).toBe(true);
+        expect(await exists(notANumber)).toBe(true);
         await expect(repo.load('tactics/autosave')).resolves.toBeDefined();
     });
 });

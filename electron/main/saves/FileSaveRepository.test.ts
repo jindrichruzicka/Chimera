@@ -117,13 +117,15 @@ describe('FileSaveRepository — integration', () => {
         // does. Artefacts with DIFFERENT discriminators, because the temp path
         // now belongs to the write: `list()` filters on the `.chimera` suffix,
         // so what stands between the discriminator is irrelevant and this test
-        // must not start depending on one particular value. The third has NO
-        // discriminator — the older per-slot shape an upgrading install can
-        // still be carrying, and one the reaper recognises.
+        // must not start depending on one particular value. The first two carry
+        // the process id the writer prefixes now; the last two are shapes an
+        // upgrading install can still be carrying — the counter alone, and no
+        // discriminator at all — and ones the reaper recognises.
         const dir = path.join(tmpDir, 'tactics');
         await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(path.join(dir, 'autosave.chimera.4242.1.tmp'), 'corrupt-partial');
+        await fs.writeFile(path.join(dir, 'autosave.chimera.9999.427.tmp'), 'corrupt-partial');
         await fs.writeFile(path.join(dir, 'autosave.chimera.1.tmp'), 'corrupt-partial');
-        await fs.writeFile(path.join(dir, 'autosave.chimera.427.tmp'), 'corrupt-partial');
         await fs.writeFile(path.join(dir, 'autosave.chimera.tmp'), 'corrupt-partial');
 
         const slots = await repo.list('tactics');

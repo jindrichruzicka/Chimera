@@ -2566,7 +2566,9 @@ describe('main', () => {
         const userData = await fsPromises.mkdtemp(path.join(tmpdir(), 'chimera-main-reap-test-'));
         appGetPath.mockImplementation(() => userData);
 
-        const abandoned = path.join(userData, 'saves', 'tactics', 'autosave.chimera.1.tmp');
+        // The shape `save()` writes now: a process id and a write counter. The
+        // superseded shapes are the reap's own test's business.
+        const abandoned = path.join(userData, 'saves', 'tactics', 'autosave.chimera.4242.1.tmp');
         await fsPromises.mkdir(path.dirname(abandoned), { recursive: true });
         await fsPromises.writeFile(abandoned, 'bytes a crash left behind');
         // Older than the sweep's window, which is what makes it abandoned
