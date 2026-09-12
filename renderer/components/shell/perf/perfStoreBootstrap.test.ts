@@ -80,6 +80,24 @@ describe('bootstrapPerfStore()', () => {
         stop();
     });
 
+    it('does not count a re-sent snapshot carrying the tick already held', () => {
+        // The subscription compares ticks, so a full re-send answering a sync
+        // request is not an arrival: counting it would read as simulation
+        // progress the host never made. This is why the metric's cadence is a
+        // snapshot whose TICK moved rather than any snapshot.
+        const gameStore = createGameStore();
+        const perfStore = createPerfStore();
+
+        const stop = bootstrapPerfStore(gameStore, perfStore, () => 1500);
+        gameStore.setState((state) => ({ ...state, snapshot: makeSnapshot(5) }));
+        expect(perfStore.getState().sample.actionsPerSec).toBe(1);
+
+        gameStore.setState((state) => ({ ...state, snapshot: makeSnapshot(5) }));
+
+        expect(perfStore.getState().sample.actionsPerSec).toBe(1);
+        stop();
+    });
+
     it('decays actionsPerSec to 0 between sporadic snapshots (turn-based games)', () => {
         let nowMs = 0;
         vi.spyOn(performance, 'now').mockImplementation(() => nowMs);

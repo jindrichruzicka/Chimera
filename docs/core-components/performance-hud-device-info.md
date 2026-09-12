@@ -19,21 +19,23 @@ A lightweight floating overlay showing key performance numbers at a glance. Togg
 
 ### Metrics
 
-| Metric             | Source                                                                      | Updated every  |
-| ------------------ | --------------------------------------------------------------------------- | -------------- |
-| FPS                | Advanced-frame count in rolling 1 s window                                  | 500 ms         |
-| Frame time avg/p95 | R3F `useFrame` `deltaSeconds`; last 120 advanced frames                     | 500 ms         |
-| Sim tick           | `PlayerSnapshot.tick` from `gameStore`                                      | On snapshot    |
-| Actions/sec        | Rolling count of snapshots received in last 1 s                             | 500 ms         |
-| Action round-trip  | `sendAction()` stamp → matching `onSnapshot()` tick advance                 | Per own-action |
-| Network ping (ms)  | `gameStore.latencyMs`, via `perfStoreBootstrap` — no producer today, see §6 | On change      |
-| Renderer heap (MB) | `performance.memory.usedJSHeapSize` (Chromium)                              | Every 1 s      |
-| Host heap (MB)     | main's `process.memoryUsage().heapUsed`, over `chimera:game:host-metrics`   | Every 1 s      |
-| Recorded actions   | `ReplayManager.recordedActionCount()`, over the same push                   | Every 1 s      |
-| R3F draw calls     | `gl.info.render.calls`                                                      | 500 ms         |
-| R3F triangles      | `gl.info.render.triangles`                                                  | 500 ms         |
+| Metric             | Source                                                                      | Updated every                                       |
+| ------------------ | --------------------------------------------------------------------------- | --------------------------------------------------- |
+| FPS                | Advanced-frame count in rolling 1 s window                                  | 500 ms                                              |
+| Frame time avg/p95 | R3F `useFrame` `deltaSeconds`; last 120 advanced frames                     | 500 ms                                              |
+| Sim tick           | `PlayerSnapshot.tick` from `gameStore`                                      | On snapshot                                         |
+| Actions/sec        | Rolling count of snapshots received in last 1 s                             | On a snapshot whose tick moved; re-pruned every 1 s |
+| Action round-trip  | `sendAction()` stamp → matching `onSnapshot()` tick advance                 | Per own-action                                      |
+| Network ping (ms)  | `gameStore.latencyMs`, via `perfStoreBootstrap` — no producer today, see §6 | On change                                           |
+| Renderer heap (MB) | `performance.memory.usedJSHeapSize` (Chromium)                              | Every 1 s                                           |
+| Host heap (MB)     | main's `process.memoryUsage().heapUsed`, over `chimera:game:host-metrics`   | Every 1 s                                           |
+| Recorded actions   | `ReplayManager.recordedActionCount()`, over the same push                   | Every 1 s                                           |
+| R3F draw calls     | `gl.info.render.calls`                                                      | 500 ms                                              |
+| R3F triangles      | `gl.info.render.triangles`                                                  | 500 ms                                              |
 
-`Host heap` and `Recorded actions` are the HOST's, and are the reason the renderer's own heap reading is not enough: a main-process buffer can grow to any size while `heapMb` sits still. They arrive on main's own timer (`startHostMetricsPush`, `HOST_METRICS_PUSH_INTERVAL_MS`) rather than per beat, and both are `number | null`, where `null` means UNAVAILABLE (no push yet, or no recording running) and renders as `—`. A recording holding no action reads `0`. The timer runs for the process lifetime rather than while the HUD is open: the overlay is off by default, so gating on its visibility would mean a metric that only exists once someone looks for it.
+`Host heap` and `Recorded actions` are the HOST's, and are the reason the renderer's own heap reading is not enough: a main-process buffer can grow to any size while `heapMb` sits still. They arrive on main's own timer (`startHostMetricsPush`, `HOST_METRICS_PUSH_INTERVAL_MS`) rather than per beat, and both are `number | null`, where `null` renders as `—`. The conditions differ by field: `hostHeapMb` is `null` only until the first push arrives (`readHostMetrics` always reads a number out of `heapUsedBytes()`, and an absent bridge means no push at all), while `recordedActionCount` is also `null` whenever no recording is running. A recording holding no action reads `0`. The timer runs for the process lifetime rather than while the HUD is open: the overlay is off by default, so gating on its visibility would mean a metric that only exists once someone looks for it.
+
+**Recorded actions in a packaged build.** The row counts the deterministic `ReplayManager` alone, and a packaged build never starts that recorder — `createDeterministicReplayPort` declines the port on `app.isPackaged`, for the reason [Replay System](replay-system.md) gives — so the row reads `—` for the life of a shipped game. A perspective recording of the same match can be in progress meanwhile: that path is gated on the game's declaration and on no build signal (`startSessionRecordings` in `electron/main/index.ts`).
 
 `recordedActionCount` is the RECORDER's count. The similar-looking `PerfStats.totalActionCount` is the debug bridge's own array length, capped by `DEBUG_ACTION_LOG_CAPACITY` and constant once saturated, and the whole debug panel exists only under `CHIMERA_DEBUG=1` outside production — so it is not a growth metric and not present in a shipped game.
 

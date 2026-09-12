@@ -16,8 +16,8 @@ They arrive on a new `chimera:game:host-metrics` push driven by main's own 1 Hz 
 Only scalars cross, and the payload is schema-validated at the preload boundary,
 where an absent key is refused rather than read as `null`.
 
-Both fields are `number | null` where `null` means UNAVAILABLE — no push yet, or no recording
-running — and the HUD renders it as `—`. A started recording holding no actions reads `0`. `PerfStats.totalActionCount` remains what it was: the debug bridge's own array
+Both fields are `number | null` where `null` means UNAVAILABLE, and the HUD renders it as `—`. A
+started recording holding no actions reads `0`. `PerfStats.totalActionCount` remains what it was: the debug bridge's own array
 length, capped and constant once saturated, and absent from a shipped game.
 
 §13.5 now records what actually executes where. The timing gates run on CI, because the bench files
