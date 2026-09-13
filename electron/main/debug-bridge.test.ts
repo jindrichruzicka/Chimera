@@ -274,6 +274,17 @@ function feedRedo(
     port.onActionApplied(makeEntry(fromTick, 'engine:redo', turnNumber), next, 1);
 }
 
+/**
+ * Mirrors what `HostSessionPipeline` sends for an applied `engine:sync_request`:
+ * the request changes nothing, so the observer and the entry both carry the
+ * tick the session already sits at.
+ */
+function feedSyncRequest(port: HostSessionDebugPort, atTick: number, turnNumber = 0): void {
+    const next = makeSnapshot(atTick, turnNumber);
+    port.observer(atTick, next);
+    port.onActionApplied(makeEntry(atTick, 'engine:sync_request', turnNumber), next, 1);
+}
+
 // ─── Startup ──────────────────────────────────────────────────────────────────
 
 describe('startDebugBridge — startup', () => {
@@ -800,6 +811,119 @@ describe('debug-bridge — session bookkeeping', () => {
         const response = await invoke(h, win.webContents, { type: 'GET_ACTION_LOG' });
         if (response.type === 'ACTION_LOG') {
             expect(response.entries.map((e) => e.tickApplied)).toEqual([0, 1, 2]);
+        }
+    });
+
+    it('an applied engine:sync_request is not appended to the log, and the next action does not warn', async () => {
+        const h = makeBridge();
+        const { port } = attach(h);
+        for (let tick = 0; tick < 3; tick++) {
+            feedAdvance(port, tick); // entries 0..2, state at tick 3
+        }
+        feedSyncRequest(port, 3);
+
+        const win = openInspector(h);
+        const afterRequest = await invoke(h, win.webContents, { type: 'GET_ACTION_LOG' });
+        expect(afterRequest.type).toBe('ACTION_LOG');
+        if (afterRequest.type === 'ACTION_LOG') {
+            expect(afterRequest.entries.map((e) => [e.tickApplied, e.action.type])).toEqual([
+                [0, 'game:advance'],
+                [1, 'game:advance'],
+                [2, 'game:advance'],
+            ]);
+        }
+
+        // The next action is applied at the same tick 3 the request was stamped
+        // with; with the request in the log this would read as a regression.
+        feedAdvance(port, 3);
+        expect(h.logger.warn).not.toHaveBeenCalled();
+        const afterNext = await invoke(h, win.webContents, { type: 'GET_ACTION_LOG' });
+        expect(afterNext.type).toBe('ACTION_LOG');
+        if (afterNext.type === 'ACTION_LOG') {
+            expect(afterNext.entries.map((e) => e.tickApplied)).toEqual([0, 1, 2, 3]);
+        }
+    });
+
+    it('an applied engine:sync_request leaves the redo stash for a later redo to restore', async () => {
+        const h = makeBridge();
+        const { port } = attach(h);
+        for (let tick = 0; tick < 5; tick++) {
+            feedAdvance(port, tick);
+        }
+        feedUndo(port, 5, 2); // log: 0,1 — stash: 2,3,4
+        feedSyncRequest(port, 2); // another seat re-syncs; nothing changes
+        feedRedo(port, 2, 5);
+
+        const win = openInspector(h);
+        const response = await invoke(h, win.webContents, { type: 'GET_ACTION_LOG' });
+        expect(response.type).toBe('ACTION_LOG');
+        if (response.type === 'ACTION_LOG') {
+            expect(response.entries.map((e) => e.tickApplied)).toEqual([0, 1, 2, 3, 4]);
+        }
+    });
+
+    it('a sync request arriving on a log left stale by an out-of-band rewind leaves it uncompacted', async () => {
+        const h = makeBridge();
+        const { port } = attach(h);
+        for (let tick = 0; tick < 5; tick++) {
+            feedAdvance(port, tick); // entries 0..4, state at tick 5
+        }
+        // Save-load rewound the session to tick 1 without the pipeline firing,
+        // and the first thing the pipeline then applies is a re-sync.
+        feedSyncRequest(port, 1);
+
+        const win = openInspector(h);
+        const afterRequest = await invoke(h, win.webContents, { type: 'GET_ACTION_LOG' });
+        expect(afterRequest.type).toBe('ACTION_LOG');
+        if (afterRequest.type === 'ACTION_LOG') {
+            expect(afterRequest.entries.map((e) => e.tickApplied)).toEqual([0, 1, 2, 3, 4]);
+        }
+        expect(h.logger.warn).not.toHaveBeenCalled();
+
+        // The next real action is what compacts the stale tail.
+        feedAdvance(port, 1);
+        expect(h.logger.warn).toHaveBeenCalledTimes(1);
+        const afterNext = await invoke(h, win.webContents, { type: 'GET_ACTION_LOG' });
+        expect(afterNext.type).toBe('ACTION_LOG');
+        if (afterNext.type === 'ACTION_LOG') {
+            expect(afterNext.entries.map((e) => e.tickApplied)).toEqual([0, 1]);
+        }
+    });
+
+    it('a sync request after an out-of-band jump past a pending redo stash restores none of it', async () => {
+        const h = makeBridge();
+        const { port } = attach(h);
+        for (let tick = 0; tick < 5; tick++) {
+            feedAdvance(port, tick);
+        }
+        feedUndo(port, 5, 2); // log: 0,1 — stash: 2,3,4
+        // A save restored the session to tick 4 without the pipeline firing;
+        // the stash entries at 2 and 3 now sit below the current tick.
+        port.observer(4, makeSnapshot(4));
+        feedSyncRequest(port, 4);
+
+        const win = openInspector(h);
+        const response = await invoke(h, win.webContents, { type: 'GET_ACTION_LOG' });
+        expect(response.type).toBe('ACTION_LOG');
+        if (response.type === 'ACTION_LOG') {
+            expect(response.entries.map((e) => e.tickApplied)).toEqual([0, 1]);
+        }
+    });
+
+    it('an applied engine:sync_request still contributes its duration to the perf stats', async () => {
+        const h = makeBridge();
+        const { port } = attach(h);
+        port.observer(1, makeSnapshot(1));
+        port.onActionApplied(makeEntry(0), makeSnapshot(1), 2);
+        port.observer(1, makeSnapshot(1));
+        port.onActionApplied(makeEntry(1, 'engine:sync_request'), makeSnapshot(1), 6);
+
+        const win = openInspector(h);
+        const response = await invoke(h, win.webContents, { type: 'GET_PERF_STATS' });
+        expect(response.type).toBe('PERF_STATS');
+        if (response.type === 'PERF_STATS') {
+            expect(response.stats.sampleCount).toBe(2);
+            expect(response.stats.maxTickDurationMs).toBe(6);
         }
     });
 

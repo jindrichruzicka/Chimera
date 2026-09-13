@@ -36,7 +36,10 @@
  * own bounded log + turn mementos (see `SnapshotInspectorOptions.getActionLog`
  * contract). Bookkeeping rules:
  *   - `engine:undo`/`engine:redo` are never appended (they have no reducer —
- *     replaying them would diverge). Undo moves the undone tail into a redo
+ *     replaying them would diverge), and neither is `engine:sync_request`:
+ *     it changes nothing and leaves the tick where it was, so appended it
+ *     would read as a tick regression on the next action and wipe the redo
+ *     stash the real undo buffer keeps. Undo moves the undone tail into a redo
  *     stash, drops now-invalid mementos, and rolls the turn high-water back
  *     so re-entered turn boundaries capture fresh mementos; redo restores
  *     from the stash; any normal append invalidates the stash (mirrors the
@@ -656,7 +659,7 @@ export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge 
             const restored = state.redoStash.filter((e) => e.tickApplied < next.tick);
             state.redoStash = state.redoStash.filter((e) => e.tickApplied >= next.tick);
             state.log.push(...restored);
-        } else {
+        } else if (actionType !== 'engine:sync_request') {
             // Append-time defensive compaction: self-heals out-of-band
             // rewinds (e.g. save restore) that bypass the pipeline. O(1)
             // fast path: the log is tickApplied-ascending, so an entry
