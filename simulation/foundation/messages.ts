@@ -195,10 +195,10 @@ export type ClientMessage =
  *                 (§4.6).
  * - CHAT          Chat message relayed from a player; includes server timestamp
  *                 for ordering.
- * - PONG          Reply to client PING; includes the server's own timestamp for
- *                 clock-skew estimation.
- * - LOBBY_STATE   Pushed whenever the lobby roster changes (player joins, leaves,
- *                 changes ready state). Keeps all clients in sync.
+ * - PONG          Reply to client PING; echoes `sentAt` so the client can
+ *                 compute the round trip.
+ * - LOBBY_STATE   Pushed by LobbyManager whenever the lobby state changes.
+ *                 Keeps all clients in sync.
  * - PROFILE_REJECT Host→client rejection of a mid-session PROFILE_UPDATE. Carries
  *                 the structured `reason` (`'profile:<AdmissionRejection>'` or
  *                 `'rate_limit'`) so the client can raise the §4.30 "Profile

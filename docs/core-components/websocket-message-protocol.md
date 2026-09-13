@@ -62,6 +62,10 @@ type ClientMessage =
       }
     | {
           type: 'LEAVE'; // Deliberate departure sent before socket close; suppresses presence toasts (#687)
+      }
+    | {
+          type: 'SPECTATE_TARGET_UPDATE';
+          targetPlayerId: string; // A spectator asks to follow a different seated player (§4.14)
       };
 
 // Server → Client
@@ -76,6 +80,10 @@ type ServerMessage =
           type: 'SNAPSHOT';
           snapshot: PlayerSnapshot;
           checksum: number; // CRC32 of JSON(snapshot) — integrity check
+      }
+    | {
+          type: 'TICK';
+          tick: number; // Clock-only beat: an engine:tick that changed nothing but the tick
       }
     | {
           type: 'SNAPSHOT_DELTA';
@@ -112,7 +120,14 @@ type ServerMessage =
     | {
           type: 'PONG';
           sentAt: number; // Echoed from PING; client subtracts to compute RTT
-          serverTime: number;
+      }
+    | {
+          type: 'LOBBY_STATE';
+          state: LobbyState; // Pushed by LobbyManager whenever the lobby state changes
+      }
+    | {
+          type: 'PROFILE_REJECT';
+          reason: string; // Host refused a mid-session PROFILE_UPDATE; wire form of the profile_reject side channel
       };
 ```
 
