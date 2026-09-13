@@ -20,7 +20,7 @@ tags: [security, ipc, trust-boundaries, electron, preload, attack-surface, owasp
 | Lobby tokens         | Short-lived random tokens issued by host on `JOIN`; prevents unauthenticated connections. No persistent auth required for peer-hosted play.   |
 | IPC surface          | Preload exposes typed, enumerated methods only. No `eval`, no arbitrary Node.js access from renderer.                                         |
 | Action checksums     | `ACTION` messages carry a CRC32 of `(playerId + tick + actionPayload)` to detect tampering or corruption.                                     |
-| State obfuscation    | `GameSnapshot` never crosses any process boundary. `StateProjector` is the mandatory gate between simulation and all outbound messages.       |
+| State obfuscation    | `GameSnapshot` is bound by Invariant #3. `StateProjector` is the mandatory gate between simulation and all outbound messages.                 |
 | Commitment integrity | `CommitmentScheme.verify()` is called client-side on every `REVEAL` message before the value is trusted. Failures are surfaced to the player. |
 | Host renderer trust  | Host's own renderer receives `PlayerSnapshot`, not `GameSnapshot`. Host player cannot gain info advantage via devtools inspection.            |
 

@@ -9,7 +9,7 @@
  *   const stop = bootstrapSettingsStore(window.__chimera.settings);
  *   return stop; // cleanup on unmount
  *
- * Invariant #3: GameSnapshot never crosses IPC; the renderer receives ResolvedSettings.
+ * Invariant #3: GameSnapshot; the renderer receives ResolvedSettings.
  */
 
 import type { SettingsAPI, Unsubscribe } from '@chimera-engine/simulation/bridge/api-types.js';

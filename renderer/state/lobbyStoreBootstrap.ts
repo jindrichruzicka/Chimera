@@ -9,7 +9,7 @@
  *   const stop = bootstrapLobbyStore(window.__chimera.lobby, window.__chimera.system);
  *   return stop; // cleanup on unmount
  *
- * Invariant #3: GameSnapshot never crosses IPC; the renderer receives LobbyState.
+ * Invariant #3: GameSnapshot; the renderer receives LobbyState.
  */
 
 import type {

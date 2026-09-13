@@ -447,9 +447,8 @@ function buildIpcValidationRejection(
  * invoke handler for that channel.
  *
  * Invariants touched:
- *   - #3: `GameSnapshot` never crosses any IPC boundary — the stubs do not
- *         accept or emit a `GameSnapshot`; the eventual snapshot channel
- *         carries `PlayerSnapshot` only.
+ *   - #3: `GameSnapshot` — the stubs do not accept or emit a `GameSnapshot`;
+ *         the eventual snapshot channel carries `PlayerSnapshot` only.
  *   - #4: The renderer only writes through `sendAction`.
  *   - #5: Channel constants are imported from `preload/game-api.ts`; there is
  *         no parallel list in this file to drift out of sync.

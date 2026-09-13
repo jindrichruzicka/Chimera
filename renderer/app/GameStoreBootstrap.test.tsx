@@ -21,7 +21,7 @@
  * so they early-return, and the bootstrap functions are mocked.
  *
  * Invariant #3: only PlayerSnapshot.phase is consumed for routing decisions;
- * GameSnapshot never crosses the IPC boundary.
+ * see Invariant #3 for what may carry a GameSnapshot.
  */
 
 import { act, cleanup, render, waitFor } from '@testing-library/react';

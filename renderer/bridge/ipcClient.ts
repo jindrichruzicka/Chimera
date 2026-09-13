@@ -33,7 +33,7 @@
  *    types stay in simulation/.
  *
  * Invariants upheld:
- *  #3  — `GameSnapshot` never crosses the IPC boundary.
+ *  #3  — `GameSnapshot`; the snapshot the store receives is the projected `PlayerSnapshot`.
  *  #4  — Renderer never writes simulation state directly; all writes go
  *          through `sendAction()` → IPC → `ActionPipeline`. Components never
  *          call `applySnapshot` or `applyTick`.

@@ -12,7 +12,7 @@
  *     without runtime errors across 1 000 draws (smoke test).
  *
  * Architecture: §10.1
- * Invariant #3: GameSnapshot never crosses a process boundary — arbitraries produce
+ * Invariant #3: GameSnapshot — arbitraries produce
  *               GameSnapshot-shaped objects only, never serialise over the wire.
  */
 

@@ -24,7 +24,7 @@
  * Architecture reference: §4.4 — Renderer State Stores
  *
  * Invariants upheld:
- *   #3  — GameSnapshot never crosses the IPC boundary.
+ *   #3  — GameSnapshot; this effect reads the projected PlayerSnapshot from the store.
  *   #4  — The renderer reads state and never writes it directly: components
  *          never call the store's `apply*` methods.
  */

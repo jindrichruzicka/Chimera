@@ -10,7 +10,7 @@
  * Architecture reference: §4.4 — Renderer State Stores
  *
  * Invariants upheld:
- *   #3 — GameSnapshot never crosses any IPC boundary.
+ *   #3 — GameSnapshot; the snapshot the bootstrap receives is the projected PlayerSnapshot.
  *   #4 — Renderer never writes simulation state directly; components never call
  *        applySnapshot / applyTick.
  */

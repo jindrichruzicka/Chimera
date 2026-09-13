@@ -7,8 +7,7 @@
 // Channel names are declared here rather than in the contract package; the
 // reason is stated once, in `electron/preload/api.ts`.
 //
-// Invariant 3: `GameSnapshot` never crosses any IPC boundary. There is no
-// import of `GameSnapshot` anywhere in this file.
+// Invariant 3: `GameSnapshot` — there is no import of it anywhere in this file.
 //
 // Invariant 4: The renderer reads state; it never writes state directly.
 // `sendAction` is the only write path the renderer has.

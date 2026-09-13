@@ -6,7 +6,7 @@
  *   - The host snapshot contains no opponent owner-only fields
  *   - Fog-hidden entities are absent from PlayerSnapshot.entities
  *
- * Invariant #3: GameSnapshot never crosses a process boundary; this spec reads
+ * Invariant #3: GameSnapshot; this spec reads
  * only the host renderer's last projected PlayerSnapshot via CHIMERA_E2E hooks.
  *
  * Invariant #8: StateProjector.project() is the mandatory outbound gate; the

@@ -53,7 +53,7 @@ export interface GameEvent {
  * Projected game state for the active viewer.
  * Canonical: simulation/snapshot.ts.
  *
- * Invariant #3: GameSnapshot never crosses any IPC boundary.
+ * Invariant #3: GameSnapshot is the source; this is the projected shape a viewer receives.
  */
 export interface PlayerSnapshot {
     readonly tick: number;
