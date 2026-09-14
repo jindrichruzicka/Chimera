@@ -98,6 +98,46 @@ describe('bootstrapPerfStore()', () => {
         stop();
     });
 
+    it('records nothing when the match is reset after a snapshot arrived', () => {
+        // `reset()` — the match → lobby or main-menu transition — drops the
+        // snapshot back to null. The subscription sees that change, and there
+        // is no tick in it to record.
+        const gameStore = createGameStore();
+        const perfStore = createPerfStore();
+        const recordSnapshotReceived = vi.spyOn(perfStore.getState(), 'recordSnapshotReceived');
+
+        const stop = bootstrapPerfStore(gameStore, perfStore, () => 1500);
+        gameStore.getState().applySnapshot(makeSnapshot(5));
+        expect(recordSnapshotReceived).toHaveBeenCalledOnce();
+
+        gameStore.getState().reset();
+
+        expect(recordSnapshotReceived).toHaveBeenCalledOnce();
+        expect(perfStore.getState().sample.actionsPerSec).toBe(1);
+        stop();
+    });
+
+    it('stamps a snapshot arrival with the injected clock, not the ambient one', () => {
+        // The two clocks disagree on purpose. The round trip is the arrival
+        // stamp minus the dispatch stamp, so it reads 500 when the arrival is
+        // stamped by the injected clock and 600 when stamped by
+        // `performance.now()`.
+        vi.spyOn(performance, 'now').mockImplementation(() => 1600);
+        try {
+            const gameStore = createGameStore();
+            const perfStore = createPerfStore();
+
+            const stop = bootstrapPerfStore(gameStore, perfStore, () => 1500);
+            perfStore.getState().recordActionDispatched(1000);
+            gameStore.getState().applySnapshot(makeSnapshot(5));
+
+            expect(perfStore.getState().sample.actionRoundTripMs).toBe(500);
+            stop();
+        } finally {
+            vi.restoreAllMocks();
+        }
+    });
+
     it('decays actionsPerSec to 0 between sporadic snapshots (turn-based games)', () => {
         let nowMs = 0;
         vi.spyOn(performance, 'now').mockImplementation(() => nowMs);

@@ -24,7 +24,7 @@ A lightweight floating overlay showing key performance numbers at a glance. Togg
 | FPS                | Advanced-frame count in rolling 1 s window                                  | 500 ms                                              |
 | Frame time avg/p95 | R3F `useFrame` `deltaSeconds`; last 120 advanced frames                     | 500 ms                                              |
 | Sim tick           | `PlayerSnapshot.tick` from `gameStore`                                      | On snapshot                                         |
-| Actions/sec        | Rolling count of snapshots received in last 1 s                             | On a snapshot whose tick moved; re-pruned every 1 s |
+| Actions/sec        | Rolling count of snapshots whose tick moved in last 1 s                     | On a snapshot whose tick moved; re-pruned every 1 s |
 | Action round-trip  | `sendAction()` stamp → matching `onSnapshot()` tick advance                 | Per own-action                                      |
 | Network ping (ms)  | `gameStore.latencyMs`, via `perfStoreBootstrap` — no producer today, see §6 | On change                                           |
 | Renderer heap (MB) | `performance.memory.usedJSHeapSize` (Chromium)                              | Every 1 s                                           |
@@ -55,7 +55,7 @@ What the engine does about each of those — which one it detects and why the ot
 ### Interface
 
 ```typescript
-// renderer/components/shell/perf/PerfHud.tsx
+// renderer/components/shell/perf/perfStore.ts
 
 interface PerfSample {
     fps: number;
@@ -71,6 +71,8 @@ interface PerfSample {
     drawCalls: number;
     triangles: number;
 }
+
+// renderer/components/shell/perf/PerfHud.tsx
 
 // Mounted once in GameShell. Reads perfStore samples produced by renderer probes.
 // Visible if F3-toggled OR engine.gameplay.showPerfHud === true
