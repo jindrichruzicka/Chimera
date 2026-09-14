@@ -1,14 +1,15 @@
 /**
  * electron/main/orphan-temp-reap.ts
  *
- * The sweep a repository owes once its temp file name is per write (§8.4 of
+ * The sweep owed once a temp file name is per write (§8.4 of
  * the Electron/IPC coding standards). Nothing ever reopens a per-write temp
  * path, so a process killed between the write and the rename leaves a
  * full-size artefact that no later write truncates. `FileSaveRepository`,
  * `FileReplayRepository` and `FilePerspectiveReplayRepository` each run this
- * over their own root, once per app start, from the composition root.
+ * over their own root, and the crash reporter runs `sweepOrphanTempFilesIn()`
+ * over its dump directory, once per app start, from the composition root.
  *
- * Each repository says which names are its temp files; this module decides
+ * Each caller says which names are its temp files; this module decides
  * which of those are abandoned.
  */
 
@@ -56,10 +57,7 @@ export async function sweepOrphanTempFiles(
     baseDir: string,
     isTempName: (name: string) => boolean,
 ): Promise<number> {
-    const gameDirs = await fs.readdir(baseDir).catch((err: unknown): string[] => {
-        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
-        throw err;
-    });
+    const gameDirs = await readdirOrNone(baseDir);
 
     // One cutoff for the whole sweep: a directory read late in the pass must
     // not use a later "now" than one read early, or the window would widen
@@ -72,27 +70,70 @@ export async function sweepOrphanTempFiles(
         // Reading a plain file as a directory throws ENOTDIR; the same catch
         // covers a directory removed between the two reads.
         const names = await fs.readdir(dir).catch((): string[] => []);
-
-        for (const name of names) {
-            if (!isTempName(name)) continue;
-
-            const filePath = path.join(dir, name);
-            const stat = await fs.stat(filePath).catch(() => undefined);
-            if (stat === undefined || stat.mtimeMs > cutoff) continue;
-
-            const unlinked = await fs
-                .unlink(filePath)
-                .then(() => true)
-                .catch(() => false);
-            if (unlinked) reaped += 1;
-        }
+        reaped += await unlinkAgedTempFiles(dir, names, isTempName, cutoff);
     }
 
     return reaped;
 }
 
 /**
- * Log the outcome of a repository's startup reap. The composition root starts
+ * {@link sweepOrphanTempFiles} for a writer whose files sit directly in `dir`,
+ * with no per-game directory between: unlink every file in `dir` whose name
+ * `isTempName` accepts and whose mtime is at least
+ * {@link ORPHAN_TEMP_MAX_AGE_MS} old.
+ *
+ * A missing `dir` is nothing to sweep, and any other failure to read it
+ * rejects. Each file's stat and unlink is best-effort, as it is there.
+ *
+ * @returns how many artefacts were unlinked.
+ */
+export async function sweepOrphanTempFilesIn(
+    dir: string,
+    isTempName: (name: string) => boolean,
+): Promise<number> {
+    const names = await readdirOrNone(dir);
+    return unlinkAgedTempFiles(dir, names, isTempName, Date.now() - ORPHAN_TEMP_MAX_AGE_MS);
+}
+
+/** `readdir`, reading a directory that does not exist as an empty one. */
+function readdirOrNone(dir: string): Promise<string[]> {
+    return fs.readdir(dir).catch((err: unknown): string[] => {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+        throw err;
+    });
+}
+
+/**
+ * Unlink each of `names` in `dir` that `isTempName` accepts and whose mtime is
+ * at or before `cutoff`, skipping any file whose stat or unlink fails.
+ */
+async function unlinkAgedTempFiles(
+    dir: string,
+    names: readonly string[],
+    isTempName: (name: string) => boolean,
+    cutoff: number,
+): Promise<number> {
+    let reaped = 0;
+
+    for (const name of names) {
+        if (!isTempName(name)) continue;
+
+        const filePath = path.join(dir, name);
+        const stat = await fs.stat(filePath).catch(() => undefined);
+        if (stat === undefined || stat.mtimeMs > cutoff) continue;
+
+        const unlinked = await fs
+            .unlink(filePath)
+            .then(() => true)
+            .catch(() => false);
+        if (unlinked) reaped += 1;
+    }
+
+    return reaped;
+}
+
+/**
+ * Log the outcome of a startup reap. The composition root starts
  * the reap and does not await it — nothing downstream depends on its result,
  * so making startup wait on the disk buys nothing — which is why this resolves
  * on a failed reap instead of rejecting: a rejection here would be an

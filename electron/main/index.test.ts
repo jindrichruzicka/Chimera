@@ -128,32 +128,40 @@ vi.mock('node:os', async (importOriginal) => {
 });
 
 // ── crash-reporter mock — spy on registerCrashReporter options ────────────────
-const { mockMakeRendererGoneHandler, mockRegisterCrashReporter, mockRendererGoneHandler } =
-    vi.hoisted(() => {
-        const rendererGoneHandler = vi.fn();
-        return {
-            mockMakeRendererGoneHandler: vi.fn<
+const {
+    mockMakeRendererGoneHandler,
+    mockReapOrphanCrashDumpTempFiles,
+    mockRegisterCrashReporter,
+    mockRendererGoneHandler,
+} = vi.hoisted(() => {
+    const rendererGoneHandler = vi.fn();
+    return {
+        mockReapOrphanCrashDumpTempFiles: vi.fn<(crashesDir: string) => Promise<number>>(() =>
+            Promise.resolve(0),
+        ),
+        mockMakeRendererGoneHandler: vi.fn<
+            (options: {
+                getRecentLogs?: () => readonly unknown[];
+                getAppVersion?: () => string;
+                reloadRenderer: () => void;
+            }) => (...args: readonly unknown[]) => void
+        >(() => rendererGoneHandler),
+        mockRegisterCrashReporter:
+            vi.fn<
                 (options: {
+                    autosave?: () => Promise<void>;
                     getRecentLogs?: () => readonly unknown[];
                     getAppVersion?: () => string;
-                    reloadRenderer: () => void;
-                }) => (...args: readonly unknown[]) => void
-            >(() => rendererGoneHandler),
-            mockRegisterCrashReporter:
-                vi.fn<
-                    (options: {
-                        autosave?: () => Promise<void>;
-                        getRecentLogs?: () => readonly unknown[];
-                        getAppVersion?: () => string;
-                        getSnapshot?: () => unknown;
-                    }) => void
-                >(),
-            mockRendererGoneHandler: rendererGoneHandler,
-        };
-    });
+                    getSnapshot?: () => unknown;
+                }) => void
+            >(),
+        mockRendererGoneHandler: rendererGoneHandler,
+    };
+});
 
 vi.mock('./logging/crash-reporter.js', () => ({
     makeRendererGoneHandler: mockMakeRendererGoneHandler,
+    reapOrphanCrashDumpTempFiles: mockReapOrphanCrashDumpTempFiles,
     registerCrashReporter: mockRegisterCrashReporter,
 }));
 
@@ -2685,6 +2693,34 @@ describe('main', () => {
         } finally {
             perspectiveReap.outcome = () => Promise.resolve(0);
         }
+    });
+
+    it('running main() reaps the crash dump directory it hands the crash reporter, and reports it', async () => {
+        // The crash reporter is mocked in this file, so what is measured here
+        // is the composition root's side: that `main()` REACHES the reap, on
+        // the same directory it hands `registerCrashReporter`, and reports what
+        // it took under that root. What the sweep does on disk is pinned in
+        // `crash-reporter.reap.test.ts`.
+        mockReapOrphanCrashDumpTempFiles.mockClear();
+        mockReapOrphanCrashDumpTempFiles.mockImplementationOnce(() => Promise.resolve(1));
+        fakeDest.write.mockClear();
+
+        await main(makeTestContributions());
+
+        const crashesDir = path.join('/tmp/chimera-userData-fake', 'crashes');
+        expect(mockRegisterCrashReporter).toHaveBeenCalledWith(
+            expect.objectContaining({ crashesDir }),
+        );
+        expect(mockReapOrphanCrashDumpTempFiles).toHaveBeenCalledOnce();
+        expect(mockReapOrphanCrashDumpTempFiles).toHaveBeenCalledWith(crashesDir);
+        await expect
+            .poll(() => loggedEntries('reaped orphaned crash dump temp files'))
+            .toEqual([
+                expect.objectContaining({
+                    level: 'info',
+                    context: expect.objectContaining({ module: 'crashes', reaped: 1 }) as unknown,
+                }),
+            ]);
     });
 
     it('routes the injected contributions through the scene wiring', async () => {

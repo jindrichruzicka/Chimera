@@ -126,6 +126,8 @@ Crash dump written to `userData/crashes/crash-<iso-timestamp>.json` contains:
 
 Crash dumps are written atomically (`.tmp` + rename) — a partially-written dump never exists.
 
+`reapOrphanCrashDumpTempFiles()` removes the `.tmp` an interrupted write leaves: once per app start the composition root sweeps `userData/crashes/`, taking only dump temp files at least `ORPHAN_TEMP_MAX_AGE_MS` old. Why the decision is age rather than ownership is on that constant, in `electron/main/orphan-temp-reap.ts`.
+
 ---
 
 ## Renderer Logging

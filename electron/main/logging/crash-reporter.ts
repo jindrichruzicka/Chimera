@@ -20,6 +20,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { LogEntry } from '@chimera-engine/simulation/foundation/logging.js';
+import { sweepOrphanTempFilesIn } from '../orphan-temp-reap.js';
 import type { Logger } from './logger.js';
 
 // ── public constants ────────────────────────────────────────────────────────────
@@ -192,7 +193,25 @@ export function makeRendererGoneHandler(options: RendererGoneHandlerOptions): Re
     };
 }
 
+/**
+ * Unlink the temp files interrupted dump writes left in `crashesDir`.
+ *
+ * What is taken, and on what evidence, is `sweepOrphanTempFilesIn()` in
+ * `electron/main/orphan-temp-reap.ts`; this function says only which names are
+ * a dump's temp files.
+ *
+ * @returns how many artefacts were unlinked.
+ */
+export function reapOrphanCrashDumpTempFiles(crashesDir: string): Promise<number> {
+    return sweepOrphanTempFilesIn(crashesDir, isCrashDumpTempName);
+}
+
 // ── private helpers ────────────────────────────────────────────────────────────
+
+/** The name `writeCrashDump()` gives its temp file: `crash-<iso>.json.tmp`. */
+function isCrashDumpTempName(name: string): boolean {
+    return name.startsWith('crash-') && name.endsWith('.json.tmp');
+}
 
 /**
  * Maximum serialised byte length allowed for the snapshot field in a crash

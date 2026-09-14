@@ -1,12 +1,12 @@
 /**
  * electron/main/orphan-temp-reap.test.ts
  *
- * Tests for `sweepOrphanTempFiles()` — the age-gated sweep a repository owes
- * once its temp file name is per write (§4.11, §4.28). Which names are temp
- * files is each repository's to say, and is pinned in that repository's own
- * `*.reap.test.ts`, beside a write in flight surviving the pass that takes an
- * aged artefact. These cases pin what the sweep does with the repository's
- * answer, and how `logOrphanTempReap()` reports a reap nothing awaits.
+ * Tests for `sweepOrphanTempFiles()` and `sweepOrphanTempFilesIn()` — the
+ * age-gated sweeps a writer owes once its temp file name is per write (§4.11,
+ * §4.27, §4.28). Which names are temp files is each writer's to say, and is
+ * pinned in its own `*.reap.test.ts`. These cases pin what the sweeps do with
+ * the writer's answer, and how `logOrphanTempReap()` reports a reap nothing
+ * awaits.
  *
  * Tests written FIRST (red); implementation in `orphan-temp-reap.ts`.
  */
@@ -21,6 +21,7 @@ import {
     logOrphanTempReap,
     ORPHAN_TEMP_MAX_AGE_MS,
     sweepOrphanTempFiles,
+    sweepOrphanTempFilesIn,
 } from './orphan-temp-reap.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -187,6 +188,97 @@ describe('sweepOrphanTempFiles()', () => {
 
         await expect(sweepOrphanTempFiles(baseDir, isTemp)).resolves.toBe(1);
         expect(await exists(orphan)).toBe(false);
+    });
+});
+
+// A writer whose files sit directly in its directory, with no per-game level
+// between — the crash reporter's `crashes/` is one.
+describe('sweepOrphanTempFilesIn()', () => {
+    let dir: string;
+
+    beforeEach(async () => {
+        dir = await fs.mkdtemp(path.join(os.tmpdir(), 'chimera-orphan-temp-reap-flat-test-'));
+    });
+
+    afterEach(async () => {
+        await fs.rm(dir, { recursive: true, force: true });
+    });
+
+    it('takes an aged name the caller calls a temp file, and no other', async () => {
+        const temp = await plant(dir, 'abandoned.tmp', AGED);
+        const kept = await plant(dir, 'abandoned.keep', AGED);
+
+        await expect(sweepOrphanTempFilesIn(dir, isTemp)).resolves.toBe(1);
+        expect(await exists(temp)).toBe(false);
+        expect(await exists(kept)).toBe(true);
+    });
+
+    it('takes an artefact exactly as old as the window', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+            const now = Date.UTC(2026, 0, 1);
+            vi.setSystemTime(now);
+            const boundary = path.join(dir, 'boundary.tmp');
+            await fs.writeFile(boundary, 'partial-write-bytes');
+            const seconds = (now - ORPHAN_TEMP_MAX_AGE_MS) / 1000;
+            await fs.utimes(boundary, seconds, seconds);
+
+            await expect(sweepOrphanTempFilesIn(dir, isTemp)).resolves.toBe(1);
+            expect(await exists(boundary)).toBe(false);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('leaves an artefact younger than the window in place', async () => {
+        const fresh = await plant(dir, 'in-flight.tmp', FRESH);
+
+        await expect(sweepOrphanTempFilesIn(dir, isTemp)).resolves.toBe(0);
+        expect(await exists(fresh)).toBe(true);
+    });
+
+    // Half a second inside the window, with the clock held at a whole second so
+    // that mtime is representable.
+    it('leaves an artefact less than a second younger than the window in place', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+            const now = Date.UTC(2026, 0, 1);
+            vi.setSystemTime(now);
+            const inside = path.join(dir, 'inside.tmp');
+            await fs.writeFile(inside, 'partial-write-bytes');
+            const seconds = (now - ORPHAN_TEMP_MAX_AGE_MS + 500) / 1000;
+            await fs.utimes(inside, seconds, seconds);
+
+            await expect(sweepOrphanTempFilesIn(dir, isTemp)).resolves.toBe(0);
+            expect(await exists(inside)).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('skips a temp name it cannot stat, and still takes the aged one beside it', async () => {
+        // A dangling symlink is the reachable stand-in for a file that is gone
+        // by the time it is stat'ed — another reaper took it first.
+        await fs.symlink(path.join(dir, 'never-created'), path.join(dir, 'dangling.tmp'));
+        const orphan = await plant(dir, 'abandoned.tmp', AGED);
+
+        await expect(sweepOrphanTempFilesIn(dir, isTemp)).resolves.toBe(1);
+        expect(await exists(orphan)).toBe(false);
+    });
+
+    it('resolves 0 when the directory does not exist yet', async () => {
+        await expect(sweepOrphanTempFilesIn(path.join(dir, 'never-created'), isTemp)).resolves.toBe(
+            0,
+        );
+    });
+
+    it('rejects when the directory cannot be read as one', async () => {
+        const notADirectory = path.join(dir, 'crashes');
+        await fs.writeFile(notADirectory, 'a file where the directory should be');
+
+        await expect(sweepOrphanTempFilesIn(notADirectory, isTemp)).rejects.toMatchObject({
+            code: 'ENOTDIR',
+        });
     });
 });
 

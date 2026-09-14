@@ -52,7 +52,11 @@ import {
     type FlushableSink,
     type LogLevel,
 } from './logging/logger.js';
-import { makeRendererGoneHandler, registerCrashReporter } from './logging/crash-reporter.js';
+import {
+    makeRendererGoneHandler,
+    reapOrphanCrashDumpTempFiles,
+    registerCrashReporter,
+} from './logging/crash-reporter.js';
 import { LogRingBufferSink } from './logging/log-ring-buffer-sink.js';
 import { SaveManager } from './saves/SaveManager.js';
 import { FileSaveRepository } from './saves/FileSaveRepository.js';
@@ -1602,6 +1606,12 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         getRecentLogs: () => crashLogSink.drain(),
         getAppVersion: () => app.getVersion(),
         autosave: autosaveActiveSessionBeforeCrash,
+    });
+
+    // The crash dump directory is reaped as the save and replay roots below are.
+    void logOrphanTempReap(reapOrphanCrashDumpTempFiles(crashesDir), logger, {
+        module: 'crashes',
+        files: 'crash dump',
     });
 
     // Create the SaveManager with FileSaveRepository (invariant #37: concrete
