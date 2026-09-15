@@ -898,6 +898,35 @@ describe('blank template lint guardrails', () => {
         expect(stylesheet).toMatch(/^\.playfield\s*\{/mu);
     });
 
+    it("lights the playfield's canvas with the engine rig", async () => {
+        // A scene with no light renders a lit material black, and a new author
+        // has no way to tell why. The rig has to be a CHILD of the canvas: it
+        // reads the shadow quality the canvas resolves, and it throws anywhere
+        // else.
+        const playfield = await read('screens/__GamePascal__Playfield.tsx');
+
+        expect(playfield).toMatch(
+            /^import \{ GameCanvas, LightingRig \} from '@chimera-engine\/renderer\/components\/r3f';$/mu,
+        );
+        expect(playfield).toMatch(/<GameCanvas\b[^>]*>\s*<LightingRig\s*\/>/u);
+    });
+
+    it('layers the canvas under the panel, full-size and out of flow', async () => {
+        // jsdom computes no layout, so the rules that place the canvas and the
+        // panel are pinned here, at the source: the canvas layer carries the
+        // class and the size, and the panel is positioned and written after it.
+        const playfield = await read('screens/__GamePascal__Playfield.tsx');
+        const stylesheet = await read('screens/__GamePascal__Playfield.module.css');
+
+        expect(playfield).toMatch(/<div className=\{styles\['sceneCanvas'\]\}>\s*<GameCanvas\b/u);
+        expect(playfield.indexOf("className={styles['sceneCanvas']}")).toBeLessThan(
+            playfield.indexOf('<Panel'),
+        );
+        expect(stylesheet).toMatch(/^\.sceneCanvas\s*\{[^}]*\bposition:\s*absolute;/mu);
+        expect(stylesheet).toMatch(/^\.sceneCanvas\s*\{[^}]*\binset:\s*0;/mu);
+        expect(stylesheet).toMatch(/^\.playfield\s*\{[^}]*\bposition:\s*relative;/mu);
+    });
+
     it('roots the screen in a full-bleed scene host', async () => {
         // Why absolute positioning is the load-bearing part is written out once,
         // in the stylesheet this asserts on — the file a scaffolded game's author

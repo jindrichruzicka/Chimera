@@ -298,10 +298,7 @@ export const PROBE_LINT_PLANTS = [
  * `e2e/**` works; the shape test pins this one) — the e2e tsconfig maps
  * `@chimera-engine/renderer/*` straight onto `dist/`, bypassing the exports
  * map, so an e2e file can type-resolve an import game source can never
- * write. Nothing mounts it, and no model or Canvas enters the blank template.
- * (Asset MANIFESTS do — two empty ones, the match inventory and the shell's,
- * both wired through the renderer loaders — but they declare no asset and mount
- * nothing.)
+ * write. Nothing mounts it.
  */
 export const PROBE_SEAM_PLANT = {
     rel: path.join('screens', 'VerifyScaffoldSeamProbe.tsx'),

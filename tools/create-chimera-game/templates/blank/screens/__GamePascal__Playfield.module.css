@@ -17,8 +17,7 @@
  */
 
 /*
- * The scene host: this screen's full-bleed root, and where a `<GameCanvas>` goes
- * when you add one.
+ * The scene host: this screen's full-bleed root.
  *
  * The rule below is spelled out in full on purpose. It looks arbitrary enough to
  * "clean up", and once it is gone nothing here tells you why it mattered.
@@ -47,7 +46,22 @@
     place-items: center;
 }
 
+/*
+ * The layer the `<GameCanvas>` sits in. It fills the scene host and is out of
+ * flow, so the panel below still centres on the host rather than below the
+ * canvas.
+ */
+.sceneCanvas {
+    position: absolute;
+    inset: 0;
+}
+
+/*
+ * Positioned so it paints above the canvas layer, which is positioned too and
+ * comes first.
+ */
 .playfield {
+    position: relative;
     display: grid;
     gap: var(--ch-space-md);
     padding: var(--ch-space-md);
