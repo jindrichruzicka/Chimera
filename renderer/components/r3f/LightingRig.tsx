@@ -36,17 +36,26 @@ export type LightingRigProps = Readonly<{
      * shadow quality `off` it does not cast whatever this says.
      */
     castShadow?: boolean;
+    /**
+     * Half the side, in world units, of the square box the key light's shadow
+     * covers; default `5`, three's own. Size it to the scene: a caster or
+     * receiver outside the box gets no shadow.
+     */
+    shadowCameraExtent?: number;
 }>;
 
 const DEFAULT_AMBIENT_INTENSITY = 0.6;
 const DEFAULT_KEY_LIGHT_INTENSITY = 1;
 const DEFAULT_KEY_LIGHT_POSITION: Vector3Tuple = [5, 10, 5];
+/** three's own `DirectionalLightShadow` box, so an unset extent renders as three would. */
+const DEFAULT_SHADOW_CAMERA_EXTENT = 5;
 
 export function LightingRig({
     ambientIntensity = DEFAULT_AMBIENT_INTENSITY,
     keyLightIntensity = DEFAULT_KEY_LIGHT_INTENSITY,
     keyLightPosition = DEFAULT_KEY_LIGHT_POSITION,
     castShadow = true,
+    shadowCameraExtent = DEFAULT_SHADOW_CAMERA_EXTENT,
 }: LightingRigProps): React.ReactElement {
     const mapSize = shadowMapSize(useCanvasShadowQuality());
     const keyLightRef = React.useRef<DirectionalLight>(null);
@@ -61,6 +70,19 @@ export function LightingRig({
         }
         resizeShadowMap(keyLight.shadow, mapSize);
     }, [mapSize]);
+
+    React.useLayoutEffect(() => {
+        const keyLight = keyLightRef.current;
+        if (keyLight === null) {
+            return;
+        }
+        const { camera } = keyLight.shadow;
+        camera.left = -shadowCameraExtent;
+        camera.right = shadowCameraExtent;
+        camera.top = shadowCameraExtent;
+        camera.bottom = -shadowCameraExtent;
+        camera.updateProjectionMatrix();
+    }, [shadowCameraExtent]);
 
     return (
         <>

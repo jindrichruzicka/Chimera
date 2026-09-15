@@ -13,12 +13,13 @@ import { ActionShellBackground } from './ActionShellBackground';
 
 // ── The engine seams this background stands on ───────────────────────────────
 //
-// Only `GameCanvas` is exported from the r3f mock: the engine mounts
-// `FrameRateLimiter` itself, so if this component ever reaches for one the
-// import resolves `undefined` and every render here crashes red.
+// Only `GameCanvas` and `LightingRig` are exported from the r3f mock: the engine
+// mounts `FrameRateLimiter` itself, so if this component ever reaches for one
+// the import resolves `undefined` and every render here crashes red.
 const gameCanvasCalls = vi.hoisted(
     (): { readonly camera: unknown; readonly role: string | undefined }[] => [],
 );
+const lightingRigCalls = vi.hoisted((): Record<string, unknown>[] => []);
 
 vi.mock('@chimera-engine/renderer/components/r3f', () => ({
     GameCanvas: ({
@@ -38,6 +39,10 @@ vi.mock('@chimera-engine/renderer/components/r3f', () => ({
                 )}
             </div>
         );
+    },
+    LightingRig: (props: Record<string, unknown>) => {
+        lightingRigCalls.push(props);
+        return <span data-testid="action-shell-lighting-rig" />;
     },
 }));
 
@@ -118,6 +123,7 @@ function resetDraft(): void {
 
 beforeEach(() => {
     gameCanvasCalls.length = 0;
+    lightingRigCalls.length = 0;
     rigProps.length = 0;
     soundRefs.length = 0;
     resetDraft();
@@ -144,6 +150,22 @@ describe('ActionShellBackground — the scene', () => {
 
         expect(gameCanvasCalls).toHaveLength(1);
         expect(gameCanvasCalls[0]?.role).toBe('overlay');
+    });
+
+    // The overlay canvas resolves its own shadow configuration; nothing here is
+    // inherited from a match canvas, which is not mounted on a menu route.
+    it("lights its own overlay canvas with the engine rig, spanning the arena's diagonal", () => {
+        render(<ActionShellBackground />);
+
+        expect(screen.getByTestId('action-shell-canvas')).toContainElement(
+            screen.getByTestId('action-shell-lighting-rig'),
+        );
+        expect(lightingRigCalls.at(-1)).toEqual({
+            ambientIntensity: 0.55,
+            keyLightIntensity: 1.1,
+            keyLightPosition: [6, 12, 6],
+            shadowCameraExtent: 11,
+        });
     });
 
     it('constructs the canvas at the HOME view, so the first frame is already framed', () => {

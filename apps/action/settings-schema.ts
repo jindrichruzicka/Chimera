@@ -1,15 +1,12 @@
 /**
  * apps/action/settings-schema.ts
  *
- * The action app's settings schema — the engine defaults plus the movement
- * bindings, and nothing else. The host registers it with
+ * The action app's settings schema. The host registers it with
  * `SettingsManager` at startup so the settings page and persistence work.
  *
  * There is no game-specific FIELD here on purpose: the app is a movement
  * sandbox, so an `arenaGridVisible`-style toggle would be a settings row
- * nothing reads. What it does own is `controls.bindings` — every movement
- * action has to arrive with a default key or the rebind UI lists it unbound and
- * nothing moves on a fresh install.
+ * nothing reads.
  *
  * Architecture reference: §4.13
  *
@@ -39,6 +36,9 @@ export type ActionSettings = EngineSettings;
 
 export const ACTION_DEFAULTS: ActionSettings = {
     ...ENGINE_DEFAULTS,
+    // The primitives cast and the arena floor receives, so the game ships a tier
+    // that renders them; the player can still lower it to 'off'.
+    display: { ...ENGINE_DEFAULTS.display, shadowQuality: 'medium' },
     controls: {
         ...ENGINE_DEFAULTS.controls,
         bindings: {

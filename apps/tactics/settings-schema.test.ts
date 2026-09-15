@@ -24,6 +24,16 @@ describe('tacticsSettingsSchema', () => {
         expect(d.gameplay.autoSave).toBe(true);
     });
 
+    // The engine default tier is 'off'. Tactics ships its own, so a fresh
+    // install renders the board's shadows and a player can still turn them off.
+    it("defaults display.shadowQuality to 'medium' over the engine's 'off'", () => {
+        expect(ENGINE_DEFAULTS.display.shadowQuality).toBe('off');
+        expect(tacticsSettingsSchema.defaults.display).toEqual({
+            ...ENGINE_DEFAULTS.display,
+            shadowQuality: 'medium',
+        });
+    });
+
     it('keeps game:end-turn out of engine defaults and owns it as a tactics binding', () => {
         expect(ENGINE_DEFAULTS.controls.bindings['game:end-turn']).toBeUndefined();
         expect(tacticsSettingsSchema.defaults.controls.bindings['game:end-turn']).toEqual({

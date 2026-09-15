@@ -39,6 +39,9 @@ export interface TacticsSettings extends EngineSettings {
 
 export const TACTICS_DEFAULTS: TacticsSettings = {
     ...ENGINE_DEFAULTS,
+    // The board's units cast and its ground receives, so the game ships a tier
+    // that renders them; the player can still lower it to 'off'.
+    display: { ...ENGINE_DEFAULTS.display, shadowQuality: 'medium' },
     controls: {
         ...ENGINE_DEFAULTS.controls,
         bindings: {

@@ -15,9 +15,20 @@ describe('actionSettingsSchema', () => {
         // drops one of the four reserved namespaces (Invariant #35).
         const defaults = actionSettingsSchema.defaults;
         expect(defaults.audio).toEqual(ENGINE_DEFAULTS.audio);
-        expect(defaults.display).toEqual(ENGINE_DEFAULTS.display);
+        expect(defaults.display).toBeDefined();
         expect(defaults.gameplay).toEqual(ENGINE_DEFAULTS.gameplay);
         expect(defaults.controls.bindings).toBeDefined();
+    });
+
+    // The engine default tier is 'off'. The action app ships its own, so a
+    // fresh install renders the arena's shadows and a player can still turn
+    // them off.
+    it("defaults display.shadowQuality to 'medium' over the engine's 'off'", () => {
+        expect(ENGINE_DEFAULTS.display.shadowQuality).toBe('off');
+        expect(actionSettingsSchema.defaults.display).toEqual({
+            ...ENGINE_DEFAULTS.display,
+            shadowQuality: 'medium',
+        });
     });
 
     it('exports ACTION_DEFAULTS matching the schema defaults', () => {

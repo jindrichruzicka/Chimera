@@ -115,6 +115,80 @@ describe('LightingRig', () => {
     });
 });
 
+describe('LightingRig shadow camera extent', () => {
+    it("spans three's default box when no extent is authored", async () => {
+        const renderer = await ReactThreeTestRenderer.create(underCanvas(<LightingRig />));
+
+        try {
+            const { camera } = onlyObject<DirectionalLight>(
+                renderer.scene,
+                'DirectionalLight',
+            ).shadow;
+            expect([camera.left, camera.right, camera.top, camera.bottom]).toEqual([-5, 5, 5, -5]);
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
+    it('spans the shadow camera box to the authored half-extent on every side', async () => {
+        const renderer = await ReactThreeTestRenderer.create(
+            underCanvas(<LightingRig shadowCameraExtent={11} />),
+        );
+
+        try {
+            const { camera } = onlyObject<DirectionalLight>(
+                renderer.scene,
+                'DirectionalLight',
+            ).shadow;
+            expect([camera.left, camera.right, camera.top, camera.bottom]).toEqual([
+                -11, 11, 11, -11,
+            ]);
+            // The projection the shadow pass renders with, not only the fields it
+            // is derived from.
+            expect(camera.projectionMatrix.elements[0]).toBeCloseTo(1 / 11);
+            expect(camera.projectionMatrix.elements[5]).toBeCloseTo(1 / 11);
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
+    it('re-spans a mounted key light when the extent changes', async () => {
+        const renderer = await ReactThreeTestRenderer.create(
+            underCanvas(<LightingRig shadowCameraExtent={6} />),
+        );
+
+        try {
+            const key = onlyObject<DirectionalLight>(renderer.scene, 'DirectionalLight');
+
+            await renderer.update(underCanvas(<LightingRig shadowCameraExtent={9} />));
+
+            const { camera } = key.shadow;
+            expect([camera.left, camera.right, camera.top, camera.bottom]).toEqual([-9, 9, 9, -9]);
+            expect(camera.projectionMatrix.elements[0]).toBeCloseTo(1 / 9);
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
+    it("returns a mounted key light to three's default box when the extent is removed", async () => {
+        const renderer = await ReactThreeTestRenderer.create(
+            underCanvas(<LightingRig shadowCameraExtent={11} />),
+        );
+
+        try {
+            const key = onlyObject<DirectionalLight>(renderer.scene, 'DirectionalLight');
+
+            await renderer.update(underCanvas(<LightingRig />));
+
+            const { camera } = key.shadow;
+            expect([camera.left, camera.right, camera.top, camera.bottom]).toEqual([-5, 5, 5, -5]);
+            expect(camera.projectionMatrix.elements[0]).toBeCloseTo(1 / 5);
+        } finally {
+            await renderer.unmount();
+        }
+    });
+});
+
 describe('LightingRig shadow quality', () => {
     it.each([
         ['basic', 512],

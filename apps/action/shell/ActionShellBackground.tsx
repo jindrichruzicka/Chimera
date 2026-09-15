@@ -32,14 +32,21 @@
 // (Invariant #96) — here `components/r3f`, `audio` and `game`.
 
 import React from 'react';
-import { GameCanvas, type CameraConfig } from '@chimera-engine/renderer/components/r3f';
+import {
+    GameCanvas,
+    LightingRig,
+    type CameraConfig,
+} from '@chimera-engine/renderer/components/r3f';
 import { useSound } from '@chimera-engine/renderer/audio';
 import { getShellState, setShellDraft, useShellState } from '@chimera-engine/renderer/game';
 
 import { ActionGroundPlane } from '../components/ActionGroundPlane.js';
 import { ActionPrimitiveMesh } from '../components/ActionPrimitiveMesh.js';
 import { ActionSelectionRing } from '../components/ActionSelectionRing.js';
-import { buildActionShellScene } from '../components/actionSceneModel.js';
+import {
+    ACTION_ARENA_SHADOW_EXTENT,
+    buildActionShellScene,
+} from '../components/actionSceneModel.js';
 import { actionShellAudioRefs } from '../shell-asset-manifest.js';
 import { ACTION_SHELL_CAMERA_HOME, actionShellCameraView } from './actionShellCamera.js';
 import { ActionShellCameraRig } from './ActionShellCameraRig.js';
@@ -114,11 +121,11 @@ export function ActionShellBackground(): React.ReactElement {
         <div ref={hostRef} data-testid="action-shell-background" className={styles['host']}>
             <GameCanvas camera={SHELL_CAMERA} role="overlay">
                 <ActionShellCameraRig hostRef={hostRef} focusX={focusX} />
-                <ambientLight intensity={AMBIENT_INTENSITY} />
-                <directionalLight
-                    castShadow
-                    intensity={KEY_LIGHT_INTENSITY}
-                    position={KEY_LIGHT_POSITION}
+                <LightingRig
+                    ambientIntensity={AMBIENT_INTENSITY}
+                    keyLightIntensity={KEY_LIGHT_INTENSITY}
+                    keyLightPosition={KEY_LIGHT_POSITION}
+                    shadowCameraExtent={ACTION_ARENA_SHADOW_EXTENT}
                 />
                 {SHELL_SCENE.ground !== null && <ActionGroundPlane ground={SHELL_SCENE.ground} />}
                 {SHELL_SCENE.primitives.map((primitive) => (

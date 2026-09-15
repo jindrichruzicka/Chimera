@@ -463,6 +463,7 @@ export type LightingRigProps = Readonly<{
     keyLightIntensity?: number; // default 1
     keyLightPosition?: Vector3Tuple; // default [5, 10, 5]
     castShadow?: boolean; // default true
+    shadowCameraExtent?: number; // default: three's own 5
 }>;
 
 <GameCanvas camera="top-down">

@@ -120,7 +120,9 @@ const gameCanvasCalls = vi.hoisted(
     }[] => [],
 );
 
-// The mock exports ONLY GameCanvas: the engine mounts PerfProbe and
+const lightingRigCalls = vi.hoisted((): Record<string, unknown>[] => []);
+
+// The mock exports GameCanvas and LightingRig only: the engine mounts PerfProbe and
 // FrameRateLimiter itself, so if the board ever re-adds either import (the
 // double-mount mutant — a second FrameRateLimiter owns a second
 // requestAnimationFrame chain and advances the canvas at roughly double the
@@ -148,6 +150,10 @@ vi.mock('@chimera-engine/renderer/components/r3f', () => ({
                 {renderedChildren}
             </div>
         );
+    },
+    LightingRig: (props: Record<string, unknown>) => {
+        lightingRigCalls.push(props);
+        return <span data-testid="tactics-lighting-rig" />;
     },
 }));
 
@@ -245,6 +251,7 @@ vi.mock('../components/TacticsUnitPrimitive.js', () => ({
 afterEach(() => {
     cleanup();
     gameCanvasCalls.length = 0;
+    lightingRigCalls.length = 0;
     minimapCalls.length = 0;
     unitPrimitiveUnits.length = 0;
     useCommitmentBuffer.getState().reset();
@@ -330,6 +337,26 @@ function makeSnapshot(
 }
 
 describe('TacticsDemoBoard', () => {
+    // Omitting castShadow leaves the rig's default: casting.
+    it('lights the board canvas with the engine rig, its key light left casting', () => {
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByTestId('tactics-r3f-canvas')).toContainElement(
+            screen.getByTestId('tactics-lighting-rig'),
+        );
+        expect(lightingRigCalls.at(-1)).toEqual({
+            ambientIntensity: 0.65,
+            keyLightIntensity: 0.9,
+            keyLightPosition: [3, 6, 4],
+        });
+    });
+
     it('renders a canvas-backed scene with colored visible units and no legacy controls', () => {
         const localPlayerId = playerId('p1');
         const sendAction = vi.fn();

@@ -31,12 +31,14 @@ const P2 = playerId('player-2');
 
 // ── The engine seams this screen stands on ───────────────────────────────────
 //
-// Only `GameCanvas` is exported from the r3f mock: the engine mounts `PerfProbe`
-// and `FrameRateLimiter` itself, so if the screen ever re-adds either import the
-// component resolves `undefined` and every render test crashes red.
+// Only `GameCanvas` and `LightingRig` are exported from the r3f mock: the engine
+// mounts `PerfProbe` and `FrameRateLimiter` itself, so if the screen ever re-adds
+// either import the component resolves `undefined` and every render test crashes
+// red.
 const gameCanvasCalls = vi.hoisted(
     (): { readonly camera: unknown; readonly role: string | undefined }[] => [],
 );
+const lightingRigCalls = vi.hoisted((): Record<string, unknown>[] => []);
 
 vi.mock('@chimera-engine/renderer/components/r3f', () => ({
     GameCanvas: ({
@@ -56,6 +58,10 @@ vi.mock('@chimera-engine/renderer/components/r3f', () => ({
                 )}
             </div>
         );
+    },
+    LightingRig: (props: Record<string, unknown>) => {
+        lightingRigCalls.push(props);
+        return <span data-testid="action-lighting-rig" />;
     },
 }));
 
@@ -230,6 +236,7 @@ beforeEach(() => {
     subscribers = new Map();
     inputManager = makeInputManagerDouble();
     gameCanvasCalls.length = 0;
+    lightingRigCalls.length = 0;
 });
 
 afterEach(() => {
@@ -269,6 +276,22 @@ describe('ActionPlayfield — the arena', () => {
 
         expect(gameCanvasCalls).toEqual([{ camera: 'top-down', role: 'main' }]);
         expect(screen.getByTestId('action-r3f-canvas')).toBeInTheDocument();
+    });
+
+    it("lights the arena with the engine rig, its shadow box spanning the arena's diagonal", () => {
+        renderPlayfield();
+
+        expect(screen.getByTestId('action-r3f-canvas')).toContainElement(
+            screen.getByTestId('action-lighting-rig'),
+        );
+        // A 17 x 11 arena centred on the origin reaches half its diagonal,
+        // about 10.1 world units, in every direction the light can look from.
+        expect(lightingRigCalls.at(-1)).toEqual({
+            ambientIntensity: 0.6,
+            keyLightIntensity: 1.1,
+            keyLightPosition: [6, 12, 6],
+            shadowCameraExtent: 11,
+        });
     });
 
     it('renders the ground plane at the size the snapshot declares', () => {

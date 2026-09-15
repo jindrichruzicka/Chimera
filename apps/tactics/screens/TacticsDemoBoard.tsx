@@ -1,7 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { GameCanvas, type OrthographicCameraConfig } from '@chimera-engine/renderer/components/r3f';
+import {
+    GameCanvas,
+    LightingRig,
+    type OrthographicCameraConfig,
+} from '@chimera-engine/renderer/components/r3f';
 import {
     rateFromSemitones,
     useAudioManager,
@@ -428,8 +432,11 @@ export function TacticsDemoBoard({
     return (
         <div aria-label={t(BOARD_KEYS.ariaLabel)} style={boardSceneStyle}>
             <GameCanvas camera={TACTICS_GAME_CANVAS_CAMERA}>
-                <ambientLight intensity={0.65} />
-                <directionalLight intensity={0.9} position={[3, 6, 4]} />
+                <LightingRig
+                    ambientIntensity={0.65}
+                    keyLightIntensity={0.9}
+                    keyLightPosition={[3, 6, 4]}
+                />
                 <TacticsGroundPlane
                     color={boardColor}
                     onSelectGridPoint={handleGroundSelect}

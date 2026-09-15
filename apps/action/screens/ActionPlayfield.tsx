@@ -32,7 +32,7 @@
 // (Invariant #96) — here `components/r3f` and `input`.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { GameCanvas } from '@chimera-engine/renderer/components/r3f';
+import { GameCanvas, LightingRig } from '@chimera-engine/renderer/components/r3f';
 import { useInputAction } from '@chimera-engine/renderer/input';
 import type { GameScreenProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import type { PlayerId } from '@chimera-engine/simulation/engine/types.js';
@@ -60,7 +60,7 @@ import {
     velocityFromHeld,
     type ActionHeldDirections,
 } from '../components/actionVelocityInput.js';
-import { parseActionScene } from '../components/actionSceneModel.js';
+import { ACTION_ARENA_SHADOW_EXTENT, parseActionScene } from '../components/actionSceneModel.js';
 import { findActionPassAndPlaySeat } from '../components/actionSeatModel.js';
 import styles from './ActionPlayfield.module.css';
 
@@ -149,11 +149,11 @@ export function ActionPlayfield({
                 <ActionSeatMovement seatId={passAndPlaySeat} keys={WASD_KEYS} dispatch={dispatch} />
             )}
             <GameCanvas camera="top-down" role="main">
-                <ambientLight intensity={AMBIENT_INTENSITY} />
-                <directionalLight
-                    castShadow
-                    intensity={KEY_LIGHT_INTENSITY}
-                    position={KEY_LIGHT_POSITION}
+                <LightingRig
+                    ambientIntensity={AMBIENT_INTENSITY}
+                    keyLightIntensity={KEY_LIGHT_INTENSITY}
+                    keyLightPosition={KEY_LIGHT_POSITION}
+                    shadowCameraExtent={ACTION_ARENA_SHADOW_EXTENT}
                 />
                 {scene.ground !== null && <ActionGroundPlane ground={scene.ground} />}
                 {scene.primitives.map((primitive) => (

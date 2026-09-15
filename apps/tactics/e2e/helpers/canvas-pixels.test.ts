@@ -2,10 +2,52 @@ import { describe, expect, it } from 'vitest';
 import { PNG } from 'pngjs';
 import {
     analyzeCanvasPixels,
+    countDarkenedPixels,
     decodePngToRgbaFrame,
     formatCanvasPixelStats,
     summarizeOpaqueColor,
 } from './canvas-pixels';
+
+describe('countDarkenedPixels', () => {
+    /** A one-row frame of the given RGBA pixels. */
+    function row(...pixels: readonly (readonly [number, number, number, number])[]) {
+        return { width: pixels.length, height: 1, rgba: pixels.flat() };
+    }
+
+    it('counts a pixel whose RGB sum fell by the threshold, and not one that fell by one less', () => {
+        const before = row([100, 100, 100, 255], [100, 100, 100, 255]);
+        const after = row([90, 90, 90, 255], [91, 90, 90, 255]);
+
+        expect(countDarkenedPixels(before, after, 30)).toBe(1);
+    });
+
+    it('does not count a pixel that brightened or stayed the same', () => {
+        const before = row([100, 100, 100, 255], [100, 100, 100, 255]);
+        const after = row([140, 140, 140, 255], [100, 100, 100, 255]);
+
+        expect(countDarkenedPixels(before, after, 1)).toBe(0);
+    });
+
+    it('sums all three channels, so a drop on one channel alone counts', () => {
+        const before = row([100, 100, 200, 255]);
+        const after = row([100, 100, 150, 255]);
+
+        expect(countDarkenedPixels(before, after, 50)).toBe(1);
+    });
+
+    it('skips a pixel that is transparent in either frame', () => {
+        const before = row([200, 200, 200, 255], [200, 200, 200, 0]);
+        const after = row([0, 0, 0, 0], [0, 0, 0, 255]);
+
+        expect(countDarkenedPixels(before, after, 1)).toBe(0);
+    });
+
+    it('throws when the two frames differ in size', () => {
+        expect(() =>
+            countDarkenedPixels(row([0, 0, 0, 255]), row([0, 0, 0, 255], [0, 0, 0, 255]), 1),
+        ).toThrow('Canvas pixel frames differ in size: 1x1 and 2x1.');
+    });
+});
 
 describe('analyzeCanvasPixels', () => {
     it('throws when width is not a positive integer', () => {

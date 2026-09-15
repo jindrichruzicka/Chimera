@@ -139,6 +139,46 @@ export function summarizeOpaqueColor(frame: CanvasRgbaFrame): CanvasColor {
 }
 
 /**
+ * How many pixels are darker in `after` than in `before` by at least
+ * `minSumDrop`, measured on the sum of the three colour channels. A pixel
+ * transparent in either frame is skipped. Used to find where a shadow landed
+ * between two frames of an otherwise identical scene.
+ */
+export function countDarkenedPixels(
+    before: CanvasRgbaFrame,
+    after: CanvasRgbaFrame,
+    minSumDrop: number,
+): number {
+    assertValidFrame(before);
+    assertValidFrame(after);
+    if (before.width !== after.width || before.height !== after.height) {
+        throw new Error(
+            `Canvas pixel frames differ in size: ${before.width}x${before.height} and ${after.width}x${after.height}.`,
+        );
+    }
+
+    let darkened = 0;
+    for (let pixelOffset = 0; pixelOffset < before.rgba.length; pixelOffset += 4) {
+        if (
+            (before.rgba[pixelOffset + 3] ?? 0) < MIN_VISIBLE_ALPHA ||
+            (after.rgba[pixelOffset + 3] ?? 0) < MIN_VISIBLE_ALPHA
+        ) {
+            continue;
+        }
+        const drop = channelSum(before.rgba, pixelOffset) - channelSum(after.rgba, pixelOffset);
+        if (drop >= minSumDrop) {
+            darkened += 1;
+        }
+    }
+
+    return darkened;
+}
+
+function channelSum(rgba: ArrayLike<number>, pixelOffset: number): number {
+    return (rgba[pixelOffset] ?? 0) + (rgba[pixelOffset + 1] ?? 0) + (rgba[pixelOffset + 2] ?? 0);
+}
+
+/**
  * Decode a PNG screenshot buffer into a full-resolution RGBA frame entirely in
  * the test process. Pixel reads must never round-trip through the renderer:
  * on CI runners the software-GL renderer main thread is the contended

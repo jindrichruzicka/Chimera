@@ -141,3 +141,14 @@ export function buildActionShellScene(): ActionScene {
         },
     };
 }
+
+/**
+ * The half-extent the key light's shadow box needs to cover the whole arena.
+ *
+ * The box is square in the light's own frame and the light arrives at an angle,
+ * so the arena's half-DIAGONAL, not either half-side, is the reach it has to
+ * cover in every direction the light could look from.
+ */
+export const ACTION_ARENA_SHADOW_EXTENT = Math.ceil(
+    Math.hypot(ACTION_ARENA_WIDTH_CELLS, ACTION_ARENA_DEPTH_CELLS) / 2,
+);
