@@ -90,6 +90,7 @@ import type {
     ShadowQuality,
     ToneMappingMode,
     WebGLContextOptions,
+    LightingRigProps,
 } from '../index';
 
 /** The barrel's TYPE surface — see the audio sibling for why each is named. */
@@ -116,6 +117,9 @@ interface BarrelTypeSurface {
     readonly renderScale: RenderScale;
     readonly contextOptions: WebGLContextOptions;
     readonly powerPreference: PowerPreference;
+    // The light rig's props, named so a game hoisting a rig configuration to a
+    // module constant can annotate it.
+    readonly lightingRig: LightingRigProps;
     // useClipPlayer's own signature: the options it takes, the handle it
     // returns, and the handler surface a game writes against. The marker event
     // types are named because a game that factors a handler out of the options
@@ -274,6 +278,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'CameraAnimationCancelled',
             'GameCanvas',
             'InteractionBlocker',
+            'LightingRig',
             'easeIn',
             'easeInOut',
             'easeOut',
@@ -292,7 +297,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         ]);
     });
 
-    it('pulls in exactly forty-seven modules — four stores, the log bridge, both animation halves, and no clone seam', async () => {
+    it('pulls in exactly forty-eight modules — four stores, the log bridge, both animation halves, and no clone seam', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // EXHAUSTIVE, not a denylist (see the audio sibling for why). The four
@@ -349,6 +354,9 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         // off settingsStore at the canvas root. It is the sibling of
         // selectTargetFps.ts and adds no store edge: settingsStore was already
         // here for the frame-rate cap.
+        // `r3f/LightingRig.tsx` is the default light rig a game mounts inside
+        // its canvas. It renders r3f intrinsics and imports no module of its
+        // own, so it adds no edge.
         const dirAndFile = inputs.map((input) => input.split('/').slice(-2).join('/')).sort();
         expect(dirAndFile).toEqual([
             'animation/ClipBackend.ts',
@@ -379,6 +387,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'r3f/FrameRateLimiter.tsx',
             'r3f/GameCanvas.tsx',
             'r3f/InteractionBlocker.tsx',
+            'r3f/LightingRig.tsx',
             'r3f/cameraFit.ts',
             'r3f/index.ts',
             'r3f/interactionContext.ts',
@@ -485,6 +494,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             ['..', 'useSpriteClipPlayer.ts'],
             ['..', 'AnimatedSprite.tsx'],
             ['..', 'InteractionBlocker.tsx'],
+            ['..', 'LightingRig.tsx'],
             ['..', 'interactionContext.ts'],
             ['../../../animation', 'useAnimationTimeScale.ts'],
             ['../../../hooks', 'useTween.ts'],

@@ -1,6 +1,6 @@
 ---
 title: 'Camera System'
-description: 'CameraMode/CameraPreset/CameraFit types, the GameCanvas declarative camera prop (presets, explicit configs, up vector, manual-projection and canvas-fit rules), preset defaults table, CameraController interface, CameraAnimationCancelled error, useCamera() hook, camera state ownership rules, and the render-loop pacing that applies the display.targetFps frame-rate cap.'
+description: 'CameraMode/CameraPreset/CameraFit types, the GameCanvas declarative camera prop (presets, explicit configs, up vector, manual-projection and canvas-fit rules), preset defaults table, CameraController interface, CameraAnimationCancelled error, useCamera() hook, camera state ownership rules, the LightingRig default light rig, and the render-loop pacing that applies the display.targetFps frame-rate cap.'
 tags: [camera, r3f, animation, renderer, three-js]
 ---
 
@@ -448,6 +448,31 @@ A `type`-only import of `three` is not a value edge, so lean on it rather than a
 That the census still BITES is itself measured, by a guard separate from it: `renderer/__tests__/named-mode-mapping-table-placement.test.ts` runs the real walk from each app's real layout with one real module's source overlaid by that same source plus a `three` import, and asserts the census reports it **by that module's name**. It also pins that the same module unmutated reports nothing, so the report is caused by the mutation rather than by something already there, and that a `type`-only import is not reported. A census whose predicate silently stopped matching would otherwise go on passing, and a rule nothing can fail is a convention rather than a constraint.
 
 The guard mutates a FILE SYSTEM, never the tree, so it needs no manual step and leaves nothing to restore. That is what makes it a standing check rather than a one-off measurement recorded in a comment.
+
+---
+
+## Lighting
+
+`LightingRig` is the engine's default light rig: one ambient light and one directional **key** light, mounted as a child of `GameCanvas`. A game mounts it instead of hand-rolling `<ambientLight>` + `<directionalLight>`, and imports neither `three` nor `Canvas` to do so (Invariant #127).
+
+```typescript
+// renderer/components/r3f/LightingRig.tsx (re-exported from the r3f barrel)
+
+export type LightingRigProps = Readonly<{
+    ambientIntensity?: number; // default 0.6
+    keyLightIntensity?: number; // default 1
+    keyLightPosition?: Vector3Tuple; // default [5, 10, 5]
+    castShadow?: boolean; // default true
+}>;
+
+<GameCanvas camera="top-down">
+    <LightingRig />
+    {/* your scene */}
+</GameCanvas>
+```
+
+- `castShadow` is the **light's** half of the shadow switch. The canvas half is the shadow quality `GameCanvas` resolves ("Precedence" above): while that resolves to `off` the canvas has shadow mapping disabled, and a casting key light renders no shadow.
+- **Hand-rolled lights remain supported.** The rig renders ordinary r3f lights and suppresses nothing, so a game adds its own lights beside it as siblings — or skips the rig and writes its lights exactly as before.
 
 ---
 

@@ -57,6 +57,10 @@
  * shape as `components/ui` re-exporting `EscapeStackProvider` from
  * `renderer/components/shell/`.
  *
+ * **The lighting rig.** `LightingRig` is a default ambient + directional key
+ * light a game mounts as a canvas child instead of hand-rolling the pair. It
+ * renders ordinary r3f lights, so a game's own lights still mount beside it.
+ *
  * The renderer-configuration types (`ShadowQuality`, `ToneMappingMode`,
  * `OutputColorSpace`, `RenderScale`, plus `WebGLContextOptions` and its
  * `PowerPreference`) ship as TYPES only, and that asymmetry is the point:
@@ -96,6 +100,8 @@ export { useModelAnimation } from './useModelAnimation';
 export { useClipPlayer } from './useClipPlayer';
 export { useSpriteClipPlayer } from './useSpriteClipPlayer';
 export { AnimatedSprite } from './AnimatedSprite';
+export { LightingRig } from './LightingRig';
+export type { LightingRigProps } from './LightingRig';
 export type {
     ClipEndEvent,
     ClipMarkerHandlers,
