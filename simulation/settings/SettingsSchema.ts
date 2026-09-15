@@ -19,9 +19,8 @@ export interface EngineSettings {
          *  for the mechanism. */
         readonly targetFps: 30 | 60 | 120 | 0;
         /** Shadow-map quality tier; `'off'` disables shadow mapping.
-         *  An engine-owned NAME, never a `three` constant (Invariant #1): the
-         *  tier becomes a shadow-map type on the renderer side alone. Applied
-         *  by the renderer, never read by the simulation. */
+         *  An engine-owned NAME, never a `three` constant (Invariant #1).
+         *  Applied by the renderer, never read by the simulation. */
         readonly shadowQuality: 'off' | 'low' | 'medium' | 'high';
         /** Fraction of the display's own pixel ratio to render at; `1` = native.
          *  Below 1 trades sharpness for fill rate — the usual lever on an

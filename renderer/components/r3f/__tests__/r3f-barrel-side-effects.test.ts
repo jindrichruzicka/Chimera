@@ -297,7 +297,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         ]);
     });
 
-    it('pulls in exactly forty-eight modules — four stores, the log bridge, both animation halves, and no clone seam', async () => {
+    it('pulls in exactly forty-nine modules — four stores, the log bridge, both animation halves, and no clone seam', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // EXHAUSTIVE, not a denylist (see the audio sibling for why). The four
@@ -355,8 +355,10 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         // selectTargetFps.ts and adds no store edge: settingsStore was already
         // here for the frame-rate cap.
         // `r3f/LightingRig.tsx` is the default light rig a game mounts inside
-        // its canvas. It renders r3f intrinsics and imports no module of its
-        // own, so it adds no edge.
+        // its canvas. `r3f/shadowQualityContext.ts` carries the shadow quality
+        // GameCanvas resolves down to that rig, which sizes its key light's
+        // shadow map from it. Neither adds an edge: rendererConfig.ts was
+        // already here, and the context is react alone.
         const dirAndFile = inputs.map((input) => input.split('/').slice(-2).join('/')).sort();
         expect(dirAndFile).toEqual([
             'animation/ClipBackend.ts',
@@ -396,6 +398,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'r3f/rendererConfig.ts',
             'r3f/selectDisplayQuality.ts',
             'r3f/selectTargetFps.ts',
+            'r3f/shadowQualityContext.ts',
             'r3f/useClipPlayback.ts',
             'r3f/useClipPlayer.ts',
             'r3f/useEngineFrameloop.ts',
@@ -495,6 +498,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             ['..', 'AnimatedSprite.tsx'],
             ['..', 'InteractionBlocker.tsx'],
             ['..', 'LightingRig.tsx'],
+            ['..', 'shadowQualityContext.ts'],
             ['..', 'interactionContext.ts'],
             ['../../../animation', 'useAnimationTimeScale.ts'],
             ['../../../hooks', 'useTween.ts'],

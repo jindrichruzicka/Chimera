@@ -30,6 +30,7 @@ import type {
 import { useSettingsStore } from '../../state/settingsStore';
 import { useGameStore } from '../../state/gameStore';
 import { useInteractionContext } from './InteractionBlocker';
+import { useCanvasShadowQuality } from './shadowQualityContext';
 import type { PlayerSnapshot } from '@chimera-engine/simulation/bridge/api-types.js';
 import type { SceneId } from '@chimera-engine/simulation/foundation/engine-contract.js';
 
@@ -2093,6 +2094,48 @@ describe('GameCanvas curated renderer configuration', () => {
         expect(refusal?.['context']).toMatchObject({ changedKeys: ['antialias'] });
     });
 
+    // The light half of the switch reads the SAME resolution the canvas half
+    // is given, so a light cannot cast at a quality the canvas never enabled.
+    it("hands its children the resolved shadow quality, clamped by the game's ceiling", () => {
+        setDisplayQuality({ shadowQuality: 'high' });
+
+        render(
+            <GameCanvas camera="free" shadows="basic">
+                <ShadowQualityProbe />
+            </GameCanvas>,
+        );
+
+        expect(screen.getByTestId('shadow-quality').textContent).toBe('basic');
+    });
+
+    it("hands its children the player's tier unchanged when the game authored no ceiling", () => {
+        setDisplayQuality({ shadowQuality: 'medium' });
+
+        render(
+            <GameCanvas camera="free">
+                <ShadowQualityProbe />
+            </GameCanvas>,
+        );
+
+        expect(screen.getByTestId('shadow-quality').textContent).toBe('percentage');
+    });
+
+    it('hands its children a mid-session tier change without remounting the canvas', () => {
+        setDisplayQuality({ shadowQuality: 'off' });
+        render(
+            <GameCanvas camera="free">
+                <ShadowQualityProbe />
+            </GameCanvas>,
+        );
+        const canvasOnMount = screen.getByTestId('r3f-canvas');
+        expect(screen.getByTestId('shadow-quality').textContent).toBe('off');
+
+        act(() => setDisplayQuality({ shadowQuality: 'high' }));
+
+        expect(screen.getByTestId('shadow-quality').textContent).toBe('soft');
+        expect(screen.getByTestId('r3f-canvas')).toBe(canvasOnMount);
+    });
+
     it('lets a player pick below the game ceiling win', () => {
         setDisplayQuality({ shadowQuality: 'low', renderScale: 0.5 });
 
@@ -2353,6 +2396,11 @@ function latestCanvasProps(): Readonly<{
     }
 
     return lastCall[0];
+}
+
+/** Renders the shadow quality a canvas child reads, as a light would. */
+function ShadowQualityProbe(): React.ReactElement {
+    return <span data-testid="shadow-quality">{useCanvasShadowQuality()}</span>;
 }
 
 function latestCanvasFrameloop(): unknown {

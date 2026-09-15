@@ -154,8 +154,7 @@ const TARGET_FPS_OPTIONS = [
 ] as const;
 
 // The stored VALUE is an engine-owned tier name, not a `three` shadow-map
-// type: Invariant #1 keeps every `three` symbol out of `simulation/`, and the
-// tier becomes a constant on the renderer side alone.
+// type: Invariant #1 keeps every `three` symbol out of `simulation/`.
 const SHADOW_QUALITY_OPTIONS = [
     { value: 'off', label: SETTINGS_KEYS.shadowsOff },
     { value: 'low', label: SETTINGS_KEYS.shadowsLow },

@@ -471,7 +471,19 @@ export type LightingRigProps = Readonly<{
 </GameCanvas>
 ```
 
-- `castShadow` is the **light's** half of the shadow switch. The canvas half is the shadow quality `GameCanvas` resolves ("Precedence" above): while that resolves to `off` the canvas has shadow mapping disabled, and a casting key light renders no shadow.
+- `castShadow` is the **light's** half of the shadow switch. The canvas half is the shadow quality `GameCanvas` resolves ("Precedence" above), and the rig reads that same resolution: at `off` the key light does not cast whatever `castShadow` says, and at every other quality its shadow map is sized from it.
+
+| Resolved quality | Key light shadow map |
+| ---------------- | -------------------- |
+| `off`            | not cast             |
+| `basic`          | 512 × 512            |
+| `percentage`     | 1024 × 1024          |
+| `soft`           | 2048 × 2048          |
+| `variance`       | 2048 × 2048          |
+
+- **A quality change applies live, without a remount**: the rig releases the shadow map built at the old size, and the next frame allocates one at the new size.
+- The rig reads the resolution from the `GameCanvas` it is mounted in, so mounting it outside one throws.
+- The route reaches the rig's key light only. A hand-rolled light's shadow map size is the game's to author.
 - **Hand-rolled lights remain supported.** The rig renders ordinary r3f lights and suppresses nothing, so a game adds its own lights beside it as siblings — or skips the rig and writes its lights exactly as before.
 
 ---

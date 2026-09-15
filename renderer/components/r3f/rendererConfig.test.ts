@@ -12,13 +12,16 @@ import {
     ReinhardToneMapping,
     SRGBColorSpace,
 } from 'three';
-import type { WebGLRenderer } from 'three';
+import { DirectionalLight } from 'three';
+import type { WebGLRenderer, WebGLRenderTarget } from 'three';
 import { installFakeDisplay } from './__test-support__/fakeDisplay';
 import {
     applyColorConfig,
     readDeviceRatio,
+    resizeShadowMap,
     resolveRenderScale,
     resolveShadowQuality,
+    shadowMapSize,
     shadowsProp,
     subscribeToDeviceRatio,
     UNRESTRICTED_SHADOW_QUALITY,
@@ -55,6 +58,114 @@ describe('shadowsProp', () => {
         expect(shadowsProp('variance')).toBe('variance');
     });
 });
+
+describe('shadowMapSize', () => {
+    it("has no map size for 'off', where a light does not cast at all", () => {
+        expect(shadowMapSize('off')).toBeNull();
+    });
+
+    it('sizes every enabled quality in pixels per side, never shrinking up the order', () => {
+        expect(shadowMapSize('basic')).toBe(512);
+        expect(shadowMapSize('percentage')).toBe(1024);
+        expect(shadowMapSize('soft')).toBe(2048);
+        expect(shadowMapSize('variance')).toBe(2048);
+    });
+});
+
+describe('resizeShadowMap', () => {
+    it('sets the size on a light three has not yet allocated a map for', () => {
+        const { shadow } = new DirectionalLight();
+
+        resizeShadowMap(shadow, 1024);
+
+        expect(shadow.mapSize.toArray()).toEqual([1024, 1024]);
+        expect(shadow.map).toBeNull();
+        expect(shadow.mapPass).toBeNull();
+    });
+
+    it('releases the map and the blur pass three built at the old size', () => {
+        const { shadow } = new DirectionalLight();
+        const allocated = plantShadowTargets(shadow);
+
+        resizeShadowMap(shadow, 2048);
+
+        expect(shadow.mapSize.toArray()).toEqual([2048, 2048]);
+        expect(shadow.map).toBeNull();
+        expect(shadow.mapPass).toBeNull();
+        expect(allocated.depthTextureDispose).toHaveBeenCalledOnce();
+        expect(allocated.mapDispose).toHaveBeenCalledOnce();
+        expect(allocated.mapPassDispose).toHaveBeenCalledOnce();
+    });
+
+    it('releases a map that carries no depth texture', () => {
+        const { shadow } = new DirectionalLight();
+        const allocated = plantShadowTargets(shadow, { withDepthTexture: false });
+
+        resizeShadowMap(shadow, 2048);
+
+        expect(allocated.mapDispose).toHaveBeenCalledOnce();
+        expect(shadow.map).toBeNull();
+    });
+
+    it('keeps an allocated map already at the requested size', () => {
+        const { shadow } = new DirectionalLight();
+        shadow.mapSize.set(1024, 1024);
+        const allocated = plantShadowTargets(shadow);
+
+        resizeShadowMap(shadow, 1024);
+
+        expect(shadow.map).toBe(allocated.map);
+        expect(allocated.mapDispose).not.toHaveBeenCalled();
+        expect(allocated.mapPassDispose).not.toHaveBeenCalled();
+    });
+
+    // Width matching alone is not "already at the size": a map three built
+    // non-square has the right width and the wrong height.
+    it('reallocates a map whose width matches and whose height does not', () => {
+        const { shadow } = new DirectionalLight();
+        shadow.mapSize.set(1024, 512);
+        const allocated = plantShadowTargets(shadow);
+
+        resizeShadowMap(shadow, 1024);
+
+        expect(shadow.mapSize.toArray()).toEqual([1024, 1024]);
+        expect(allocated.mapDispose).toHaveBeenCalledOnce();
+    });
+
+    it('reallocates a map whose height matches and whose width does not', () => {
+        const { shadow } = new DirectionalLight();
+        shadow.mapSize.set(512, 1024);
+        const allocated = plantShadowTargets(shadow);
+
+        resizeShadowMap(shadow, 1024);
+
+        expect(shadow.mapSize.toArray()).toEqual([1024, 1024]);
+        expect(allocated.mapDispose).toHaveBeenCalledOnce();
+    });
+});
+
+/** Stands in for the render targets three allocates when it first renders a casting light. */
+function plantShadowTargets(
+    shadow: DirectionalLight['shadow'],
+    { withDepthTexture = true }: Readonly<{ withDepthTexture?: boolean }> = {},
+): Readonly<{
+    map: WebGLRenderTarget;
+    mapDispose: ReturnType<typeof vi.fn>;
+    mapPassDispose: ReturnType<typeof vi.fn>;
+    depthTextureDispose: ReturnType<typeof vi.fn>;
+}> {
+    const mapDispose = vi.fn();
+    const mapPassDispose = vi.fn();
+    const depthTextureDispose = vi.fn();
+    const map = {
+        dispose: mapDispose,
+        depthTexture: withDepthTexture ? { dispose: depthTextureDispose } : null,
+    } as unknown as WebGLRenderTarget;
+    shadow.map = map;
+    shadow.mapPass = { dispose: mapPassDispose } as unknown as WebGLRenderTarget;
+
+    return { map, mapDispose, mapPassDispose, depthTextureDispose };
+}
 
 describe('applyColorConfig', () => {
     it('writes nothing when the game authored no colour knob', () => {

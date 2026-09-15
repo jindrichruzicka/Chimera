@@ -25,6 +25,7 @@ import {
     subscribeToDeviceRatio,
 } from './rendererConfig';
 import { selectRenderScaleFraction, selectShadowQualityTier } from './selectDisplayQuality';
+import { ShadowQualityContext } from './shadowQualityContext';
 import { useFrozenContextOptions } from './useFrozenContextOptions';
 import type {
     ColorConfigurableRenderer,
@@ -293,6 +294,9 @@ export function GameCanvas({
     // dependency array, and writes the shadow map and the dpr on every pass.
     const shadowTier = useSettingsStore(selectShadowQualityTier);
     const renderScaleFraction = useSettingsStore(selectRenderScaleFraction);
+    // Resolved once: the canvas half of the shadow switch and the light half
+    // below must agree, or a light could cast at a quality never enabled.
+    const resolvedShadowQuality = resolveShadowQuality(shadowTier, shadows);
     // The display's own ratio, which a range ceiling is resolved against.
     // Subscribed as well as read, so a ratio change that re-renders nothing
     // else here still reaches the dpr. The server snapshot is the same read,
@@ -340,7 +344,7 @@ export function GameCanvas({
                 // `dpr = [1, 2]`, and a destructuring default applies to a key
                 // passed as `undefined` exactly as to an absent one — so at the
                 // engine defaults the canvas resolves to what it always did.
-                shadows={shadowsProp(resolveShadowQuality(shadowTier, shadows))}
+                shadows={shadowsProp(resolvedShadowQuality)}
                 dpr={resolveRenderScale(renderScale, renderScaleFraction, deviceRatio)}
                 // The FROZEN options, so what r3f builds the context from
                 // never changes; the key is omitted entirely when the game
@@ -366,7 +370,14 @@ export function GameCanvas({
                  * value is read from one store, so an overlay would compute the
                  * same `isBlocked` a main does.
                  */}
-                <InteractionBlocker>{children}</InteractionBlocker>
+                {/*
+                 * The light half of the shadow switch: the same resolution the
+                 * `shadows` prop carries, read by LightingRig to size its key
+                 * light's map — see shadowQualityContext.ts.
+                 */}
+                <ShadowQualityContext.Provider value={resolvedShadowQuality}>
+                    <InteractionBlocker>{children}</InteractionBlocker>
+                </ShadowQualityContext.Provider>
             </Canvas>
         </div>
     );

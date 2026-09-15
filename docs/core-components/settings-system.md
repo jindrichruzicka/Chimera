@@ -43,8 +43,7 @@ interface EngineSettings {
         // fullscreen/vsync/uiScale setting.
         targetFps: 30 | 60 | 120 | 0;
         // Shadow-map quality tier; 'off' disables shadow mapping. The stored
-        // value is an engine-owned NAME, never a three constant (Invariant #1)
-        // — the tier becomes a shadow-map type on the renderer side alone.
+        // value is an engine-owned NAME, never a three constant (Invariant #1).
         // Resolved at the canvas root against the game's own GameCanvas
         // ceiling, the player picking at or below it (§4.22 "Precedence").
         // Never read by the simulation.

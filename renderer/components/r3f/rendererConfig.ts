@@ -39,7 +39,7 @@ import {
     ReinhardToneMapping,
     SRGBColorSpace,
 } from 'three';
-import type { WebGLRenderer } from 'three';
+import type { LightShadow, WebGLRenderer } from 'three';
 
 /**
  * Shadow-map quality. `'off'` disables shadow mapping entirely; the other four
@@ -161,6 +161,50 @@ const outputColorSpaceConstants = {
  */
 export function shadowsProp(quality: ShadowQuality): boolean | Exclude<ShadowQuality, 'off'> {
     return quality === 'off' ? false : quality;
+}
+
+/**
+ * Pixels per side of a light's shadow map at each quality. `off` has none: a
+ * light at `off` does not cast at all.
+ */
+const SHADOW_MAP_SIZES = {
+    off: null,
+    basic: 512,
+    percentage: 1024,
+    soft: 2048,
+    variance: 2048,
+} as const satisfies Record<ShadowQuality, number | null>;
+
+/** The side length of a light's shadow map for a quality, or `null` at `off`. */
+export function shadowMapSize(quality: ShadowQuality): number | null {
+    return SHADOW_MAP_SIZES[quality];
+}
+
+/** The fields of a light's shadow that `resizeShadowMap` reads and writes. */
+export type ResizableShadow = Pick<LightShadow, 'mapSize' | 'map' | 'mapPass'>;
+
+/**
+ * Size a light's shadow map, releasing the targets three built at another size.
+ *
+ * three never compares a live map with `mapSize`, so this releases the targets
+ * built at the old size and the next frame allocates at the new one. The depth
+ * texture goes first, as it does in three's own reallocation.
+ */
+export function resizeShadowMap(shadow: ResizableShadow, size: number): void {
+    if (shadow.mapSize.x === size && shadow.mapSize.y === size) {
+        return;
+    }
+
+    shadow.mapSize.set(size, size);
+    if (shadow.map !== null) {
+        shadow.map.depthTexture?.dispose();
+        shadow.map.dispose();
+        shadow.map = null;
+    }
+    if (shadow.mapPass !== null) {
+        shadow.mapPass.dispose();
+        shadow.mapPass = null;
+    }
 }
 
 /**
