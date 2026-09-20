@@ -33,11 +33,12 @@
  * straight through with no re-derivation. The quad is one world unit square;
  * `scale` sizes it.
  *
- * **The texture is never configured here.** It is manager-owned and shared by
- * every sprite cut from the same sheet (Invariant #21), so writing `magFilter`,
- * `colorSpace` or `flipY` on it for one sprite would change all of them.
- * Filtering and color space belong to how the sheet is authored and loaded, not
- * to an element that draws one frame of it.
+ * **The texture is never configured here** (Rule SPRITE-NO-SHARED-MUTATION). It
+ * is manager-owned (Invariant #21) and shared by every sprite cut from the same
+ * sheet, so writing `magFilter`, `colorSpace` or `flipY` on it for one sprite
+ * would change all of them. Filtering and color space belong to how the sheet is
+ * authored and loaded — its manifest entry declares them — not to an element
+ * that draws one frame of it.
  *
  * The default material is unlit and untone-mapped, which is what sprite art
  * almost always wants; a game that wants another one passes it as `children`.

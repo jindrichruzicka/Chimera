@@ -9,8 +9,9 @@
  *
  * Fail-soft, like the sheet readers next door: `null` when there is no atlas to
  * measure, a refusal plus a warning per unusable cell, and no throw on any path.
- * The `Texture` is manager-owned — this module READS its decoded dimensions and
- * never writes, configures or disposes it (Invariant #21).
+ * The `Texture` is manager-owned (Invariant #21) and shared — this module READS
+ * its decoded dimensions and `flipY`, and never writes or configures it (Rule
+ * SPRITE-NO-SHARED-MUTATION) or disposes it.
  *
  * **The UV form, written once.** The four pairs on each frame are RAW `uv`
  * attribute values, in `THREE.PlaneGeometry`'s own vertex order — top-left,

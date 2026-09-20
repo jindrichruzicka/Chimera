@@ -635,6 +635,8 @@ const CONTENT_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
     '.glb': 'model/gltf-binary',
     '.gltf': 'model/gltf+json',
     '.html': HTML_CONTENT_TYPE,
+    '.jpeg': 'image/jpeg',
+    '.jpg': 'image/jpeg',
     '.js': 'application/javascript; charset=utf-8',
     '.json': 'application/json; charset=utf-8',
     '.m4a': 'audio/mp4',

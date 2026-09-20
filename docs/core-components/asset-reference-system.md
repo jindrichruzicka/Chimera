@@ -654,8 +654,9 @@ The sharp edges here are different from the model ones:
    pairs one geometry with one mounted hook.
 3. **The texture is shared and must not be configured per-sprite.** Writing
    `magFilter`, `colorSpace` or `flipY` for one sprite changes every sprite cut from
-   that sheet (Invariant #21). Filtering and color space belong to how the sheet is
-   authored and loaded — declare them on the sheet's manifest entry
+   that sheet (Rule SPRITE-NO-SHARED-MUTATION,
+   [Animation System](animation-system.md)). Filtering and color space belong to how
+   the sheet is authored and loaded — declare them on the sheet's manifest entry
    ([Per-entry texture sampling](#per-entry-texture-sampling)). A sheet declared
    `flipY: false` is measured accordingly: `useSpriteAtlas` reads the flag off the
    loaded texture and writes its `v` coordinates running down the image.

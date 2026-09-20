@@ -1643,6 +1643,37 @@ describe('renderer app protocol', () => {
         expect(response.headers.get('content-type')).toBe(expected);
     });
 
+    // JPEG under both of its spellings: the table answers for a common image type
+    // rather than letting it fall through to octet-stream.
+    it.each([
+        ['portrait.jpg', 'image/jpeg'],
+        ['portrait.jpeg', 'image/jpeg'],
+        ['portrait.JPG', 'image/jpeg'],
+    ])('serves %s as %s', (name, expected) => {
+        const response = buildRendererProtocolResponse({
+            filePath: `/abs/path/games/tactics/assets/textures/${name}`,
+            data: Buffer.from('fake-jpeg-bytes'),
+            rangeHeader: null,
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.headers.get('content-type')).toBe(expected);
+    });
+
+    it('answers a ranged request for a JPEG with the whole file', () => {
+        // A row also decides range serving. An image type is not range-capable,
+        // so a `Range` header on one is ignored rather than answered with 206.
+        const response = buildRendererProtocolResponse({
+            filePath: '/abs/path/games/tactics/assets/textures/portrait.jpg',
+            data: Buffer.from('0123456789'),
+            rangeHeader: 'bytes=2-5',
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.headers.get('content-type')).toBe('image/jpeg');
+        expect(response.headers.get('content-range')).toBeNull();
+    });
+
     it('answers a ranged request for a capitalised media file with 206', async () => {
         // The two halves together: without the lookup the content type is
         // octet-stream, which `isRangeCapableContentType` refuses, so the

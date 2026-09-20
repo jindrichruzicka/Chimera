@@ -49,7 +49,8 @@ export interface UseSpriteAtlasState {
     readonly atlas: SpriteAtlas | null;
     /**
      * The decoded sheet texture, or `null` until the load resolves. Manager-owned
-     * and shared: read it, never configure or dispose it.
+     * and shared: read it, never configure or dispose it (Rule
+     * SPRITE-NO-SHARED-MUTATION).
      */
     readonly texture: LoadedSpriteSheetAsset['texture'] | null;
     /** True while the sheet is in flight. */

@@ -351,7 +351,7 @@ chimera/
 │   │   ├── clipMarkerScheduler.ts   # Pure playhead → notify/passage/clip-end batches; sole producer of clip-end
 │   │   ├── ClipPlayer.ts            # Speed stack, per-playback step bound, handler fan-out, transitionTo/stopAll and the poses a clip end or a blend left; getTimeScale and report injected
 │   │   ├── MeshClipBackend.ts       # ClipBackend + SupportsClipBlending over an INJECTED AnimationMixer; ended derived from state, weight ramps owned here rather than three's, released-but-posing actions owned under Rule POSING-RELEASE
-│   │   ├── SpriteClipBackend.ts     # ClipBackend over an atlas run; writes uv into an injected geometry, never touches the shared Texture
+│   │   ├── SpriteClipBackend.ts     # ClipBackend over an atlas run; writes uv into an injected geometry, never touches the shared Texture (Rule SPRITE-NO-SHARED-MUTATION)
 │   │   ├── timeScaleStore.ts        # One float: the authoritative dilation multiplier, derived only via timeScaleMultiplier (Invariant #130)
 │   │   └── useAnimationTimeScale.ts # Read seam onto that float; the one module here re-exported from the components/r3f barrel
 │   ├── shell/
