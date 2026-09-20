@@ -204,7 +204,39 @@ to its `three` value). `AssetManager` publishes what a loader resolves, so what
 `load()` resolves and what `get()` returns is already configured: a component has no
 configuration step of its own, and no reason to write to a texture it shares with
 every other consumer of that ref. An option the entry does not declare is left as the
-loader produced it.
+loader produced it, apart from the color space.
+
+**The default color space is sRGB.** A `texture` or `sprite-sheet` entry that declares
+no `colorSpace` — including one that declares no sampling at all — is published as
+`'srgb'`. The name is `DEFAULT_TEXTURE_COLOR_SPACE`, defined with the vocabulary in
+`simulation/foundation/texture-sampling.ts` and mapped to its `three` value
+renderer-side. sRGB is how a color image is stored, and a color image is what either
+kind usually holds; three's own default for a bare texture is no color space at all.
+
+What the default changes depends on how a game hands the texture to a material,
+because `@react-three/fiber` tags a texture sRGB itself on some routes and not on
+others. What r3f does on each is pinned against the installed version by
+`renderer/components/r3f/__tests__/r3f-texture-color-space.test.tsx`:
+
+| Route                                                         | r3f                                              | With the default                                                   |
+| ------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------ |
+| JSX prop on a color slot — `<meshStandardMaterial map={t} />` | tags an 8-bit RGBA one sRGB, whatever it carried | unchanged: it was sRGB on this route already                       |
+| Constructor `args` — `args={[{ map: t }]}`                    | leaves it alone                                  | now sRGB; it was untagged, and uploaded without an sRGB decode     |
+| A material the game built — `material.map = t`                | leaves it alone                                  | now sRGB, as above                                                 |
+| JSX prop on a data slot — `roughnessMap`, `normalMap`         | leaves it alone                                  | now sRGB unless the entry declares `'none'` — wrong for a data map |
+
+The first row is the route `AnimatedSprite` takes for its default material. It also
+means a color space declared on the entry does not survive that route: r3f writes
+sRGB over it on the shared texture when the prop is applied.
+
+**Data maps declare `colorSpace: 'none'`.** Roughness, metalness, normal, ambient
+occlusion and mask images are not color, and sRGB is wrong for them. They are told
+apart by that one declared option rather than by a second asset kind: a second kind
+would need its own phantom type, loader registration and validator row to carry a
+difference that a single option on the entry already carries. That is deferred, not
+ruled out. The trigger for revisiting it is an engine-side consumer that has to treat
+data and color images differently by KIND — a loader, a validator rule or a
+compressed-texture pipeline whose transcode target depends on which one it is holding.
 
 The declaration is checked first, before the image or an atlas descriptor is
 requested, so an invalid one — reachable through a hand-authored entry, which no

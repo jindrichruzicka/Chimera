@@ -102,6 +102,7 @@ describe('textureEntry', () => {
     it('is published, with its error type, on the content barrel', () => {
         expect(contentBarrel.textureEntry).toBe(textureEntry);
         expect(contentBarrel.InvalidTextureSamplingError).toBe(InvalidTextureSamplingError);
+        expect(contentBarrel.DEFAULT_TEXTURE_COLOR_SPACE).toBe('srgb');
     });
 
     it('builds an entry that survives a JSON round trip unchanged', () => {

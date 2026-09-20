@@ -45,6 +45,7 @@
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
 // Uncomment alongside your first entry:
 // import type { AssetRef, TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';
+// import { textureEntry } from '@chimera-engine/simulation/content/textureManifest.js';
 
 import { __GAME_CONSTANT___GAME_ID } from './simulation/constants.js';
 
@@ -58,6 +59,16 @@ import { __GAME_CONSTANT___GAME_ID } from './simulation/constants.js';
 export const __gameCamel__AssetManifest: AssetManifest = {
     gameId: __GAME_CONSTANT___GAME_ID,
     entries: [
-        // { ref: __gameCamel__TextureRefs.banner, kind: 'texture', priority: 'deferred' },
+        // `sampling` says how the image is sampled, and is applied as the texture
+        // loads. `colorSpace` is 'srgb' when an entry leaves it out, which is right
+        // for a color image like this one. A data map — roughness, metalness, a
+        // normal map, a mask — is not color: declare `colorSpace: 'none'` on it, or
+        // it is decoded as if it were.
+        //
+        // textureEntry({
+        //     ref: __gameCamel__TextureRefs.banner,
+        //     priority: 'deferred',
+        //     sampling: { colorSpace: 'srgb' },
+        // }),
     ],
 };

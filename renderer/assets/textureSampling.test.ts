@@ -127,7 +127,7 @@ describe('applyTextureSampling', () => {
         expect(applied({ anisotropy: 8 }).anisotropy).toBe(8);
     });
 
-    it('leaves every option an entry does not declare as the loader produced it', () => {
+    it('leaves every option the sampling does not declare as the loader produced it', () => {
         const untouched = samplingFieldsOf(new THREE.Texture());
 
         expect(samplingFieldsOf(applied({}))).toEqual(untouched);

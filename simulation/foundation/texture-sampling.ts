@@ -35,6 +35,15 @@ export type TextureWrapMode = 'clamp' | 'repeat' | 'mirrored-repeat';
 
 export const TEXTURE_COLOR_SPACES: readonly TextureColorSpace[] = ['srgb', 'srgb-linear', 'none'];
 
+/**
+ * The color space of a `'texture'` or `'sprite-sheet'` entry that declares none.
+ *
+ * sRGB, because that is how a color image — the usual thing either kind holds — is
+ * stored. A DATA map (roughness, metalness, normal, AO, a mask) is not color and
+ * must say so: declare `colorSpace: 'none'` on its entry.
+ */
+export const DEFAULT_TEXTURE_COLOR_SPACE: TextureColorSpace = 'srgb';
+
 export const TEXTURE_MAG_FILTERS: readonly TextureMagFilter[] = ['nearest', 'linear'];
 
 export const TEXTURE_MIN_FILTERS: readonly TextureMinFilter[] = [
@@ -54,7 +63,8 @@ export const TEXTURE_WRAP_MODES: readonly TextureWrapMode[] = [
 
 /**
  * How one manifest entry's image is sampled. Every option is optional; an
- * omitted one is left to the loader.
+ * omitted one is left to the loader, apart from `colorSpace`, which falls back to
+ * {@link DEFAULT_TEXTURE_COLOR_SPACE}.
  */
 export interface TextureSampling {
     readonly colorSpace?: TextureColorSpace;
@@ -151,4 +161,15 @@ export function readTextureSampling(metadata: unknown): TextureSampling | undefi
         throw new InvalidTextureSamplingError(problems);
     }
     return sampling;
+}
+
+/**
+ * The sampling a loader applies for an entry: what its `metadata` declares, over
+ * {@link DEFAULT_TEXTURE_COLOR_SPACE}. A new object — the declaration is not
+ * written to.
+ *
+ * @throws {InvalidTextureSamplingError} As {@link readTextureSampling} does.
+ */
+export function resolveTextureSampling(metadata: unknown): TextureSampling {
+    return { colorSpace: DEFAULT_TEXTURE_COLOR_SPACE, ...readTextureSampling(metadata) };
 }

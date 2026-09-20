@@ -6,9 +6,8 @@
  * and what `get()` returns is already configured, so no consumer has a
  * configuration step of its own.
  *
- * Kept apart from `AssetManager.test.ts` because that file replaces `three` with
- * a stub that has no constants. Here only `TextureLoader` is replaced — by a
- * loader that decodes nothing and hands back a real `Texture` — so the values
+ * Only `TextureLoader` is replaced — by a loader that decodes nothing and hands
+ * back a real `Texture`, wrapped so every write to it is recorded — so the values
  * asserted are three's own.
  */
 
@@ -116,15 +115,50 @@ describe('the default texture loader', () => {
         expect(manager.get(ref)).toBe(loaded);
     });
 
-    it('leaves a texture whose entry declares no sampling exactly as the loader produced it', async () => {
+    it('publishes a texture whose entry declares no sampling as sRGB, and writes nothing else', async () => {
         const ref = buildAssetRef<TextureAsset>('tactics', 'textures/plain.png');
         const manager = managerFor([textureEntry({ ref, priority: 'deferred' })]);
 
         const loaded = await manager.load(ref);
 
-        expect(samplingFieldsOf(loaded)).toEqual(samplingFieldsOf(new THREE.Texture()));
-        expect(textureLoads.writes).toEqual([]);
+        expect(samplingFieldsOf(loaded)).toEqual({
+            ...samplingFieldsOf(new THREE.Texture()),
+            colorSpace: THREE.SRGBColorSpace,
+        });
+        expect(textureLoads.writes.map((write) => write.property)).toEqual(['colorSpace']);
     });
+
+    it('defaults the color space of an entry that declares other options only', async () => {
+        const ref = buildAssetRef<TextureAsset>('tactics', 'textures/tiles.png');
+        const manager = managerFor([
+            textureEntry({ ref, priority: 'deferred', sampling: { wrapS: 'repeat' } }),
+        ]);
+
+        const loaded = await manager.load(ref);
+
+        expect(samplingFieldsOf(loaded)).toEqual({
+            ...samplingFieldsOf(new THREE.Texture()),
+            colorSpace: THREE.SRGBColorSpace,
+            wrapS: THREE.RepeatWrapping,
+        });
+    });
+
+    it.each([
+        ['none', THREE.NoColorSpace],
+        ['srgb-linear', THREE.LinearSRGBColorSpace],
+    ] as const)(
+        'lets an entry declaring colorSpace %s override the default',
+        async (colorSpace, expected) => {
+            const ref = buildAssetRef<TextureAsset>('tactics', 'textures/roughness.png');
+            const manager = managerFor([
+                textureEntry({ ref, priority: 'deferred', sampling: { colorSpace } }),
+            ]);
+
+            const loaded = await manager.load(ref);
+
+            expect(loaded.colorSpace).toBe(expected);
+        },
+    );
 
     it('hands two consumers of one ref the same texture, configured once and never written to again', async () => {
         const ref = buildAssetRef<TextureAsset>('tactics', 'textures/banner.png');
@@ -187,6 +221,16 @@ describe('the default sprite-sheet loader', () => {
 
         expect(textureLoads.urls).toEqual(['resolved://tactics/sprites/hero.png']);
         expect(samplingFieldsOf(loaded.texture)).toMatchObject(PIXEL_ART_FIELDS);
+    });
+
+    it('publishes a plain sheet that declares no sampling as sRGB', async () => {
+        const ref = buildAssetRef<SpriteSheetAsset>('tactics', 'sprites/hero.png');
+        const manager = managerFor([spriteAnimationEntry({ ref, priority: 'deferred' })]);
+
+        const loaded = await manager.load(ref);
+
+        expect(loaded.texture.colorSpace).toBe(THREE.SRGBColorSpace);
+        expect(textureLoads.writes.map((write) => write.property)).toEqual(['colorSpace']);
     });
 
     it('configures the image a JSON atlas points at', async () => {

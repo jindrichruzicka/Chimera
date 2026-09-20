@@ -155,7 +155,7 @@ chimera/
 │   │   └── ContentLoader.ts         # Loads JSON sources, validates, merges, builds ContentDatabase
 │   ├── foundation/                  # Contract leaf — types + pure helpers; no cross-package imports (Check 13)
 │   │   ├── audio-cue-sheet.ts       # AudioCueName / AudioClipMetadata — DEFINED sim-side, read only by renderer/audio (#124)
-│   │   ├── texture-sampling.ts      # TextureSampling vocabulary (engine-owned names) + readTextureSampling(); see §4.10
+│   │   ├── texture-sampling.ts      # TextureSampling vocabulary (engine-owned names), DEFAULT_TEXTURE_COLOR_SPACE, readTextureSampling() / resolveTextureSampling(); see §4.10
 │   │   ├── dev-fixture-contract.ts  # Dev-harness fixture schemas (DevScenario, DevAnnounce) + pure helpers; see §4.32
 │   │   ├── game-manifest-contract.ts # GameManifest + resolvers; see §4.2.1
 │   │   ├── game-screen-contract.ts  # GameScreenRegistry, GameHudProps, GameEventAudioBinding

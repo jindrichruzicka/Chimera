@@ -1,6 +1,11 @@
+import type * as Three from 'three';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
-vi.mock('three', () => ({
+// Only `TextureLoader` is replaced. The rest of `three` stays real because the
+// default texture loaders write the engine's default color space onto what they
+// load, and read three's constants to do it.
+vi.mock('three', async (importOriginal) => ({
+    ...(await importOriginal<typeof Three>()),
     TextureLoader: class TextureLoader {
         load(url: string, onLoad: (texture: unknown) => void): void {
             onLoad({ textureUrl: url });
@@ -1029,6 +1034,8 @@ describe('DefaultAssetManager', () => {
 
             expect(loaded.texture).toEqual({
                 textureUrl: 'resolved://tactics/sprites/units/warrior.webp',
+                // No sampling declared: the loader applies the default color space.
+                colorSpace: 'srgb',
             });
             expect(loaded.frames).toEqual({
                 idle: { x: 0, y: 0, w: 32, h: 32 },

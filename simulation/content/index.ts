@@ -29,6 +29,7 @@ export {
 } from './audioManifest';
 
 export {
+    DEFAULT_TEXTURE_COLOR_SPACE,
     InvalidTextureSamplingError,
     textureEntry,
     type TextureColorSpace,

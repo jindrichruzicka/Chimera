@@ -27,7 +27,10 @@ import type {
 
 // Re-export the sampling vocabulary so a game authors a declaration and its
 // manifest entry from a single content-layer import site.
-export { InvalidTextureSamplingError } from '../foundation/texture-sampling.js';
+export {
+    DEFAULT_TEXTURE_COLOR_SPACE,
+    InvalidTextureSamplingError,
+} from '../foundation/texture-sampling.js';
 export type {
     TextureColorSpace,
     TextureMagFilter,

@@ -538,6 +538,21 @@ describe('blank template smoke harness', () => {
         expect(manifest).toMatch(/entries:\s*\[[\s\n]*(?:\/\/[^\n]*\n\s*)*\],/u);
     });
 
+    it('teaches the color space knob in the worked example an author uncomments', async () => {
+        // The example is the first texture a new game declares. It names its color
+        // space even though sRGB is what an entry gets anyway, so the first thing
+        // an author reads shows that the option exists — and what a data map,
+        // which must NOT be sRGB, would change.
+        const manifest = await read('asset-manifest.ts');
+        expect(manifest).toContain(
+            "// import { textureEntry } from '@chimera-engine/simulation/content/textureManifest.js';",
+        );
+        expect(manifest).toContain("        //     sampling: { colorSpace: 'srgb' },\n");
+        expect(manifest).toContain('        // textureEntry({\n');
+        // The hand-written literal it replaces carried no sampling at all.
+        expect(manifest).not.toContain("kind: 'texture', priority: 'deferred' }");
+    });
+
     it('forwards the asset manifest through the game loader', async () => {
         // The forward is the whole point of shipping the manifest: the field is
         // OPTIONAL on `LoadedRendererGame`, so omitting it is silent at every

@@ -417,7 +417,7 @@ class TextureAssetLoader implements AssetLoader<TextureAsset, Texture> {
     readonly kind = 'texture' as const;
 
     async load(request: AssetLoadRequest<TextureAsset>): Promise<Texture> {
-        return loadTexture(request.url, await readDeclaredSampling(request.metadata));
+        return loadTexture(request.url, await resolveSampling(request.metadata));
     }
 }
 
@@ -481,15 +481,13 @@ class ParticleConfigAssetLoader implements AssetLoader<
  * resolves, so a consumer never sees the texture unconfigured and never has a
  * reason to configure the shared object itself.
  */
-async function loadTexture(url: string, sampling: TextureSampling | undefined): Promise<Texture> {
+async function loadTexture(url: string, sampling: TextureSampling): Promise<Texture> {
     const three = await import('three');
     const loader = new three.TextureLoader();
     const texture = await new Promise<Texture>((resolve, reject) => {
         loader.load(url, resolve, undefined, reject);
     });
-    if (sampling !== undefined) {
-        applyTextureSampling(texture, sampling, three);
-    }
+    applyTextureSampling(texture, sampling, three);
     return texture;
 }
 
@@ -502,8 +500,10 @@ async function loadGltf(url: string): Promise<LoadedGltfAsset> {
 }
 
 /**
- * The sampling a manifest entry declares, read off the metadata that arrived on
- * its `AssetLoadRequest`, or `undefined` when it declares none.
+ * The sampling to apply for a manifest entry: what it declares, read off the
+ * metadata that arrived on its `AssetLoadRequest`, over the engine's default color
+ * space. The default is an engine-owned name defined with the vocabulary, in
+ * `simulation/foundation/texture-sampling.ts`.
  *
  * This is a LOADER interpreting manifest metadata. The other metadata readers — a
  * clip's cue sheet (Invariant #124), an animation clip sheet — are consuming
@@ -517,14 +517,14 @@ async function loadGltf(url: string): Promise<LoadedGltfAsset> {
  *
  * @throws {InvalidTextureSamplingError} When the declaration is not valid.
  */
-async function readDeclaredSampling(metadata: unknown): Promise<TextureSampling | undefined> {
-    const { readTextureSampling } =
+async function resolveSampling(metadata: unknown): Promise<TextureSampling> {
+    const { resolveTextureSampling } =
         await import('@chimera-engine/simulation/foundation/texture-sampling.js');
-    return readTextureSampling(metadata);
+    return resolveTextureSampling(metadata);
 }
 
 async function loadSpriteSheet(url: string, metadata: unknown): Promise<LoadedSpriteSheetAsset> {
-    const sampling = await readDeclaredSampling(metadata);
+    const sampling = await resolveSampling(metadata);
     const extension = getAssetExtension(url);
     if (extension === '.json') {
         const atlas = readSpriteSheetAtlas(await loadJson(url), url);

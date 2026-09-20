@@ -17,8 +17,10 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import {
+    DEFAULT_TEXTURE_COLOR_SPACE,
     InvalidTextureSamplingError,
     readTextureSampling,
+    resolveTextureSampling,
     TEXTURE_COLOR_SPACES,
     TEXTURE_MAG_FILTERS,
     TEXTURE_MIN_FILTERS,
@@ -236,5 +238,49 @@ describe('readTextureSampling', () => {
             expect(roundTripped).toEqual({ sampling });
             expect(readTextureSampling(roundTripped)).toEqual(sampling);
         }
+    });
+});
+
+describe('resolveTextureSampling', () => {
+    it('defaults the color space to sRGB', () => {
+        // Asserted against the literal, not the constant: changing the default is a
+        // visual change to every game, and should fail a test that says which way.
+        expect(DEFAULT_TEXTURE_COLOR_SPACE).toBe('srgb');
+    });
+
+    it('resolves an entry that declares no sampling to the default color space alone', () => {
+        expect(resolveTextureSampling(undefined)).toEqual({ colorSpace: 'srgb' });
+        expect(resolveTextureSampling({ clips: {} })).toEqual({ colorSpace: 'srgb' });
+    });
+
+    it('defaults the color space of a declaration that names other options only', () => {
+        expect(resolveTextureSampling({ sampling: { magFilter: 'nearest' } })).toEqual({
+            colorSpace: 'srgb',
+            magFilter: 'nearest',
+        });
+    });
+
+    it.each(['none', 'srgb-linear'] as const)(
+        'lets an explicit colorSpace %s override the default',
+        (colorSpace) => {
+            expect(resolveTextureSampling({ sampling: { colorSpace, flipY: false } })).toEqual({
+                colorSpace,
+                flipY: false,
+            });
+        },
+    );
+
+    it('rejects an invalid declaration exactly as the reader does', () => {
+        expect(() => resolveTextureSampling({ sampling: { colourSpace: 'none' } })).toThrow(
+            new InvalidTextureSamplingError(['sampling.colourSpace is not a sampling option.']),
+        );
+    });
+
+    it('does not write the default into the declaration it read', () => {
+        const sampling = Object.freeze({ magFilter: 'nearest' } as const);
+        const metadata = Object.freeze({ sampling });
+
+        expect(resolveTextureSampling(metadata)).not.toBe(sampling);
+        expect(sampling).toEqual({ magFilter: 'nearest' });
     });
 });
