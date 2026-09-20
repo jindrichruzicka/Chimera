@@ -39,8 +39,8 @@
  * **The four pairs, and their order.** {@link SpriteAtlasFrame.uv} is already in
  * `PlaneGeometry`'s vertex order — top-left, top-right, bottom-left,
  * bottom-right — and is written straight through, unrecomputed. The derivation
- * that made `v` run UP the image (the sheet decodes through a `Texture` whose
- * `flipY` defaults to `true`) lives once, in `renderer/assets/spriteAtlas.ts`;
+ * of which way `v` runs (it follows the sheet texture's `flipY`) lives once, in
+ * `renderer/assets/spriteAtlas.ts`;
  * transcribing it into a second form here is the coin-flip on vertical
  * orientation that one form exists to avoid.
  */

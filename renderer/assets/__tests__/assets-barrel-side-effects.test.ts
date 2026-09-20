@@ -90,7 +90,7 @@ describe('@chimera-engine/renderer/assets barrel', () => {
         ]);
     });
 
-    it('pulls in exactly thirteen asset-layer modules and no store', async () => {
+    it('pulls in a closed set of asset-layer modules and no store', async () => {
         const { inputs, externals } = await analyzeModule('index.ts');
 
         // EXHAUSTIVE, not a denylist (see the audio sibling for why).
@@ -100,7 +100,9 @@ describe('@chimera-engine/renderer/assets barrel', () => {
         // registry from it; `animationSheet.ts` because `useAnimationSheet.ts`
         // calls both its parsers; `spriteAtlas.ts` and `useSpriteAtlas.ts`
         // because the sprite half of the sheet seam now ships from here — it
-        // has a React binding to serve (`AnimatedSprite`, `useSpriteClipPlayer`).
+        // has a React binding to serve (`AnimatedSprite`, `useSpriteClipPlayer`);
+        // `textureSampling.ts` because `AssetManager.ts`'s texture loaders apply a
+        // declared sampling through it.
         // No `state/` store appears — this barrel, unlike `audio`,
         // is import-inert at the store level.
         // Compared on the last TWO path segments (CWD-independent — see the
@@ -116,6 +118,7 @@ describe('@chimera-engine/renderer/assets barrel', () => {
             'assets/animationSheet.ts',
             'assets/index.ts',
             'assets/spriteAtlas.ts',
+            'assets/textureSampling.ts',
             'assets/useAnimationSheet.ts',
             'assets/useAsset.ts',
             'assets/useModelInstance.ts',

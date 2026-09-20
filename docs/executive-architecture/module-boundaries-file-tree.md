@@ -302,7 +302,8 @@ chimera/
 │   │   ├── AssetPreloader.ts
 │   │   ├── criticalAssetPreload.ts  # The §4.10 critical preload — commit-phase, non-blocking, non-fatal; plus the route-entry gate that reports when it settles
 │   │   ├── animationSheet.ts        # parseModel/SpriteAnimationMetadata — fail-soft readers of the animation sheet in AssetManifestEntry.metadata
-│   │   ├── spriteAtlas.ts           # parseSpriteAtlas — public via the barrel; measures atlas cells to raw flipY UVs
+│   │   ├── spriteAtlas.ts           # parseSpriteAtlas — public via the barrel; measures atlas cells to raw UVs in the texture's own row order (flipY)
+│   │   ├── textureSampling.ts       # applyTextureSampling — internal; maps a declared TextureSampling onto a texture inside the loader (§4.10). Type-only imports: `three` arrives as an argument
 │   │   ├── useAnimationSheet.ts     # Model sheet, memoised on metadata IDENTITY
 │   │   └── useAsset.ts
 │   ├── game/                        # Public barrel: @chimera-engine/renderer/game

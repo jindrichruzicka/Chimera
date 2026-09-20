@@ -183,6 +183,55 @@ describe('parseSpriteAtlas writes UVs for a flipY texture', () => {
     });
 });
 
+describe('parseSpriteAtlas writes UVs for a sheet declared `flipY: false`', () => {
+    // A sheet's manifest entry may declare `flipY: false`, and the loader applies it
+    // before the sheet is published. The decode then leaves the rows alone, so v
+    // runs DOWN the image and the reader must not subtract from 1.
+    function unflippedAssetOf(frames: unknown): LoadedSpriteSheetAsset {
+        return {
+            texture: { image: { width: 64, height: 32 }, flipY: false } as unknown as Texture,
+            frames,
+        } as LoadedSpriteSheetAsset;
+    }
+
+    it('maps the top-left cell with v = 0 at the TOP', () => {
+        const atlas = parseSpriteAtlas(unflippedAssetOf({ idle: { x: 0, y: 0, w: 32, h: 16 } }));
+
+        // Same plane order — top-left, top-right, bottom-left, bottom-right.
+        expect(atlas?.frames[0]?.uv).toEqual([
+            [0, 0],
+            [0.5, 0],
+            [0, 0.5],
+            [0.5, 0.5],
+        ]);
+    });
+
+    it('maps an inset cell to its own four pairs', () => {
+        const atlas = parseSpriteAtlas(unflippedAssetOf({ hit: { x: 32, y: 16, w: 16, h: 8 } }));
+
+        expect(atlas?.frames[0]?.uv).toEqual([
+            [0.5, 0.5],
+            [0.75, 0.5],
+            [0.5, 0.75],
+            [0.75, 0.75],
+        ]);
+    });
+
+    it('keeps the flipped form for a texture that says `flipY: true`', () => {
+        const atlas = parseSpriteAtlas({
+            texture: { image: { width: 64, height: 32 }, flipY: true } as unknown as Texture,
+            frames: { hit: { x: 32, y: 16, w: 16, h: 8 } },
+        });
+
+        expect(atlas?.frames[0]?.uv).toEqual([
+            [0.5, 0.5],
+            [0.75, 0.5],
+            [0.5, 0.25],
+            [0.75, 0.25],
+        ]);
+    });
+});
+
 describe('parseSpriteAtlas leaves the asset it read alone', () => {
     it('mutates neither the frames record nor the texture, and keeps declaration order', () => {
         const frames = {

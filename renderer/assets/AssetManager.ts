@@ -17,6 +17,8 @@ import type {
     AssetManifestEntry,
 } from '@chimera-engine/simulation/content/AssetManifest.js';
 
+import type { TextureSampling } from '@chimera-engine/simulation/foundation/texture-sampling.js';
+
 import type { AssetResolver } from './AssetResolver';
 import {
     createAssetLoaderRegistry,
@@ -24,6 +26,8 @@ import {
     type AssetLoader,
     type AssetLoaderRegistry,
 } from './AssetLoaderRegistry';
+
+import { applyTextureSampling } from './textureSampling';
 
 export type { AssetLoadRequest, AssetLoader, AssetLoaderRegistry } from './AssetLoaderRegistry';
 
@@ -413,7 +417,7 @@ class TextureAssetLoader implements AssetLoader<TextureAsset, Texture> {
     readonly kind = 'texture' as const;
 
     async load(request: AssetLoadRequest<TextureAsset>): Promise<Texture> {
-        return loadTexture(request.url);
+        return loadTexture(request.url, await readDeclaredSampling(request.metadata));
     }
 }
 
@@ -429,7 +433,7 @@ class SpriteSheetAssetLoader implements AssetLoader<SpriteSheetAsset, LoadedSpri
     readonly kind = 'sprite-sheet' as const;
 
     async load(request: AssetLoadRequest<SpriteSheetAsset>): Promise<LoadedSpriteSheetAsset> {
-        return loadSpriteSheet(request.url);
+        return loadSpriteSheet(request.url, request.metadata);
     }
 }
 
@@ -470,13 +474,23 @@ class ParticleConfigAssetLoader implements AssetLoader<
  * This is the shape `loadGltf` below has always had for `GLTFLoader`. Which
  * consumers reach this module, and that neither loader's edge is a static one,
  * are measured by `renderer/__tests__/shell-layout-graph-census.test.ts`.
+ *
+ * **Sampling is applied here, before the texture is returned.** Any `sampling` the
+ * manifest entry declares (§4.10) is written onto the texture while this function
+ * is still the only thing holding it. The manager publishes what a loader
+ * resolves, so a consumer never sees the texture unconfigured and never has a
+ * reason to configure the shared object itself.
  */
-async function loadTexture(url: string): Promise<Texture> {
-    const { TextureLoader } = await import('three');
-    const loader = new TextureLoader();
-    return new Promise((resolve, reject) => {
+async function loadTexture(url: string, sampling: TextureSampling | undefined): Promise<Texture> {
+    const three = await import('three');
+    const loader = new three.TextureLoader();
+    const texture = await new Promise<Texture>((resolve, reject) => {
         loader.load(url, resolve, undefined, reject);
     });
+    if (sampling !== undefined) {
+        applyTextureSampling(texture, sampling, three);
+    }
+    return texture;
 }
 
 async function loadGltf(url: string): Promise<LoadedGltfAsset> {
@@ -487,17 +501,40 @@ async function loadGltf(url: string): Promise<LoadedGltfAsset> {
     });
 }
 
-async function loadSpriteSheet(url: string): Promise<LoadedSpriteSheetAsset> {
+/**
+ * The sampling a manifest entry declares, read off the metadata that arrived on
+ * its `AssetLoadRequest`, or `undefined` when it declares none.
+ *
+ * This is a LOADER interpreting manifest metadata. The other metadata readers — a
+ * clip's cue sheet (Invariant #124), an animation clip sheet — are consuming
+ * layers that read `getManifestMetadata` after the load; this one deliberately is
+ * not, because a texture has to be right before anyone can hold it. It reads the
+ * request rather than re-reading the manifest entry: a loader is handed a request
+ * and has no manager to ask.
+ *
+ * The `texture` and `sprite-sheet` loaders call this FIRST. The reader is reached
+ * through `await import`; see `renderer/__tests__/shell-layout-graph-census.test.ts`.
+ *
+ * @throws {InvalidTextureSamplingError} When the declaration is not valid.
+ */
+async function readDeclaredSampling(metadata: unknown): Promise<TextureSampling | undefined> {
+    const { readTextureSampling } =
+        await import('@chimera-engine/simulation/foundation/texture-sampling.js');
+    return readTextureSampling(metadata);
+}
+
+async function loadSpriteSheet(url: string, metadata: unknown): Promise<LoadedSpriteSheetAsset> {
+    const sampling = await readDeclaredSampling(metadata);
     const extension = getAssetExtension(url);
     if (extension === '.json') {
         const atlas = readSpriteSheetAtlas(await loadJson(url), url);
         const spriteSheet = {
-            texture: await loadTexture(resolveRelativeAssetUrl(url, atlas.image)),
+            texture: await loadTexture(resolveRelativeAssetUrl(url, atlas.image), sampling),
         };
         return atlas.frames === undefined ? spriteSheet : { ...spriteSheet, frames: atlas.frames };
     }
 
-    return { texture: await loadTexture(url) };
+    return { texture: await loadTexture(url, sampling) };
 }
 
 interface SpriteSheetAtlasData {

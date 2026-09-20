@@ -195,7 +195,27 @@ value outside the vocabulary. The `TextureSampling` type rejects a misspelled li
 at compile time; the runtime check covers what a spread or a cast carries past it.
 
 The declaration travels with the rest of the entry's metadata: it reaches the kind's
-loader as `AssetLoadRequest.metadata`. Nothing applies it to the loaded texture yet.
+loader as `AssetLoadRequest.metadata`.
+
+**Applied before publication.** The default `texture` and `sprite-sheet` loaders read
+the declaration off the request and write it onto the texture while the loader is
+still the only thing holding it (`renderer/assets/textureSampling.ts` maps each name
+to its `three` value). `AssetManager` publishes what a loader resolves, so what
+`load()` resolves and what `get()` returns is already configured: a component has no
+configuration step of its own, and no reason to write to a texture it shares with
+every other consumer of that ref. An option the entry does not declare is left as the
+loader produced it.
+
+The declaration is checked first, before the image or an atlas descriptor is
+requested, so an invalid one — reachable through a hand-authored entry, which no
+builder checked — rejects the load with `InvalidTextureSamplingError`.
+
+This is a loader interpreting manifest metadata, which the other metadata readers
+are not: a clip's cue sheet (Invariant #124) and an animation clip sheet are read by
+the consuming layer, through `getManifestMetadata`, after the load. Sampling cannot
+work that way, because the texture has to be right before anyone holds it. The loader
+reads the request rather than re-reading the manifest entry, since a loader is handed
+a request and has no manager to ask.
 
 **One ref, one sampling.** The asset cache is keyed on the ref, so the same image at
 two color spaces (or two filterings) is not expressible as two entries over one ref:
@@ -603,7 +623,10 @@ The sharp edges here are different from the model ones:
 3. **The texture is shared and must not be configured per-sprite.** Writing
    `magFilter`, `colorSpace` or `flipY` for one sprite changes every sprite cut from
    that sheet (Invariant #21). Filtering and color space belong to how the sheet is
-   authored and loaded.
+   authored and loaded — declare them on the sheet's manifest entry
+   ([Per-entry texture sampling](#per-entry-texture-sampling)). A sheet declared
+   `flipY: false` is measured accordingly: `useSpriteAtlas` reads the flag off the
+   loaded texture and writes its `v` coordinates running down the image.
 4. **`durationSeconds` is mandatory on a sprite clip.** The backend plays cells at an
    fps derived as `frames.length / durationSeconds`, so the authored length is what
    every compiled mark is placed against. A clip without one is dropped with a warning

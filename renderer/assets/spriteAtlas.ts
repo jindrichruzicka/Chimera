@@ -29,6 +29,13 @@
  *
  * and the four pairs are `[u0, vTop] [u1, vTop] [u0, vBottom] [u1, vBottom]`.
  *
+ * A sheet whose manifest entry declares `flipY: false` (§4.10) arrives with the
+ * rows left alone, and then `v` runs DOWN the image with them:
+ *
+ *     vTop = y / imageHeight           vBottom = (y + h) / imageHeight
+ *
+ * Read off the texture, where the loader wrote it before the sheet was published.
+ *
  * **Frame order is the atlas's own.** Cells come out in the order the descriptor
  * declares them, unsorted, because that is the order an atlas tool writes a clip's
  * run in. Sorting by name would look tidier and quietly put `run_10` before
@@ -93,11 +100,13 @@ export function parseSpriteAtlas(asset: LoadedSpriteSheetAsset): SpriteAtlas | n
         return null;
     }
     const [imageWidth, imageHeight] = size;
+    // Only an explicit `false` is unflipped: `true` is three's default.
+    const rowsFlipped = asset.texture.flipY !== false;
 
     const frames: SpriteAtlasFrame[] = [];
     const warnings: string[] = [];
     for (const [name, rawFrame] of Object.entries(rawFrames)) {
-        const frame = readFrame(name, rawFrame, imageWidth, imageHeight);
+        const frame = readFrame(name, rawFrame, imageWidth, imageHeight, rowsFlipped);
         if (typeof frame === 'string') {
             warnings.push(frame);
         } else {
@@ -133,6 +142,7 @@ function readFrame(
     rawFrame: unknown,
     imageWidth: number,
     imageHeight: number,
+    rowsFlipped: boolean,
 ): SpriteAtlasFrame | string {
     if (!isRecord(rawFrame)) {
         return `Sprite atlas frame '${name}' is not an object; refusing the frame.`;
@@ -172,8 +182,8 @@ function readFrame(
 
     const u0 = x / imageWidth;
     const u1 = (x + width) / imageWidth;
-    const vTop = 1 - y / imageHeight;
-    const vBottom = 1 - (y + height) / imageHeight;
+    const vTop = rowsFlipped ? 1 - y / imageHeight : y / imageHeight;
+    const vBottom = rowsFlipped ? 1 - (y + height) / imageHeight : (y + height) / imageHeight;
 
     return {
         name,

@@ -16,8 +16,5 @@ whether a re-registered entry is still the same asset.
 the declaration and throw `InvalidTextureSamplingError`, naming every fault, for a misspelled option
 or a value outside the vocabulary. An entry authored without `sampling` is unchanged.
 
-This release only carries the declaration: it reaches the kind's loader on
-`AssetLoadRequest.metadata`, and nothing applies it to the loaded texture yet.
-
 `validate-assets` now peels `textureEntry(...)` like the other entry builders. Before this, an entry
 authored through it was skipped, so its ref was never looked for on disk.
