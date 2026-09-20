@@ -26,6 +26,8 @@ import type {
     AssetManifest,
     AssetManifestEntry,
 } from '@chimera-engine/simulation/content/AssetManifest.js';
+import { spriteAnimationEntry } from '@chimera-engine/simulation/content/animationManifest.js';
+import { textureEntry } from '@chimera-engine/simulation/content/textureManifest.js';
 
 import type { AssetResolver } from './AssetResolver';
 import {
@@ -1172,6 +1174,134 @@ describe('DefaultAssetManager.getManifestMetadata', () => {
             (ref: AssetRef) => unknown
         >();
         expectTypeOf(manager.getManifestMetadata(ref)).toBeUnknown();
+    });
+});
+
+describe('DefaultAssetManager — declared texture sampling', () => {
+    it('hands the texture loader every declared sampling option on the load request', async () => {
+        const ref = buildAssetRef<TextureAsset>('tactics', 'textures/banner.png');
+        const load = vi.fn(async (request: AssetLoadRequest<TextureAsset>) => ({
+            textureUrl: request.url,
+        }));
+        const manager = createTextureManager(load);
+        registerManifest(manager, [
+            textureEntry({
+                ref,
+                priority: 'deferred',
+                sampling: {
+                    colorSpace: 'srgb',
+                    magFilter: 'nearest',
+                    minFilter: 'linear-mipmap-nearest',
+                    wrapS: 'repeat',
+                    wrapT: 'mirrored-repeat',
+                    flipY: false,
+                    anisotropy: 4,
+                    generateMipmaps: true,
+                },
+            }),
+        ]);
+
+        await manager.load(ref);
+
+        expect(load).toHaveBeenCalledTimes(1);
+        expect(load.mock.calls[0]?.[0]).toStrictEqual({
+            ref,
+            kind: 'texture',
+            url: `resolved://${ref}`,
+            metadata: {
+                sampling: {
+                    colorSpace: 'srgb',
+                    magFilter: 'nearest',
+                    minFilter: 'linear-mipmap-nearest',
+                    wrapS: 'repeat',
+                    wrapT: 'mirrored-repeat',
+                    flipY: false,
+                    anisotropy: 4,
+                    generateMipmaps: true,
+                },
+            },
+        });
+    });
+
+    it('hands the sprite-sheet loader a declared sampling beside the clip sheet', async () => {
+        const ref = buildAssetRef<SpriteSheetAsset>('tactics', 'sprites/explosion.png');
+        const load = vi.fn(async () => ({ texture: {} }));
+        const manager = new DefaultAssetManager(
+            createResolver(),
+            createSingleLoaderRegistry(
+                'sprite-sheet',
+                load as unknown as AssetLoader<SpriteSheetAsset>['load'],
+            ),
+        );
+        registerManifest(manager, [
+            spriteAnimationEntry({
+                ref,
+                priority: 'deferred',
+                metadata: { clips: { blast: { frames: [0, 1], durationSeconds: 0.2 } } },
+                sampling: { magFilter: 'nearest', minFilter: 'nearest' },
+            }),
+        ]);
+
+        await manager.load(ref);
+
+        expect(load).toHaveBeenCalledTimes(1);
+        expect(load.mock.calls[0]).toStrictEqual([
+            {
+                ref,
+                kind: 'sprite-sheet',
+                url: `resolved://${ref}`,
+                metadata: {
+                    clips: { blast: { frames: [0, 1], durationSeconds: 0.2 } },
+                    sampling: { magFilter: 'nearest', minFilter: 'nearest' },
+                },
+            },
+        ]);
+    });
+
+    it('keeps the later of two entries declaring one ref at two samplings', async () => {
+        const ref = buildAssetRef<TextureAsset>('tactics', 'textures/banner.png');
+        const load = vi.fn(async (request: AssetLoadRequest<TextureAsset>) => ({
+            textureUrl: request.url,
+        }));
+        const manager = createTextureManager(load);
+        registerManifest(manager, [
+            textureEntry({ ref, priority: 'deferred', sampling: { colorSpace: 'srgb' } }),
+            textureEntry({ ref, priority: 'deferred', sampling: { colorSpace: 'none' } }),
+        ]);
+
+        await manager.load(ref);
+
+        expect(load).toHaveBeenCalledTimes(1);
+        expect(load.mock.calls[0]?.[0].metadata).toStrictEqual({
+            sampling: { colorSpace: 'none' },
+        });
+        expect(manager.getManifestMetadata(ref)).toStrictEqual({
+            sampling: { colorSpace: 'none' },
+        });
+    });
+
+    it('re-loads a texture whose declared sampling changed on re-registration', async () => {
+        const ref = buildAssetRef<TextureAsset>('tactics', 'textures/banner.png');
+        const load = vi.fn(async () => ({ dispose: vi.fn() }));
+        const manager = createTextureManager(load);
+
+        registerManifest(manager, [
+            textureEntry({ ref, priority: 'deferred', sampling: { colorSpace: 'srgb' } }),
+        ]);
+        await manager.load(ref);
+        // An equal declaration in a fresh object keeps the cached texture …
+        registerManifest(manager, [
+            textureEntry({ ref, priority: 'deferred', sampling: { colorSpace: 'srgb' } }),
+        ]);
+        await manager.load(ref);
+        expect(load).toHaveBeenCalledTimes(1);
+
+        // … and a different one evicts it.
+        registerManifest(manager, [
+            textureEntry({ ref, priority: 'deferred', sampling: { colorSpace: 'none' } }),
+        ]);
+        await manager.load(ref);
+        expect(load).toHaveBeenCalledTimes(2);
     });
 });
 

@@ -2406,6 +2406,49 @@ describe('animation clip sheet validation', () => {
             expect(report.invalidAnimationSheets).toHaveLength(0);
         });
     });
+
+    // `textureEntry` bakes `kind: 'texture'` into its own body like the builders
+    // above, so an entry authored through it has to be peeled the same way or its
+    // ref is never looked for on disk.
+    describe('entries authored through the texture builder', () => {
+        it('existence-checks the ref of a textureEntry-authored entry', async () => {
+            const report = await validateManifestEntries(
+                `textureEntry({
+                    ref: 'tactics/textures/absent.png',
+                    priority: 'critical',
+                    sampling: { colorSpace: 'srgb' },
+                })`,
+            );
+
+            expect(report.ok).toBe(false);
+            expect(report.missing.map((entry) => entry.ref)).toEqual([
+                'tactics/textures/absent.png',
+            ]);
+        });
+
+        // A spread makes the entry's members unreadable, and then each sheet gate reports
+        // what it cannot rule out unless the kind rules it out. `'texture'` carries
+        // neither sheet.
+        it('rules both sheets out for a textureEntry whose argument carries a spread', async () => {
+            const report = await validateManifestEntries(
+                `textureEntry({ ...shared, ref: 'tactics/sprites/hero.png', priority: 'deferred' })`,
+            );
+
+            expect(report.ok).toBe(true);
+            expect(report.invalidCueSheets).toEqual([]);
+            expect(report.invalidAnimationSheets).toEqual([]);
+        });
+
+        it('counts a present textureEntry ref as checked, under a kind it recognises', async () => {
+            const report = await validateManifestEntries(
+                `textureEntry({ ref: 'tactics/sprites/hero.png', priority: 'deferred' })`,
+            );
+
+            expect(report.ok).toBe(true);
+            expect(report.checkedRefs).toBe(1);
+            expect(report.unknownKinds).toEqual([]);
+        });
+    });
 });
 
 function cueSheetReasons(report: AssetValidationReport): readonly string[] {

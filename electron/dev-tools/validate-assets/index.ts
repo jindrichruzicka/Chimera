@@ -990,7 +990,8 @@ function collectAssetManifestRefs(
  *
  * `modelAnimationEntry` and `spriteAnimationEntry` (`simulation/content/animationManifest.ts`)
  * are the same shape for the same reason: an entry authored through either of them reads
- * as kindless until it is peeled here.
+ * as kindless until it is peeled here. So is `textureEntry`
+ * (`simulation/content/textureManifest.ts`).
  */
 interface ManifestEntryLiteral {
     readonly objectLiteral: ObjectLiteralExpression;
@@ -1002,6 +1003,7 @@ const manifestEntryBuilderKinds: ReadonlyMap<string, string> = new Map([
     ['audioClipEntry', 'audio-clip'],
     ['modelAnimationEntry', 'gltf-model'],
     ['spriteAnimationEntry', SPRITE_SHEET_KIND],
+    ['textureEntry', 'texture'],
 ]);
 
 function unwrapManifestEntry(expression: Expression): ManifestEntryLiteral | undefined {

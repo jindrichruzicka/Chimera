@@ -150,10 +150,12 @@ chimera/
 │   │   ├── AssetRef.ts              # AssetRef<T> branded type — phantom-typed path string; zero renderer deps
 │   │   ├── AssetManifest.ts         # AssetManifestEntry (kind, priority, opaque `metadata: unknown`)
 │   │   ├── audioManifest.ts         # audioClipEntry() cue-sheet authoring builder — write-only (§4.25, #124)
+│   │   ├── textureManifest.ts       # textureEntry() builder — declares and checks per-entry texture sampling (§4.10)
 │   │   ├── ContentDatabase.ts       # Immutable query interface; createContentDatabase() factory
 │   │   └── ContentLoader.ts         # Loads JSON sources, validates, merges, builds ContentDatabase
 │   ├── foundation/                  # Contract leaf — types + pure helpers; no cross-package imports (Check 13)
 │   │   ├── audio-cue-sheet.ts       # AudioCueName / AudioClipMetadata — DEFINED sim-side, read only by renderer/audio (#124)
+│   │   ├── texture-sampling.ts      # TextureSampling vocabulary (engine-owned names) + readTextureSampling(); see §4.10
 │   │   ├── dev-fixture-contract.ts  # Dev-harness fixture schemas (DevScenario, DevAnnounce) + pure helpers; see §4.32
 │   │   ├── game-manifest-contract.ts # GameManifest + resolvers; see §4.2.1
 │   │   ├── game-screen-contract.ts  # GameScreenRegistry, GameHudProps, GameEventAudioBinding

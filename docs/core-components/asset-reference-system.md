@@ -155,6 +155,57 @@ The manifest value is **injected via `AssetManagerContext`** at game session sta
 > **Module boundary (§3)** — the renderer never imports game packages; `AssetManager` included.
 > **Invariant #22** — All `AssetRef` strings in content JSON must pass `electron/dev-tools/validate-assets/index.ts` before merge.
 
+### Per-entry texture sampling
+
+A `texture` or `sprite-sheet` entry declares how its image is sampled under
+`metadata.sampling`. The vocabulary lives in
+`simulation/foundation/texture-sampling.ts`, and every value is an engine-owned name
+or a JSON scalar — never a `three` constant (Invariant #1):
+
+| Option            | Values                                                                                                                              |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `colorSpace`      | `'srgb'`, `'srgb-linear'`, `'none'` (data maps)                                                                                     |
+| `magFilter`       | `'nearest'`, `'linear'`                                                                                                             |
+| `minFilter`       | `'nearest'`, `'linear'`, `'nearest-mipmap-nearest'`, `'nearest-mipmap-linear'`, `'linear-mipmap-nearest'`, `'linear-mipmap-linear'` |
+| `wrapS` / `wrapT` | `'clamp'`, `'repeat'`, `'mirrored-repeat'`                                                                                          |
+| `flipY`           | boolean                                                                                                                             |
+| `anisotropy`      | a finite number of at least 1                                                                                                       |
+| `generateMipmaps` | boolean                                                                                                                             |
+
+A game declares them through the `simulation/content` builders rather than by
+hand-nesting the slot:
+
+```typescript
+import { spriteAnimationEntry, textureEntry } from '@chimera-engine/simulation/content';
+
+textureEntry({ ref: banner, priority: 'critical', sampling: { colorSpace: 'srgb' } });
+
+// A pixel-art sheet: the sampling sits beside the clip sheet in the same slot.
+spriteAnimationEntry({
+    ref: heroSheet,
+    priority: 'deferred',
+    metadata: { clips },
+    sampling: { magFilter: 'nearest', minFilter: 'nearest', generateMipmaps: false },
+});
+```
+
+Both builders check the declaration with `readTextureSampling` and throw
+`InvalidTextureSamplingError` — naming every fault — for a misspelled option or a
+value outside the vocabulary. The `TextureSampling` type rejects a misspelled literal
+at compile time; the runtime check covers what a spread or a cast carries past it.
+
+The declaration travels with the rest of the entry's metadata: it reaches the kind's
+loader as `AssetLoadRequest.metadata`. Nothing applies it to the loaded texture yet.
+
+**One ref, one sampling.** The asset cache is keyed on the ref, so the same image at
+two color spaces (or two filterings) is not expressible as two entries over one ref:
+nothing rejects the duplicate, and the later entry replaces the earlier. This is
+accepted rather than worked around. A game that needs both ships the image under two
+paths, which makes them two refs and two cached textures. Changing a ref's declared
+sampling in a re-registered manifest evicts the cached asset like any other metadata
+change, because every declarable value survives the `JSON.stringify` comparison the
+cache uses.
+
 ---
 
 ## `AssetResolver` — Environment-Aware URL Resolution

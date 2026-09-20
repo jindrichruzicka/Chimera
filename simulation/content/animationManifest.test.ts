@@ -19,6 +19,7 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { buildAssetRef, type GLTFModelAsset, type SpriteSheetAsset } from './AssetRef';
 import type { AssetManifestEntry } from './AssetManifest';
+import { InvalidTextureSamplingError } from './textureManifest';
 import {
     modelAnimationEntry,
     spriteAnimationEntry,
@@ -90,6 +91,64 @@ describe('spriteAnimationEntry', () => {
 
         expect(entry).toEqual({ ref, kind: 'sprite-sheet', priority: 'critical' });
         expect(Object.hasOwn(entry, 'metadata')).toBe(false);
+    });
+
+    it('carries a declared sampling beside the clip sheet under `metadata.sampling`', () => {
+        const ref = buildAssetRef<SpriteSheetAsset>('tactics', 'sprites/explosion.png');
+        const metadata: SpriteAnimationMetadata = {
+            clips: { blast: { frames: [0, 1], frameCount: 2, durationSeconds: 0.2 } },
+        };
+
+        const entry = spriteAnimationEntry({
+            ref,
+            priority: 'deferred',
+            metadata,
+            sampling: { magFilter: 'nearest', minFilter: 'nearest', colorSpace: 'srgb' },
+        });
+
+        expect(entry).toEqual({
+            ref,
+            kind: 'sprite-sheet',
+            priority: 'deferred',
+            metadata: {
+                clips: { blast: { frames: [0, 1], frameCount: 2, durationSeconds: 0.2 } },
+                sampling: { magFilter: 'nearest', minFilter: 'nearest', colorSpace: 'srgb' },
+            },
+        });
+        // The authored sheet is copied beside the sampling, never written to.
+        expect(metadata).toEqual({
+            clips: { blast: { frames: [0, 1], frameCount: 2, durationSeconds: 0.2 } },
+        });
+    });
+
+    it('carries a sampling declared without any clip sheet', () => {
+        const ref = buildAssetRef<SpriteSheetAsset>('tactics', 'sprites/ui-icons.png');
+
+        const entry = spriteAnimationEntry({
+            ref,
+            priority: 'critical',
+            sampling: { wrapS: 'clamp', wrapT: 'clamp', flipY: true, anisotropy: 2 },
+        });
+
+        expect(entry).toEqual({
+            ref,
+            kind: 'sprite-sheet',
+            priority: 'critical',
+            metadata: { sampling: { wrapS: 'clamp', wrapT: 'clamp', flipY: true, anisotropy: 2 } },
+        });
+    });
+
+    it('rejects a misspelled sampling option rather than ignoring it', () => {
+        const ref = buildAssetRef<SpriteSheetAsset>('tactics', 'sprites/ui-icons.png');
+
+        expect(() =>
+            spriteAnimationEntry({
+                ref,
+                priority: 'critical',
+                // @ts-expect-error: 'magFiler' is not a sampling option
+                sampling: { magFiler: 'nearest' },
+            }),
+        ).toThrow(new InvalidTextureSamplingError(['sampling.magFiler is not a sampling option.']));
     });
 
     it('returns exactly an `AssetManifestEntry<SpriteSheetAsset>`', () => {

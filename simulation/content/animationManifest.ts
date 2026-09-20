@@ -3,11 +3,15 @@
 // docs/roadmap-sections/m10-first-public-release-v1.0.0.md.
 //
 // The write-only authoring builders games call to attach a clip sheet to a
-// 'gltf-model' or 'sprite-sheet' manifest entry. They only WRITE the value into
-// the existing AssetManifestEntry.metadata slot (typed `unknown`); they never
-// read or parse it. The sheet vocabulary is defined sim-side
+// 'gltf-model' or 'sprite-sheet' manifest entry. They only WRITE the sheet into
+// the existing AssetManifestEntry.metadata slot (typed `unknown`). The sheet
+// vocabulary is defined sim-side
 // (../foundation/animation-clip-sheet) and flows sim → renderer — the sole
 // playback parser/resolver is the renderer, never the reverse.
+//
+// A 'sprite-sheet' entry may also declare how its image is sampled (§4.10). That
+// declaration is a sibling of the sheet under `metadata.sampling`, and unlike the
+// sheet it IS checked here — see ../foundation/texture-sampling.
 //
 // AssetManifestEntry itself is unchanged (metadata?: unknown).
 //
@@ -29,6 +33,7 @@ import type {
     SpriteAnimationMetadata,
     SpriteClipDeclaration,
 } from '../foundation/animation-clip-sheet.js';
+import { readTextureSampling, type TextureSampling } from '../foundation/texture-sampling.js';
 
 // Re-export the sim-side clip vocabulary so a game authors a clip sheet and its
 // manifest entry from a single content-layer import site.
@@ -81,19 +86,32 @@ export function modelAnimationEntry(args: {
 
 /**
  * Build a `'sprite-sheet'` {@link AssetManifestEntry}, optionally carrying a clip
- * sheet in the opaque `metadata` slot. The exact twin of
- * {@link modelAnimationEntry} for sprite content.
+ * sheet in the opaque `metadata` slot. The twin of {@link modelAnimationEntry}
+ * for sprite content, plus the sheet image's sampling.
+ *
+ * Without `sampling` the sheet is carried verbatim, by reference. With it, the
+ * entry's metadata is a new object holding the sheet's keys and `sampling`
+ * beside them; the passed sheet is never written to.
  *
  * @param args.ref       A typed reference to the sprite sheet.
  * @param args.priority  Load priority (`'critical'` preloads; `'deferred'` lazy-loads).
- * @param args.metadata  Optional clip sheet. Omit for a behaviour-neutral entry
- *                       identical to a hand-authored one (no `metadata` key).
+ * @param args.metadata  Optional clip sheet. Omit it and `sampling` for a
+ *                       behaviour-neutral entry identical to a hand-authored one
+ *                       (no `metadata` key).
+ * @param args.sampling  Optional sampling of the sheet image, checked here.
+ * @throws {InvalidTextureSamplingError} When `sampling` is not a valid declaration.
  */
 export function spriteAnimationEntry(args: {
     readonly ref: AssetRef<SpriteSheetAsset>;
     readonly priority: AssetPriority;
     readonly metadata?: SpriteAnimationMetadata;
+    readonly sampling?: TextureSampling;
 }): AssetManifestEntry<SpriteSheetAsset> {
+    if (args.sampling !== undefined) {
+        const metadata = { ...args.metadata, sampling: args.sampling };
+        readTextureSampling(metadata);
+        return { ref: args.ref, kind: 'sprite-sheet', priority: args.priority, metadata };
+    }
     if (args.metadata === undefined) {
         return { ref: args.ref, kind: 'sprite-sheet', priority: args.priority };
     }

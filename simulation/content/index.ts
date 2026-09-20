@@ -29,6 +29,17 @@ export {
 } from './audioManifest';
 
 export {
+    InvalidTextureSamplingError,
+    textureEntry,
+    type TextureColorSpace,
+    type TextureMagFilter,
+    type TextureMetadata,
+    type TextureMinFilter,
+    type TextureSampling,
+    type TextureWrapMode,
+} from './textureManifest';
+
+export {
     modelAnimationEntry,
     spriteAnimationEntry,
     type AnimationClipName,
