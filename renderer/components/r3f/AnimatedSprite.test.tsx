@@ -10,8 +10,8 @@
  * so it owns a handle to pass the backend — so the cells it shows are read off
  * the same `uv` array a shader would sample. The R3F intrinsics around it
  * (`<mesh>`, `<meshBasicMaterial>`) render as inert DOM under the fiber
- * stand-in, so nothing here asserts about them; what this file covers is the
- * wiring from an `AssetRef` through the manager to a moving quad.
+ * stand-in; what this file covers is the wiring from an `AssetRef` through the
+ * manager to a moving quad.
  *
  * **Why a geometry ledger rather than a ref.** Exposing the geometry just to
  * test it would freeze it into the public surface. The `three` mock records
@@ -32,6 +32,7 @@ import type { AssetRef, SpriteSheetAsset } from '@chimera-engine/simulation/cont
 import type { AssetManager, LoadedSpriteSheetAsset } from '../../assets/AssetManager.js';
 import { AssetManagerContext } from '../../assets/AssetManagerContext.js';
 import { resetFakeFiberRoot, update } from './__test-support__/fakeFiberRoot';
+import { intrinsicProps } from './__test-support__/intrinsicProps';
 import { AnimatedSprite } from './AnimatedSprite';
 
 vi.mock('@react-three/fiber', () => import('./__test-support__/fakeFiberRoot'));
@@ -314,6 +315,30 @@ describe('AnimatedSprite is null-safe while its sheet loads', () => {
         });
 
         expect(container.querySelector('meshbasicmaterial')?.hasAttribute('map')).toBe(true);
+    });
+
+    it('sets transparent, toneMapped and alphaTest to true, false and 0.01 on the default material', async () => {
+        // Today's three values, asserted BY VALUE and nothing wider. The claim
+        // is that these three props hold these three values — not that they are
+        // the right ones for sprite art.
+        //
+        // Read through `intrinsicProps` because the DOM is lossy here: react-dom
+        // 19.2.5 drops a boolean-valued prop on an unrecognised element, so
+        // `transparent` and `toneMapped={false}` leave no attribute to read and
+        // a presence check could not separate them from absent.
+        const { container } = renderSprite(<AnimatedSprite sheet={RUN_REF} clip="run" />);
+
+        await waitFor(() => {
+            expect(container.querySelector('meshbasicmaterial')).not.toBeNull();
+        });
+
+        const material = container.querySelector('meshbasicmaterial');
+        expect(material).not.toBeNull();
+        const props = intrinsicProps(material!);
+
+        expect(props['transparent']).toBe(true);
+        expect(props['toneMapped']).toBe(false);
+        expect(props['alphaTest']).toBe(0.01);
     });
 
     it('still draws a sheet that decodes but measures to no atlas', async () => {
