@@ -79,6 +79,7 @@ import type {
     AnimatedSpriteProps,
     SpriteAlphaMode,
     SpriteBlending,
+    ShaderTimeUniform,
     EasingFn,
     TweenState,
     TweenCallbackHandlers,
@@ -139,6 +140,9 @@ interface BarrelTypeSurface {
     // sprite's look into a constant or a helper has to annotate it, and the
     // values are engine-owned names rather than `three` constants (Invariant #1).
     readonly spriteBlending: SpriteBlending;
+    // The shader time uniform's own type: a game hoisting one into a constant or
+    // a uniforms object has to annotate it.
+    readonly shaderTime: ShaderTimeUniform;
     readonly spriteAlphaMode: SpriteAlphaMode;
     readonly markerEvent: MarkerEvent;
     readonly notify: NotifyEvent;
@@ -298,13 +302,14 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'useGameInteraction',
             'useInteractionContext',
             'useModelAnimation',
+            'useShaderTime',
             'useSpriteClipPlayer',
             'useTween',
             'useTweenCallback',
         ]);
     });
 
-    it('pulls in exactly forty-nine modules — four stores, the log bridge, both animation halves, and no clone seam', async () => {
+    it('pulls in exactly fifty modules — four stores, the log bridge, both animation halves, and no clone seam', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // EXHAUSTIVE, not a denylist (see the audio sibling for why). The four
@@ -413,6 +418,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'r3f/useFrozenContextOptions.ts',
             'r3f/useModelAnimation.ts',
             'r3f/useOwnedMixer.ts',
+            'r3f/useShaderTime.ts',
             'r3f/useSpriteClipPlayer.ts',
             'state/gameStore.ts',
             'state/settingsStore.ts',
@@ -502,6 +508,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             ['..', 'useClipPlayer.ts'],
             ['..', 'useClipPlayback.ts'],
             ['..', 'useSpriteClipPlayer.ts'],
+            ['..', 'useShaderTime.ts'],
             ['..', 'AnimatedSprite.tsx'],
             ['..', 'InteractionBlocker.tsx'],
             ['..', 'LightingRig.tsx'],

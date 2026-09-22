@@ -339,14 +339,15 @@ readers that feed them — `useAnimationSheet`, `useSpriteAnimationSheet`, `useS
 | `useClipPlayer`         | The **mesh** binding: a declarative `clip` / `loop` / `speed` / `blendSeconds` surface over one `ClipPlayer` driving one `MeshClipBackend` on one owned `AnimationMixer`.                                                                                                           |
 | `useSpriteClipPlayer`   | The **sprite** binding: the same declarative surface over one `SpriteClipBackend` writing a caller-owned quad. `blendSeconds` is narrowed off its options.                                                                                                                          |
 | `AnimatedSprite`        | The sprite half as one element — an `AssetRef` to a sprite sheet in, an animated quad out. A `Mesh` with its own `PlaneGeometry`, never a `THREE.Sprite`, which shares one module-level geometry across every instance in the process. Carries the sprite appearance surface below. |
-| `useAnimationTimeScale` | The exported dilation scalar, for everything a game animates by hand — a camera tween, a particle rate, a shader uniform, a HUD countdown.                                                                                                                                          |
+| `useAnimationTimeScale` | The exported dilation scalar, for everything a game animates by hand — a camera tween, a particle rate, a HUD countdown.                                                                                                                                                            |
+| `useShaderTime`         | The shader time uniform: a stable `{ value }` holding dilated engine seconds, for a game's own material.                                                                                                                                                                            |
 | `useModelAnimation`     | The pre-existing route: a bare mixer for a game that drives actions itself. Still supported, no longer the only option.                                                                                                                                                             |
 
 Both players share `useClipPlayback.ts` — the declarative surface, the single default-priority frame
 driver, and the `ClipPlayerHandle` (`setClipSpeed`, which refuses an unusable multiplier whether or not
 a player exists behind it yet). Two copies would be two contracts, both green.
 
-**Every allocation is a commit-phase effect, never `useMemo`.** StrictMode double-invokes memo factories
+**Every allocation with something to DISPOSE is a commit-phase effect, never `useMemo`.** StrictMode double-invokes memo factories
 and **discards one result**, which would orphan a mixer retaining a clone root with no `uncacheRoot`
 ever running, and a `ClipPlayer` holding a backend with no `dispose` ever running.
 
@@ -551,6 +552,41 @@ shared by every sprite cut from it (Invariant #21), so tinting one sprite does n
 
 These props configure the **default** material only. A game that supplies its own material owns its
 whole appearance, and none of them is copied onto it.
+
+## A shader time uniform
+
+A shader that animates needs a time uniform, and the obvious hand-rolled version — accumulate the
+frame delta, or read the R3F clock — works perfectly **until the player enables slow motion**, at
+which point it runs at full speed while everything around it crawls. That is the worst possible
+moment to discover the wiring was wrong, and no test a game would think to write catches it. So the
+engine ships the uniform rather than a snippet:
+
+```tsx
+const time = useShaderTime();
+// …handed to the material this component owns:
+uniforms={{ uTime: time }}
+```
+
+`useShaderTime()` returns a `ShaderTimeUniform` — `{ value: number }`, structurally `three`'s
+`IUniform<number>`, so it drops into a `ShaderMaterial`'s `uniforms` with no `three` type named. It
+must be called inside a `<GameCanvas>`, since it subscribes to the frame loop.
+
+- **It dilates.** The value advances by the frame delta multiplied by `useAnimationTimeScale`, so a
+  shader follows the match's authoritative time scale with no per-call-site wiring.
+- **It is cap-independent.** A capped loop delivers fewer, larger deltas, and their sum over a
+  second is the same second — a 30 fps game and a 144 fps one reach the same value.
+- **The object identity is stable for the life of the mount**, which is what lets a material hold
+  the reference it was handed on the first render. Two mounted components get uniforms of their own,
+  and a uniform stops advancing when its component unmounts.
+- **It does not wrap.** The value accumulates for the life of the mount, and is uploaded as a GLSL
+  `float`. Its spacing stays finer than one frame delta for at least 18 hours at 144 fps — longer at
+  lower rates — but that is the bound for a uniform read raw; a shader that MULTIPLIES it, as
+  `sin(uTime * 50.0)` does, quantises far sooner. A long-running shader should wrap it itself.
+- **It gates nothing authoritative.** Like an animation mark (#132) or an audio cue (#135), a value
+  derived from the frame clock is derived from a clock no two machines share. That is held by the
+  shape: the hook takes no parameters, so there is no dispatcher, `SendAction`, `PlayerId` or tick to
+  hand it, and a parameter that does not exist cannot be `eslint-disable`d back in. A frame delta is
+  not a tick source and nothing here reaches a reducer (#42, #43).
 
 ## The custom-material seam
 

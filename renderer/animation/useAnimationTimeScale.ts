@@ -12,8 +12,9 @@
  *
  * `useClipPlayer` applies this multiplier itself, so clip playback dilates with
  * no wiring at all. Everything else a game animates by hand — a camera tween, a
- * particle rate, a shader uniform, a HUD countdown — is opt-in, and this hook is
- * what it opts in with. It ships from the `components/r3f` barrel (Invariant
+ * particle rate, a HUD countdown — is opt-in, and this hook is what it opts in
+ * with. A shader's time uniform has its own helper, `useShaderTime`, which
+ * applies the multiplier itself. It ships from the `components/r3f` barrel (Invariant
  * #96) because `renderer/animation/` is not an importable subpath.
  *
  * Read-only by construction: the store's one writer is `TimeScaleBridge`, which

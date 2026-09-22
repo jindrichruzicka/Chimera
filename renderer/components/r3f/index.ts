@@ -25,8 +25,9 @@
  *
  * `useAnimationTimeScale` is next: the authoritative dilation multiplier as
  * a plain number. Both clip players already follow it, so this is what
- * everything a game animates by hand — a camera tween, a particle rate, a shader
- * uniform, a HUD countdown — opts in with.
+ * everything a game animates by hand — a camera tween, a particle rate, a HUD
+ * countdown — opts in with. A shader's time uniform has its own helper,
+ * `useShaderTime`, which applies the scalar itself.
  *
  * **Animating by hand** is the rest.
  * `useTween` drives a normalized 0→1 value off `useFrame` and hands it back to
@@ -99,6 +100,7 @@ export { useEntityInterpolation } from './useEntityInterpolation';
 export { useModelAnimation } from './useModelAnimation';
 export { useClipPlayer } from './useClipPlayer';
 export { useSpriteClipPlayer } from './useSpriteClipPlayer';
+export { useShaderTime } from './useShaderTime';
 export { AnimatedSprite } from './AnimatedSprite';
 export { LightingRig } from './LightingRig';
 export type { LightingRigProps } from './LightingRig';
@@ -117,6 +119,7 @@ export type {
 export type { EntityInterpolationOptions } from './useEntityInterpolation';
 export type { UseSpriteClipPlayerOptions } from './useSpriteClipPlayer';
 export type { AnimatedSpriteProps, SpriteAlphaMode, SpriteBlending } from './AnimatedSprite';
+export type { ShaderTimeUniform } from './useShaderTime';
 export type {
     CameraMode,
     CameraPreset,

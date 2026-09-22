@@ -17,7 +17,7 @@ sole writer, takes the permille as a prop, and carries nothing back (Invariant #
 `useClipPlayer` follows that multiplier by default, so a dilated match slows every clip with no
 wiring in the game at all; `options.timeScale` still overrides it for a clip that must ignore a
 global slow-motion. `useAnimationTimeScale()` returns the same multiplier as a plain number, and
-is what everything a game animates by hand — a camera tween, a particle rate, a shader uniform,
+is what everything a game animates by hand — a camera tween, a particle rate,
 a HUD countdown — opts in with. **Clip playback is what dilates, never the R3F clock:** the clock
 feeds `PerfProbe`, and scaling it would make the performance HUD report a frame rate the player
 never saw.
