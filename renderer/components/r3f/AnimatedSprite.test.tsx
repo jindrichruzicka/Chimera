@@ -22,6 +22,7 @@
 
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import React from 'react';
+import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -44,7 +45,7 @@ import type { AssetManager, LoadedSpriteSheetAsset } from '../../assets/AssetMan
 import { AssetManagerContext } from '../../assets/AssetManagerContext.js';
 import { resetFakeFiberRoot, update } from './__test-support__/fakeFiberRoot';
 import { intrinsicProps } from './__test-support__/intrinsicProps';
-import { AnimatedSprite, MATERIAL_INTRINSIC } from './AnimatedSprite';
+import { AnimatedSprite, MATERIAL_INTRINSIC, withSheetTexture } from './AnimatedSprite';
 
 vi.mock('@react-three/fiber', () => import('./__test-support__/fakeFiberRoot'));
 
@@ -174,6 +175,19 @@ async function waitForFirstWrite(): Promise<void> {
     });
 }
 
+/**
+ * Every `console.error` argument React emits while the returned reader is live.
+ *
+ * React reports an invalid prop on a container — `Fragment` accepts only `key`
+ * and `children` — through `console.error` and nothing else, so this is the only
+ * channel a test has for "the engine cloned something it should not have". The
+ * spy is restored by `afterEach`'s `restoreAllMocks`.
+ */
+function captureConsoleErrors(): () => readonly unknown[] {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    return () => spy.mock.calls.flat();
+}
+
 let frameClockSeconds = 0;
 
 function advance(deltaSeconds: number): void {
@@ -191,6 +205,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
 });
 
 // ─── cases ──────────────────────────────────────────────────────────────────────
@@ -1071,5 +1086,338 @@ describe('AnimatedSprite exposes a sprite appearance surface', () => {
         const supplied = intrinsicProps(container.querySelector('meshstandardmaterial')!);
         expect(supplied).not.toHaveProperty('color');
         expect(supplied).not.toHaveProperty('blending');
+    });
+});
+
+describe('AnimatedSprite hands its atlas texture to a supplied material', () => {
+    it('gives a material supplied through the material prop the sheet texture it already holds', async () => {
+        // The whole point of the seam: the component has resolved the sheet, so a
+        // game writing a custom material must not resolve it a second time. The
+        // load count is what says it did not — the texture identity alone would
+        // pass even if the caller had gone back to the manager for the same
+        // cached object.
+        const sheet = createLoadedSheet();
+        const load = vi.fn(() => Promise.resolve(sheet)) as unknown as AssetManager['load'];
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run" material={<meshStandardMaterial />} />,
+            createManager({ load }),
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        const supplied = intrinsicProps(container.querySelector('meshstandardmaterial')!);
+        expect(supplied['map']).toBe(sheet.texture);
+        expect(container.querySelector('meshbasicmaterial')).toBeNull();
+        expect(load).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves a supplied material’s own map in place rather than overwriting it', async () => {
+        // Precedence, pinned rather than incidental: a game that has already
+        // decided how the sheet is sampled owns `map`, and the handoff is a
+        // convenience for the case where it has not.
+        const ownTexture = { image: { width: 2, height: 2 } } as unknown as ThreeModule.Texture;
+        const { container } = renderSprite(
+            <AnimatedSprite
+                sheet={RUN_REF}
+                clip="run"
+                material={<meshStandardMaterial map={ownTexture} />}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        const supplied = intrinsicProps(container.querySelector('meshstandardmaterial')!);
+        expect(supplied['map']).toBe(ownTexture);
+    });
+
+    it('carries every other prop of the supplied material through untouched', async () => {
+        const { container } = renderSprite(
+            <AnimatedSprite
+                sheet={RUN_REF}
+                clip="run"
+                material={
+                    <meshStandardMaterial transparent={false} opacity={0.75} toneMapped={true} />
+                }
+            />,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        const supplied = intrinsicProps(container.querySelector('meshstandardmaterial')!);
+        expect(supplied['transparent']).toBe(false);
+        expect(supplied['opacity']).toBe(0.75);
+        expect(supplied['toneMapped']).toBe(true);
+    });
+
+    it('returns a new element rather than writing into the one it was given', () => {
+        // Called directly, because a rendered assertion cannot measure this:
+        // React freezes `element.props` in development, so an implementation
+        // that wrote in place would THROW before anything rendered, and the test
+        // would be pinning React's freeze rather than the clone. Identity is the
+        // claim, so identity is what is asserted.
+        const element = <meshStandardMaterial />;
+        const texture = { image: { width: 4, height: 4 } } as unknown as ThreeModule.Texture;
+
+        const handed = withSheetTexture(element, texture);
+
+        expect(handed).not.toBe(element);
+        expect(handed.props).not.toBe(element.props);
+        expect((handed.props as { readonly map?: unknown }).map).toBe(texture);
+        expect(element.props).not.toHaveProperty('map');
+    });
+
+    it('returns the very element it was given when that element declares a map', () => {
+        // The early return, pinned by identity too: no clone at all, so a game
+        // that memoised the element keeps its reference.
+        const own = { image: { width: 2, height: 2 } } as unknown as ThreeModule.Texture;
+        const element = <meshStandardMaterial map={own} />;
+
+        expect(withSheetTexture(element, { image: {} } as unknown as ThreeModule.Texture)).toBe(
+            element,
+        );
+    });
+
+    it('keeps the mapped default material when the material prop is not a material', async () => {
+        // `material={<group/>}` is caller error, but the cheap failure is the one
+        // to take: suppressing the default would leave three's implicit white
+        // unmapped material, the same white square the children path has fixtures
+        // against. The supplied element still renders.
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run" material={<group />} />,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('group')).not.toBeNull();
+        });
+
+        const fallback = container.querySelector('meshbasicmaterial');
+        expect(fallback).not.toBeNull();
+        expect(fallback?.hasAttribute('map')).toBe(true);
+        // Declined, so not cloned either: the engine does not write a `map` onto
+        // an element it refused to treat as a material. r3f would set it on the
+        // object silently rather than throwing.
+        expect(intrinsicProps(container.querySelector('group')!)).not.toHaveProperty('map');
+    });
+
+    it('accepts a component through the material prop and hands it the texture', async () => {
+        // A material component is the shape a game most often supplies, and it is
+        // recognised the same way a child component is.
+        const GlowMaterial = (props: Record<string, unknown>): React.ReactElement => (
+            <meshStandardMaterial {...props} />
+        );
+        const sheet = createLoadedSheet();
+
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run" material={<GlowMaterial />} />,
+            createManager({
+                load: (() => Promise.resolve(sheet)) as unknown as AssetManager['load'],
+            }),
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        // The texture, not merely the absence of the default: an implementation
+        // that handed a component element nothing would otherwise pass.
+        const supplied = intrinsicProps(container.querySelector('meshstandardmaterial')!);
+        expect(supplied['map']).toBe(sheet.texture);
+        expect(container.querySelector('meshbasicmaterial')).toBeNull();
+    });
+
+    it('treats a declared map of null as the material’s own decision', async () => {
+        // `map={null}` IS a declaration — a game writing `map={maybeTexture}` has
+        // said "no map" while the texture is absent, and the contract is that a
+        // material declaring its own `map` keeps it. Pinned because the guard is
+        // `!== undefined` and widening it to also skip `null` would silently
+        // overrule the caller.
+        const { container } = renderSprite(
+            <AnimatedSprite
+                sheet={RUN_REF}
+                clip="run"
+                material={<meshStandardMaterial map={null} />}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        const supplied = intrinsicProps(container.querySelector('meshstandardmaterial')!);
+        expect(supplied['map']).toBeNull();
+    });
+
+    it('does not treat a fragment as the material, so the sprite keeps a mapped default', async () => {
+        // The children walk looks THROUGH a fragment; this prop must not. Handing
+        // the texture to a fragment puts it on a container React drops it from,
+        // leaves the material inside with nothing, and — if the fragment counted
+        // as the material — suppresses the default that would have carried it.
+        const consoleErrors = captureConsoleErrors();
+        const { container } = renderSprite(
+            <AnimatedSprite
+                sheet={RUN_REF}
+                clip="run"
+                material={
+                    <>
+                        <meshStandardMaterial />
+                    </>
+                }
+            />,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        const fallback = container.querySelector('meshbasicmaterial');
+        expect(fallback).not.toBeNull();
+        expect(fallback?.hasAttribute('map')).toBe(true);
+
+        // The other half, which the default's presence does not carry: the
+        // fragment was not CLONED with the texture either. A fragment renders no
+        // DOM node to read props off, so what is observable is React's own
+        // complaint — it accepts only `key` and `children` — and its absence is
+        // the pin.
+        expect(consoleErrors().join(' ')).not.toMatch(/Fragment/);
+
+        // The control, in the shape `intrinsicProps` uses for the same kind of
+        // dependency: the assertion above is NEGATIVE, so it would pass forever
+        // if React stopped routing this through `console.error` or reworded it
+        // without the word. Doing deliberately what the engine must not do proves
+        // the channel was live when the assertion read it.
+        render(<mesh>{React.cloneElement((<></>) as ReactElement, { map: 1 } as never)}</mesh>);
+        expect(consoleErrors().join(' ')).toMatch(/Fragment/);
+    });
+
+    it('gives a material component the texture even when it takes a prop named object', async () => {
+        // The two predicates have to agree about `object`. A component is counted
+        // as the material, so declining it the texture on the mere PRESENCE of an
+        // `object` prop — a name a game may use for its own vocabulary — would
+        // leave the sprite with neither a mapped material nor a default.
+        const sheet = createLoadedSheet();
+        const GlowMaterial = ({
+            object: _object,
+            ...rest
+        }: Record<string, unknown>): React.ReactElement => <meshStandardMaterial {...rest} />;
+
+        const { container } = renderSprite(
+            <AnimatedSprite
+                sheet={RUN_REF}
+                clip="run"
+                material={<GlowMaterial object={{ id: 7 }} />}
+            />,
+            createManager({
+                load: (() => Promise.resolve(sheet)) as unknown as AssetManager['load'],
+            }),
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        const supplied = intrinsicProps(container.querySelector('meshstandardmaterial')!);
+        expect(supplied['map']).toBe(sheet.texture);
+    });
+
+    it('hands nothing to a primitive, whose instance belongs to the game', async () => {
+        // r3f applies a cloned `map` by WRITING it onto the instance, and that
+        // write outlives the mount — and reaches every consumer if the material
+        // is shared (Invariant #21). A game handing over an instance has already
+        // configured it, so the engine declines rather than writes.
+        const own = new ThreeMeshStandardMaterial();
+
+        const { container } = renderSprite(
+            <AnimatedSprite
+                sheet={RUN_REF}
+                clip="run"
+                material={<primitive object={own} attach="material" />}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('primitive')).not.toBeNull();
+        });
+
+        // Element-level, which is the whole pin: the fiber stand-in renders
+        // intrinsics as inert DOM and never applies a prop to a three instance,
+        // so an instance-level assertion here could not fail whatever the engine
+        // did. What makes the write matter is measured outside this harness; what
+        // this file can hold is that the prop is never emitted.
+        expect(intrinsicProps(container.querySelector('primitive')!)).not.toHaveProperty('map');
+        expect(container.querySelector('meshbasicmaterial')).toBeNull();
+        own.dispose();
+    });
+
+    it('still renders children alongside a supplied material', async () => {
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run" material={<meshStandardMaterial />}>
+                <group />
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        expect(container.querySelector('group')).not.toBeNull();
+    });
+
+    it('emits the material prop before the children, so a material in both is the caller’s error to see', async () => {
+        // Supplying a material twice is caller error rather than a supported
+        // combination. It is pinned so the outcome is deterministic and visible:
+        // both are emitted, the prop's first.
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run" material={<meshStandardMaterial />}>
+                <meshDepthMaterial />
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshdepthmaterial')).not.toBeNull();
+        });
+
+        const tags = [...(container.querySelector('mesh')?.children ?? [])].map((element) =>
+            element.tagName.toLowerCase(),
+        );
+        // Both present FIRST: `indexOf` answers -1 for a tag that is absent, so
+        // the comparison below would hold vacuously if the material prop emitted
+        // nothing at all.
+        expect(tags).toContain('meshstandardmaterial');
+        expect(tags).toContain('meshdepthmaterial');
+        expect(tags.indexOf('meshstandardmaterial')).toBeLessThan(
+            tags.indexOf('meshdepthmaterial'),
+        );
+        expect(container.querySelector('meshbasicmaterial')).toBeNull();
+    });
+
+    it('applies no appearance prop to a supplied material', async () => {
+        // The appearance surface configures the DEFAULT material. A game that
+        // supplies one owns its whole look, and the texture is the only thing
+        // handed over.
+        const { container } = renderSprite(
+            <AnimatedSprite
+                sheet={RUN_REF}
+                clip="run"
+                color="#ff0000"
+                blending="additive"
+                alphaMode="mask"
+                material={<meshStandardMaterial />}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        const supplied = intrinsicProps(container.querySelector('meshstandardmaterial')!);
+        expect(supplied).not.toHaveProperty('color');
+        expect(supplied).not.toHaveProperty('blending');
+        expect(supplied).not.toHaveProperty('alphaTest');
     });
 });

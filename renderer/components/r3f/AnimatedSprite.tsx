@@ -41,13 +41,14 @@
  * that draws one frame of it.
  *
  * The default material is unlit and untone-mapped, which is what sprite art
- * almost always wants; a game that wants another one passes it as `children`,
- * and the default is emitted only when `children` carries no material —
- * `suppliesMaterial` below is where that is decided, and why.
+ * almost always wants. A game that wants another one passes it as `material`,
+ * which RECEIVES the sheet texture this component has already resolved, or as
+ * `children`, which does not — `withSheetTexture` and `suppliesMaterial` below
+ * are where each of those is decided, and why.
  */
 
 import React, { useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 
 import type { Blending, PlaneGeometry } from 'three';
 import {
@@ -63,6 +64,7 @@ import type { AssetRef, SpriteSheetAsset } from '@chimera-engine/simulation/cont
 
 import { useSpriteAnimationSheet } from '../../assets/useAnimationSheet.js';
 import { useSpriteAtlas } from '../../assets/useSpriteAtlas.js';
+import type { UseSpriteAtlasState } from '../../assets/useSpriteAtlas.js';
 import { useSpriteClipPlayer } from './useSpriteClipPlayer.js';
 import type { UseSpriteClipPlayerOptions } from './useSpriteClipPlayer.js';
 
@@ -186,7 +188,13 @@ function isMaterialInstance(object: unknown): boolean {
 }
 
 /**
- * Whether `children` carries a material, and so replaces the default one.
+ * Whether ONE element is itself a material.
+ *
+ * This is the question the `material` prop asks. The children walk below asks a
+ * different one — whether a material is anywhere among them — and the two must
+ * not be conflated: a fragment CONTAINING a material answers `true` there and
+ * `false` here, because handing the sheet texture to a fragment would put it on
+ * a container React drops it from and leave the material inside with nothing.
  *
  * The two ways of being wrong do not cost the same. Answering `true` when no
  * material mounts leaves the mesh on three's implicit white unmapped material —
@@ -217,12 +225,6 @@ function isMaterialInstance(object: unknown): boolean {
  * is a material instance that is NOT the mesh's material, and answering from
  * `object` first would put the white square back.
  *
- * A FRAGMENT is looked through, because `<>{material}{label}</>` is a shape a
- * game writes and nothing else in the element says what is inside. No other
- * symbol type is: `Suspense` renders its FALLBACK when suspended (measured
- * against react-dom 19.2.5), so looking through one would claim a material that
- * never mounted.
- *
  * An INTRINSIC is matched on its name, which is sound and complete over three's
  * own catalogue — a third-party property, so `AnimatedSprite.test.tsx` measures
  * it rather than leaving it asserted here.
@@ -233,39 +235,98 @@ function isMaterialInstance(object: unknown): boolean {
  * at the cost of the white square, because changing it would break every caller
  * already passing a material component.
  */
+function isMaterialElement(node: ReactNode): boolean {
+    if (!React.isValidElement(node)) {
+        return false;
+    }
+
+    const { attach, object } = node.props as {
+        readonly attach?: unknown;
+        readonly object?: unknown;
+    };
+    if (attach !== undefined) {
+        return attach === 'material';
+    }
+    if (isMaterialInstance(object)) {
+        return true;
+    }
+
+    const { type } = node;
+    if (typeof type === 'string') {
+        return MATERIAL_INTRINSIC.test(type);
+    }
+    // Function and object types (including `memo` and `forwardRef` wrappers)
+    // are components. A symbol type is one of React's own containers, which is
+    // not itself a material — a FRAGMENT answers `false` here, and only the
+    // children walk below looks inside one.
+    return typeof type !== 'symbol';
+}
+
+/**
+ * Whether `children` carries a material anywhere, and so replaces the default.
+ *
+ * A FRAGMENT is looked through, because `<>{material}{label}</>` is a shape a
+ * game writes. No other container is: `Suspense` renders its FALLBACK when
+ * suspended (measured against react-dom 19.2.5), so looking through one would
+ * claim a material that never mounted.
+ */
 function suppliesMaterial(children: ReactNode): boolean {
     return React.Children.toArray(children).some((child) => {
-        if (!React.isValidElement(child)) {
-            return false;
-        }
-
-        const {
-            attach,
-            object,
-            children: nested,
-        } = child.props as {
-            readonly attach?: unknown;
-            readonly object?: unknown;
-            readonly children?: ReactNode;
-        };
-        if (attach !== undefined) {
-            return attach === 'material';
-        }
-        if (isMaterialInstance(object)) {
-            return true;
-        }
-
-        const { type } = child;
-        if (type === React.Fragment) {
+        if (React.isValidElement(child) && child.type === React.Fragment) {
+            const { children: nested } = child.props as { readonly children?: ReactNode };
             return suppliesMaterial(nested);
         }
-        if (typeof type === 'string') {
-            return MATERIAL_INTRINSIC.test(type);
-        }
-        // Function and object types (including `memo` and `forwardRef` wrappers)
-        // are components; any remaining symbol is a container this does not look
-        // through.
-        return typeof type !== 'symbol';
+        return isMaterialElement(child);
+    });
+}
+
+/**
+ * The supplied material element, holding the sheet texture.
+ *
+ * `cloneElement` rather than a write: the element a game handed over may be held
+ * in a constant or rendered twice, so this returns a NEW element and leaves the
+ * caller's alone. Nothing here touches the TEXTURE either — it is manager-owned
+ * and shared by every sprite cut from the sheet (Invariant #21), and handing it
+ * to a material is not a licence to configure it.
+ *
+ * A material whose `map` PROP is set keeps it, `map={null}` included: a game
+ * writing `map={maybeTexture}` has said "no map" while its own load is in
+ * flight, and overruling that would be this component deciding something the
+ * caller already decided. A `map` attached as a CHILD is not visible here — the
+ * prop is what this reads.
+ *
+ * An element whose `object` holds a material INSTANCE — a `<primitive>` —
+ * receives nothing at all. r3f would apply the cloned prop by WRITING `map` onto
+ * that instance, and the instance belongs to the game: the write would outlive
+ * the mount and, if the material is one the asset manager shares, would reach
+ * every consumer of it (Invariant #21). A game handing over an instance has
+ * already configured it.
+ *
+ * That test is `isMaterialInstance`, the same one `isMaterialElement` uses, and
+ * deliberately not the coarser `object !== undefined`. The two predicates have to
+ * agree about what `object` means: a material COMPONENT taking a prop of that
+ * name out of a game's own vocabulary counts as the material, so declining it the
+ * texture would leave the sprite with neither a mapped material nor a default.
+ *
+ * Exported so the clone is pinned by element identity rather than through a
+ * render: React freezes `element.props` in development, so an in-place write
+ * throws before any rendered assertion could observe it, and the pin would be
+ * measuring React's freeze instead of this function. Not re-exported from the
+ * r3f barrel — the barrel's export list is closed (Invariant #96).
+ */
+export function withSheetTexture(
+    element: ReactElement,
+    texture: NonNullable<UseSpriteAtlasState['texture']>,
+): ReactElement {
+    const { map, object } = element.props as {
+        readonly map?: unknown;
+        readonly object?: unknown;
+    };
+    if (map !== undefined || isMaterialInstance(object)) {
+        return element;
+    }
+    return React.cloneElement(element as ReactElement<Record<string, unknown>>, {
+        map: texture,
     });
 }
 
@@ -328,10 +389,23 @@ export interface AnimatedSpriteProps extends UseSpriteClipPlayerOptions {
     /** Whether the sprite is depth-tested against what is already drawn. */
     readonly depthTest?: boolean;
     /**
+     * The material to draw the sprite with, RECEIVING the sheet texture.
+     *
+     * This is the supported seam for a custom sprite material: the component has
+     * already resolved the sheet, so a game that supplies a material here does
+     * not resolve it a second time. The element is cloned rather than written
+     * into, and `withSheetTexture` is where the precedence is stated: which
+     * elements receive the texture, and which the engine declines to touch.
+     *
+     * Supplying a material here AND as `children` is caller error. Both are
+     * emitted, this one first.
+     */
+    readonly material?: ReactElement;
+    /**
      * A material here replaces the default unlit one; anything else is drawn as
-     * a child alongside it. The sheet texture is NOT applied to a caller-supplied
-     * material — a game that provides one owns its `map` too, because that is
-     * the only way it can decide how the sheet is sampled.
+     * a child alongside it. The sheet texture is NOT applied to a material
+     * supplied this way — it owns its `map` too, which is what the `material`
+     * prop exists to spare a game.
      *
      * `suppliesMaterial` is what decides which children count as a material,
      * and why each case falls the way it does.
@@ -372,6 +446,7 @@ export function AnimatedSprite({
     alphaThreshold,
     depthWrite,
     depthTest,
+    material,
     children,
     ...playback
 }: Readonly<AnimatedSpriteProps>): React.ReactElement | null {
@@ -399,6 +474,13 @@ export function AnimatedSprite({
 
     const alpha = resolveAlpha(alphaMode, alphaThreshold);
 
+    // ONE binding, read by both consumers below: whether the supplied element is
+    // the material decides who gets the texture AND whether the default is
+    // emitted, and those two answers must never come from separate calls. Asking
+    // twice is what let a fragment be handed the texture while the default was
+    // still emitted — two arms of one decision, only one of them pinned.
+    const suppliedIsMaterial = material !== undefined && isMaterialElement(material);
+
     // Two arms, killed by two different gates. `texture === null` is the
     // behavioural one — it is what keeps a white unit square off the screen for
     // the length of the load — and a test asserts the rendered output. The
@@ -418,7 +500,9 @@ export function AnimatedSprite({
             {...(renderOrder !== undefined ? { renderOrder } : {})}
             {...(visible !== undefined ? { visible } : {})}
         >
-            {!suppliesMaterial(children) && (
+            {material !== undefined &&
+                (suppliedIsMaterial ? withSheetTexture(material, texture) : material)}
+            {!suppliedIsMaterial && !suppliesMaterial(children) && (
                 // Every appearance prop is spread conditionally rather than
                 // passed as `undefined`: an absent prop must leave three's own
                 // default standing, and writing `blending={undefined}` would

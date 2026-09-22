@@ -552,6 +552,60 @@ shared by every sprite cut from it (Invariant #21), so tinting one sprite does n
 These props configure the **default** material only. A game that supplies its own material owns its
 whole appearance, and none of them is copied onto it.
 
+## The custom-material seam
+
+A game supplies its own sprite material through the **`material` prop**, and it receives the sheet
+texture the component has already resolved:
+
+```tsx
+<AnimatedSprite sheet={sheet} clip="run" material={<meshLambertMaterial />} />
+```
+
+That is the point of the prop. `AnimatedSprite` resolves the sheet to draw it, so a game supplying a
+material would otherwise resolve the same sheet a second time through `useAsset` or `useSpriteAtlas`
+just to reach a texture the component is already holding. It is a manager cache hit rather than a
+second load, so the cost is duplicated resolution in every game that wants a custom sprite material,
+not a second network fetch.
+
+What the engine does and does not do to what it is handed:
+
+- **The element is cloned, never written into.** A game may hold the element in a constant or render
+  it twice; it will not find `map` written onto its own object.
+- **A material whose `map` prop is set keeps it**, `map={null}` included — a game writing
+  `map={maybeTexture}` has said "no map" while its own load is in flight, and the engine does not
+  overrule that. The handoff is for the case where a game has not already decided how the sheet is
+  sampled. The `map` **prop** is what decides this; a `map` attached as a child is not read.
+  See `AnimatedSprite.test.tsx`.
+- **Every other prop passes through untouched**, and none of the sprite appearance props is applied
+  to it. A game that supplies a material owns its whole look; the texture is the only thing handed
+  over.
+- **An element handing over a material instance receives nothing** — a `<primitive>`. r3f applies a
+  `map` prop to one by WRITING it onto the instance, and that write outlives the mount — and reaches every consumer if the material is one
+  the asset manager shares (Invariant #21). A game handing over an instance has already configured
+  it, so the engine declines rather than writes.
+- **A fragment is not a material.** `material={<>…</>}` is read as the container it is, so the
+  texture is not handed to something React would drop it from and the default still stands. The
+  `children` walk does look through a fragment — that is a different question, asked of a different
+  prop.
+- **A `material` that is not a material does not delete the default one.** `material={<group/>}` is
+  caller error, and the engine takes the cheap failure: the default is still emitted, so the sprite
+  does not fall back to an unmapped white quad.
+- **The texture itself is never configured.** It is manager-owned and shared by every sprite cut from
+  the sheet (Invariant #21), so receiving it is not a licence to set `magFilter`, `colorSpace` or
+  `flipY` on it. Those belong to how the sheet is authored and loaded.
+
+**Ownership is the game's.** A `ShaderMaterial` a game creates is a game resource: the component that
+creates it disposes it. `AnimatedSprite` disposes only the quad it allocated itself.
+
+**Allocate it in a commit-phase effect, never `useMemo`.** StrictMode double-invokes memo factories
+and **discards one result**, with no cleanup for the discarded one — so a `useMemo` that constructs a
+`ShaderMaterial` orphans one per mount with no `dispose` ever running. `AnimatedSprite` allocates its
+own quad exactly this way for exactly this reason.
+
+A material supplied as **`children`** still works and still replaces the default, but it does **not**
+receive the texture — it owns its `map`, which is what the `material` prop exists to spare a game.
+Supplying a material both ways is caller error. Both are emitted, the prop's first.
+
 ## Out of scope
 
 The full deferred list, with the measurements behind each entry, is in the roadmap's F82 and F89
