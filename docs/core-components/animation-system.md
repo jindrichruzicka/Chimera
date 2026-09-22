@@ -487,12 +487,13 @@ renderer/components/r3f/
 ├── useOwnedMixer.ts                  # allocates and claims the mixer the mesh binding drives
 ├── mixerBindingRegistry.ts           # counts the claims; reports a duplicate a frame later
 ├── useSpriteClipPlayer.ts            # sprite binding
+├── useShaderTime.ts                  # the dilating shader time uniform
 └── AnimatedSprite.tsx                # the sprite half as one element
 
 renderer/assets/
 ├── animationSheet.ts                 # fail-soft allow-list readers for both metadata shapes
 ├── useAnimationSheet.ts              # useAnimationSheet / useSpriteAnimationSheet
-├── spriteAtlas.ts                    # parseSpriteAtlas — the non-React atlas reader
+├── spriteAtlas.ts                    # parseSpriteAtlas — the non-React atlas reader, where v is derived
 └── useSpriteAtlas.ts                 # useSpriteAtlas — measures a loaded sheet's cells
 
 renderer/components/shell/
@@ -587,6 +588,43 @@ must be called inside a `<GameCanvas>`, since it subscribes to the frame loop.
   shape: the hook takes no parameters, so there is no dispatcher, `SendAction`, `PlayerId` or tick to
   hand it, and a parameter that does not exist cannot be `eslint-disable`d back in. A frame delta is
   not a tick source and nothing here reaches a reducer (#42, #43).
+
+## The sprite UV contract
+
+A custom sprite material that reads `uv` animates for free. That is a **contract**, not an accident
+of the implementation, and this is what it guarantees.
+
+`AnimatedSprite` owns one `PlaneGeometry(1, 1)` per mounted component, and `SpriteClipBackend`
+animates it by rewriting that geometry's **`uv` attribute** in place — four pairs, one per vertex,
+whenever the clip moves to a new cell. Nothing else about the quad changes: the same attribute, the
+same four vertices, the same buffer. So a shader that samples `uv` samples the current cell, with no
+notification to subscribe to and no second binding to maintain.
+
+The four pairs arrive in `PlaneGeometry`'s own vertex order:
+
+| Vertex | Corner       | A fresh quad's `uv` |
+| ------ | ------------ | ------------------- |
+| 0      | top-left     | `[0, 1]`            |
+| 1      | top-right    | `[1, 1]`            |
+| 2      | bottom-left  | `[0, 0]`            |
+| 3      | bottom-right | `[1, 0]`            |
+
+The vertex order is why the contract holds: a cell's UVs are measured in exactly that order by
+`parseSpriteAtlas`, so the backend writes them **straight through, unrecomputed**. Which way `v` runs
+follows the sheet texture's `flipY`, and is derived once — see `renderer/assets/spriteAtlas.ts`.
+
+Both halves are measured rather than asserted: `renderer/animation/__tests__/spriteUvContract.test.ts`
+reads
+each corner off the quad's `position` — so the corner NAMES are earned, not assumed — and then
+checks that what the atlas measured is pair-for-pair what a shader would sample, on both axes. A
+`three` release that reordered plane vertices reds there.
+
+What a shader may therefore rely on:
+
+- **`uv` is the animated attribute.** Sampling it gives the current cell of the current clip.
+- **The quad is one world unit square**, centred on the mesh's origin; `scale` is what sizes a
+  sprite.
+- **`position`, `normal` and the index buffer are never rewritten** by playback.
 
 ## The custom-material seam
 
