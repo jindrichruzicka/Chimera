@@ -24,6 +24,12 @@ import { act, cleanup, render, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+    BufferGeometry as ThreeBufferGeometry,
+    Material as ThreeMaterial,
+    MeshDepthMaterial as ThreeMeshDepthMaterial,
+    MeshStandardMaterial as ThreeMeshStandardMaterial,
+} from 'three';
 import type * as ThreeModule from 'three';
 
 import { buildAssetRef } from '@chimera-engine/simulation/content/AssetRef.js';
@@ -33,7 +39,7 @@ import type { AssetManager, LoadedSpriteSheetAsset } from '../../assets/AssetMan
 import { AssetManagerContext } from '../../assets/AssetManagerContext.js';
 import { resetFakeFiberRoot, update } from './__test-support__/fakeFiberRoot';
 import { intrinsicProps } from './__test-support__/intrinsicProps';
-import { AnimatedSprite } from './AnimatedSprite';
+import { AnimatedSprite, MATERIAL_INTRINSIC } from './AnimatedSprite';
 
 vi.mock('@react-three/fiber', () => import('./__test-support__/fakeFiberRoot'));
 
@@ -384,6 +390,368 @@ describe('AnimatedSprite is null-safe while its sheet loads', () => {
         expect(container.querySelector('meshbasicmaterial')).toBeNull();
     });
 
+    it('keeps the mapped default material when a conditional child evaluates to false', async () => {
+        // `{flag && <Mat/>}` passes `false` when the flag is off, and `false` is
+        // not nullish. A `children ?? default` substitution therefore suppresses
+        // the default on the commonest React conditional there is, and the mesh
+        // falls back to three's implicit white MeshBasicMaterial with no map —
+        // the white unit square the texture gate exists to keep off the screen.
+        const showGlow = false;
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                {showGlow && <meshStandardMaterial />}
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('mesh')).not.toBeNull();
+        });
+
+        const material = container.querySelector('meshbasicmaterial');
+        expect(material).not.toBeNull();
+        expect(material?.hasAttribute('map')).toBe(true);
+    });
+
+    it('keeps the mapped default material when the only child is a non-material element', async () => {
+        // A nested intrinsic is a CHILD, not a material. Suppressing the
+        // material because something was passed confuses the two.
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                <group />
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('mesh')).not.toBeNull();
+        });
+
+        const material = container.querySelector('meshbasicmaterial');
+        expect(material).not.toBeNull();
+        expect(material?.hasAttribute('map')).toBe(true);
+        // …and the child is still rendered rather than swallowed.
+        expect(container.querySelector('group')).not.toBeNull();
+    });
+
+    it('lets a material replace the default while a sibling non-material child still draws', async () => {
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                <meshStandardMaterial />
+                <group />
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        expect(container.querySelector('meshbasicmaterial')).toBeNull();
+        expect(container.querySelector('group')).not.toBeNull();
+    });
+
+    it('looks through a fragment to the material inside it', async () => {
+        // Without this, a fragment would be classified as a non-material child
+        // and the default would be emitted ALONGSIDE the caller's material —
+        // two materials attaching to one mesh.
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                <>
+                    <meshStandardMaterial />
+                    <group />
+                </>
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        expect(container.querySelector('meshbasicmaterial')).toBeNull();
+    });
+
+    it('keeps the mapped default material when the only child is text', async () => {
+        // A string survives `React.Children.toArray` — unlike `false`, which it
+        // drops — so the non-element arm is reachable, and this is what reaches
+        // it. Without it, treating a non-element as a material loses the map.
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                label
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('mesh')).not.toBeNull();
+        });
+
+        const material = container.querySelector('meshbasicmaterial');
+        expect(material).not.toBeNull();
+        expect(material?.hasAttribute('map')).toBe(true);
+    });
+
+    it('treats a memo-wrapped material component as the material', async () => {
+        // `React.memo` and `forwardRef` both produce an OBJECT type rather than a
+        // function, and wrapping a material component in one is ordinary. A
+        // classifier that only recognised functions would emit the default
+        // alongside the caller's material.
+        const GlowMaterial = React.memo(function GlowMaterial(): React.ReactElement {
+            return <meshStandardMaterial />;
+        });
+
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                <GlowMaterial />
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        expect(container.querySelector('meshbasicmaterial')).toBeNull();
+    });
+
+    it('reads attach="material" as the material on an element whose name says nothing', async () => {
+        // `<primitive>` is the shape a game uses to hand over a material it built
+        // itself, and its element name carries no material-ness at all — the same
+        // position a material registered under another name through `extend()` is
+        // in. r3f honours a string `attach` before it infers anything from the
+        // instantiated object, so `attach` is the signal that covers both.
+        const material = new ThreeMeshStandardMaterial();
+
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                <primitive object={material} attach="material" />
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('primitive')).not.toBeNull();
+        });
+
+        expect(container.querySelector('meshbasicmaterial')).toBeNull();
+        material.dispose();
+    });
+
+    it('keeps the mapped default material when a material-named child attaches elsewhere', async () => {
+        // `<meshDepthMaterial attach="customDepthMaterial"/>` is the standard
+        // shape for an alpha-cut shadow caster: a material by name that is NOT
+        // the mesh's material. `attach` therefore has to decide BOTH ways — a
+        // positive-only check falls through to the name and deletes the sprite's
+        // own material, which is this issue's defect class exactly.
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                <meshDepthMaterial attach="customDepthMaterial" />
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshdepthmaterial')).not.toBeNull();
+        });
+
+        const material = container.querySelector('meshbasicmaterial');
+        expect(material).not.toBeNull();
+        expect(material?.hasAttribute('map')).toBe(true);
+    });
+
+    it('reads a bare primitive holding a material as the material', async () => {
+        // No `attach` at all — the form r3f would itself auto-attach as the
+        // mesh's material, because the instance says `isMaterial`. The element
+        // name says nothing, so `object` is the only thing that can answer.
+        const material = new ThreeMeshStandardMaterial();
+
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                <primitive object={material} />
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('primitive')).not.toBeNull();
+        });
+
+        expect(container.querySelector('meshbasicmaterial')).toBeNull();
+        material.dispose();
+    });
+
+    it('keeps the mapped default material when a material-named child attaches by hand', async () => {
+        // The non-string side of the `attach` boundary. r3f's function form is a
+        // caller doing the assignment itself, and r3f stops inferring from the
+        // object for ANY defined `attach` — so a guard narrowed to strings would
+        // send this child on to the name arm and delete the sprite's material.
+        const attachByHand = (): (() => void) => (): void => {};
+
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                <meshDepthMaterial attach={attachByHand} />
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshdepthmaterial')).not.toBeNull();
+        });
+
+        const material = container.querySelector('meshbasicmaterial');
+        expect(material).not.toBeNull();
+        expect(material?.hasAttribute('map')).toBe(true);
+    });
+
+    it('lets attach overrule a primitive that is holding a material', async () => {
+        // The one child both new arms can answer for, which is what makes their
+        // ORDER a behaviour rather than a detail. `new MeshDepthMaterial(...)`
+        // handed over as a shadow caster is a material instance by `isMaterial`
+        // and not the mesh's material by `attach`; deciding from `object` first
+        // would suppress the default and put the white square back.
+        const depthMaterial = new ThreeMeshDepthMaterial();
+
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                <primitive object={depthMaterial} attach="customDepthMaterial" />
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('primitive')).not.toBeNull();
+        });
+
+        const material = container.querySelector('meshbasicmaterial');
+        expect(material).not.toBeNull();
+        expect(material?.hasAttribute('map')).toBe(true);
+        depthMaterial.dispose();
+    });
+
+    it('keeps the mapped default material for a bare primitive holding a non-material', async () => {
+        // The same form carrying something that is not a material — a geometry —
+        // must not be read as one.
+        const geometry = new ThreeBufferGeometry();
+
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                <primitive object={geometry} />
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('primitive')).not.toBeNull();
+        });
+
+        const material = container.querySelector('meshbasicmaterial');
+        expect(material).not.toBeNull();
+        expect(material?.hasAttribute('map')).toBe(true);
+        geometry.dispose();
+    });
+
+    it('does not look through Suspense, and emits the default before the children', async () => {
+        // Two claims, one fixture, because they are the same decision. Suspense
+        // renders its FALLBACK when suspended, so looking through it would answer
+        // "a material is here" for one that never mounts — the white-square
+        // direction. Answering "no material" instead emits the default too, which
+        // is only harmless because the caller's material is rendered AFTER it and
+        // the later attach wins. That ordering is what makes the safe direction
+        // safe, so it is pinned rather than assumed.
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                <React.Suspense fallback={null}>
+                    <meshStandardMaterial />
+                </React.Suspense>
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        const emitted = container.querySelector('mesh')?.children ?? [];
+        const tags = [...emitted].map((element) => element.tagName.toLowerCase());
+
+        expect(tags).toContain('meshbasicmaterial');
+        expect(tags.indexOf('meshbasicmaterial')).toBeLessThan(
+            tags.indexOf('meshstandardmaterial'),
+        );
+    });
+
+    it('keeps the mapped default material when a fragment holds no material', async () => {
+        // The negative side of the fragment gate. Answering "a material is here"
+        // for a fragment because it IS a fragment loses the material with none
+        // anywhere in the tree — the white-square direction, and the side every
+        // other fragment fixture here leaves unmeasured by putting a material
+        // inside.
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                <>
+                    <group />
+                </>
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('group')).not.toBeNull();
+        });
+
+        const material = container.querySelector('meshbasicmaterial');
+        expect(material).not.toBeNull();
+        expect(material?.hasAttribute('map')).toBe(true);
+    });
+
+    it('applies the attach rule inside a fragment, not just at the top level', async () => {
+        // The recursion is what carries every other arm one level down. A
+        // fragment check that matched on NAME alone would read this as the
+        // mesh's material and delete the sprite's own — the same defect as at
+        // the top level, one fragment deep.
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                <>
+                    <meshDepthMaterial attach="customDepthMaterial" />
+                </>
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshdepthmaterial')).not.toBeNull();
+        });
+
+        const material = container.querySelector('meshbasicmaterial');
+        expect(material).not.toBeNull();
+        expect(material?.hasAttribute('map')).toBe(true);
+    });
+
+    it('finds a material nested more than one array deep', async () => {
+        // The case that separates `React.Children.toArray` from a shallow
+        // flatten: nested `map` calls produce nested arrays, and a one-level
+        // flatten would miss the material and emit the default alongside it.
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                {[[<meshStandardMaterial key="glow" />]]}
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        expect(container.querySelector('meshbasicmaterial')).toBeNull();
+    });
+
+    it('treats a component child as the material, the one case children cannot decide', async () => {
+        // Pinned because it is a DECISION, not an accident: a component could be
+        // a material or a label and only rendering it would say which, so the
+        // ambiguity resolves toward the existing contract. Changing that is a
+        // breaking change and should red here.
+        function GlowMaterial(): React.ReactElement {
+            return <meshStandardMaterial />;
+        }
+
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run">
+                <GlowMaterial />
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        expect(container.querySelector('meshbasicmaterial')).toBeNull();
+    });
+
     it('accepts a null sheet ref and loads nothing', () => {
         // Typed through the manager's own signature: `AssetManager.load` is
         // generic over the asset kind, so a stub that only ever answers with a
@@ -426,5 +794,53 @@ describe('AnimatedSprite is null-safe while its sheet loads', () => {
         advance(1);
 
         expect(uvVersion()).toBe(0);
+    });
+});
+
+describe('the intrinsic-name match is sound and complete over three’s catalogue', () => {
+    it('matches every Material subclass three exports and no other export', async () => {
+        // The component decides an intrinsic by NAME, which is only safe if
+        // "ends in Material" and "is a Material" are the same set in three's own
+        // catalogue. That is a third-party property, so it is measured rather
+        // than asserted in prose — and measured against the exported pattern
+        // itself, not a copy of it.
+        //
+        // The pattern is applied to the INTRINSIC name, which is what the
+        // component sees: r3f lowercases the class name's first character, so
+        // `MeshStandardMaterial` is declared as `<meshStandardMaterial>`. Testing
+        // the class name instead would measure a string the component never
+        // classifies.
+        const three = await import('three');
+        const exported = Object.entries(three);
+
+        const materials: string[] = [];
+        const disagreements: string[] = [];
+
+        for (const [name, value] of exported) {
+            const intrinsicName = `${name.charAt(0).toLowerCase()}${name.slice(1)}`;
+            const isMaterialClass =
+                typeof value === 'function' &&
+                (value === ThreeMaterial || value.prototype instanceof ThreeMaterial);
+            if (isMaterialClass) {
+                materials.push(intrinsicName);
+            }
+            if (isMaterialClass !== MATERIAL_INTRINSIC.test(intrinsicName)) {
+                disagreements.push(intrinsicName);
+            }
+        }
+
+        expect(disagreements).toEqual([]);
+
+        // Controls. The agreement assertion above is satisfied by an enumeration
+        // that found nothing, so both halves of what was enumerated are checked:
+        // the namespace as a whole, which a partial mock would shrink, and the
+        // material set within it, which is what the pattern is being measured
+        // against. Neither bound is the exact count — that would be a hostage to
+        // three's next release — but both are far enough below today's (441
+        // exports, 18 materials) to survive a version bump and far enough above
+        // zero to catch a namespace that stopped resolving.
+        expect(exported.length).toBeGreaterThan(200);
+        expect(materials.length).toBeGreaterThan(14);
+        expect(materials).toContain('meshStandardMaterial');
     });
 });
