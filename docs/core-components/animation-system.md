@@ -347,7 +347,7 @@ Both players share `useClipPlayback.ts` — the declarative surface, the single 
 driver, and the `ClipPlayerHandle` (`setClipSpeed`, which refuses an unusable multiplier whether or not
 a player exists behind it yet). Two copies would be two contracts, both green.
 
-**Every allocation with something to DISPOSE is a commit-phase effect, never `useMemo`.** StrictMode double-invokes memo factories
+**Allocate in a commit-phase effect, never `useMemo`.** StrictMode double-invokes memo factories
 and **discards one result**, which would orphan a mixer retaining a clone root with no `uncacheRoot`
 ever running, and a `ClipPlayer` holding a backend with no `dispose` ever running.
 
@@ -560,25 +560,69 @@ A shader that animates needs a time uniform, and the obvious hand-rolled version
 frame delta, or read the R3F clock — works perfectly **until the player enables slow motion**, at
 which point it runs at full speed while everything around it crawls. That is the worst possible
 moment to discover the wiring was wrong, and no test a game would think to write catches it. So the
-engine ships the uniform rather than a snippet:
+engine ships the uniform rather than a snippet.
+
+`useShaderTime()` returns a `ShaderTimeUniform` — `{ value: number }`, structurally `three`'s
+`IUniform<number>`, so it needs no `three` type named to sit in a `ShaderMaterial`'s `uniforms`. It
+must be called inside a `<GameCanvas>`, since it subscribes to the frame loop.
+
+**Where it has to land.** The hook advances `value` inside the frame loop and never re-renders —
+that is the point of it — so the material must hold the very object the hook returned. Build the
+material yourself, seat the uniform in its constructor, and hand the instance over:
 
 ```tsx
 const time = useShaderTime();
-// …handed to the material this component owns:
-uniforms={{ uTime: time }}
+// The sheet is resolved here because a `ShaderMaterial` samples `uniforms`, and the
+// `material` prop's texture handoff sets a `map` PROP — see the seam section below.
+const { texture } = useSpriteAtlas(sheet);
+const [material, setMaterial] = useState<ShaderMaterial | null>(null);
+
+useEffect(() => {
+    if (texture === null) return;
+    const created = new ShaderMaterial({
+        uniforms: { uTime: time, uMap: { value: texture } },
+        vertexShader,
+        fragmentShader,
+    });
+    setMaterial(created);
+    return () => {
+        setMaterial(null);
+        created.dispose();
+    };
+}, [time, texture]);
+
+return material === null ? null : (
+    <AnimatedSprite
+        sheet={sheet}
+        clip="run"
+        material={<primitive object={material} attach="material" />}
+    />
+);
 ```
 
-`useShaderTime()` returns a `ShaderTimeUniform` — `{ value: number }`, structurally `three`'s
-`IUniform<number>`, so it drops into a `ShaderMaterial`'s `uniforms` with no `three` type named. It
-must be called inside a `<GameCanvas>`, since it subscribes to the frame loop.
+**Do not declare `uniforms` as a JSX prop for this.** Measured against `@react-three/fiber` 9.6.1:
+`applyProps` special-cases `ShaderMaterial` + `uniforms` and, for a uniform the material does not
+already carry, stores a **shallow copy**. A fresh material carries none, so the copy is what it
+keeps — the shader then reads the value that copy was made with, `0`, for the life of the mount,
+while the hook advances an object nothing is looking at. A later re-render for any unrelated reason
+copies one stale sample and freezes again. All three behaviours are pinned in
+`renderer/components/r3f/__tests__/shader-uniform-call-site.test.ts`, whose negative case doubles as
+the control that r3f's branch is really being taken.
+
+The cleanup clears the state before disposing, which is the shape `AnimatedSprite` uses for its own
+quad.
+
+The owned-instance path is also why `AnimatedSprite` declines to write into an element carrying an
+`object` (see the seam section): the material is the game's, and nothing the engine does replaces
+its uniforms.
 
 - **It dilates.** The value advances by the frame delta multiplied by `useAnimationTimeScale`, so a
   shader follows the match's authoritative time scale with no per-call-site wiring.
 - **It is cap-independent.** A capped loop delivers fewer, larger deltas, and their sum over a
   second is the same second — a 30 fps game and a 144 fps one reach the same value.
-- **The object identity is stable for the life of the mount**, which is what lets a material hold
-  the reference it was handed on the first render. Two mounted components get uniforms of their own,
-  and a uniform stops advancing when its component unmounts.
+- **The object identity is stable for the life of the mount**, which is what the owned-instance path
+  above depends on. Two mounted components get uniforms of their own, and a uniform stops advancing
+  when its component unmounts.
 - **It does not wrap.** The value accumulates for the life of the mount, and is uploaded as a GLSL
   `float`. Its spacing stays finer than one frame delta for at least 18 hours at 144 fps — longer at
   lower rates — but that is the bound for a uniform read raw; a shader that MULTIPLIES it, as
@@ -664,6 +708,12 @@ What the engine does and does not do to what it is handed:
 - **A `material` that is not a material does not delete the default one.** `material={<group/>}` is
   caller error, and the engine takes the cheap failure: the default is still emitted, so the sprite
   does not fall back to an unmapped white quad.
+- **A `ShaderMaterial` is not reached by this.** The handoff sets a `map` PROP, and a
+  `ShaderMaterial` samples its `uniforms` and never a `map` property — measured: `applyProps` sets
+  `shader.map` and leaves `uniforms` empty. A game writing one seats the texture in its own uniforms
+  at construction, on the owned-instance path the shader-time section shows, and resolves the sheet
+  through `useSpriteAtlas` to do so. The seam removes the second resolution for stock material
+  intrinsics; for a shader it does not, and closing that is its own task.
 - **The texture itself is never configured.** It is manager-owned and shared by every sprite cut from
   the sheet (Invariant #21), so receiving it is not a licence to set `magFilter`, `colorSpace` or
   `flipY` on it. Those belong to how the sheet is authored and loaded.

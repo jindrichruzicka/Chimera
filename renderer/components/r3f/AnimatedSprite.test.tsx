@@ -410,6 +410,26 @@ describe('AnimatedSprite is null-safe while its sheet loads', () => {
         expect(container.querySelector('meshbasicmaterial')).toBeNull();
     });
 
+    it('applies no appearance prop to a material supplied as children', async () => {
+        // The `children` arm of the same contract. It is NOT the same test as the
+        // `material`-prop one: that path routes through `withSheetTexture` and
+        // clones, this one renders the element verbatim, so neither covers the
+        // other.
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run" color="#ff0000" blending="additive">
+                <meshStandardMaterial />
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        const supplied = intrinsicProps(container.querySelector('meshstandardmaterial')!);
+        expect(supplied).not.toHaveProperty('color');
+        expect(supplied).not.toHaveProperty('blending');
+    });
+
     it('keeps the mapped default material when a conditional child evaluates to false', async () => {
         // `{flag && <Mat/>}` passes `false` when the flag is off, and `false` is
         // not nullish. A `children ?? default` substitution therefore suppresses
@@ -1067,25 +1087,6 @@ describe('AnimatedSprite exposes a sprite appearance surface', () => {
             expect(props['blending']).toBe(AdditiveBlending);
             expect(props['depthWrite']).toBe(false);
         }
-    });
-
-    it('hands the appearance props to no caller-supplied material', async () => {
-        // A game that supplies its own material owns its whole appearance. The
-        // props configure the DEFAULT material and must not be silently dropped
-        // onto someone else's.
-        const { container } = renderSprite(
-            <AnimatedSprite sheet={RUN_REF} clip="run" color="#ff0000" blending="additive">
-                <meshStandardMaterial />
-            </AnimatedSprite>,
-        );
-
-        await waitFor(() => {
-            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
-        });
-
-        const supplied = intrinsicProps(container.querySelector('meshstandardmaterial')!);
-        expect(supplied).not.toHaveProperty('color');
-        expect(supplied).not.toHaveProperty('blending');
     });
 });
 

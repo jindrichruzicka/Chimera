@@ -69,16 +69,19 @@ export interface ShaderTimeUniform {
  *
  * Must be called inside a `<GameCanvas>`: it subscribes to the frame loop.
  *
- * ```tsx
- * const time = useShaderTime();
- * // …later, in the same component's material:
- * uniforms={{ uTime: time }}
- * ```
+ * The object identity is stable for the life of the mount, and the material has
+ * to hold that very object: this advances `value` in the frame loop and never
+ * re-renders, so a material holding a COPY reads the number the copy was made
+ * with, for good. Seat it in a `ShaderMaterial`'s constructor and hand the
+ * instance over as `<primitive object={material} attach="material" />` —
+ * declaring `uniforms` as a JSX prop does not work, because r3f stores a shallow
+ * copy of a uniform the material does not already carry.
+ * `__tests__/shader-uniform-call-site.test.ts` pins both, and
+ * `docs/core-components/animation-system.md` shows the shape.
  *
- * The object identity is stable for the life of the mount, which is what lets a
- * material hold it. Ownership of anything the GAME allocates around it — a
- * `ShaderMaterial`, its uniforms object — stays the game's: the component that
- * creates one disposes it.
+ * Ownership of anything the GAME allocates around it — a `ShaderMaterial`, its
+ * uniforms object — stays the game's: the component that creates one disposes
+ * it.
  */
 export function useShaderTime(): ShaderTimeUniform {
     const timeScale = useAnimationTimeScale();

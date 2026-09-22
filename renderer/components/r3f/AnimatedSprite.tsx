@@ -351,6 +351,10 @@ export interface AnimatedSpriteProps extends UseSpriteClipPlayerOptions {
      * Tint multiplied into the sheet's texels. A CSS colour string or a packed
      * hex number; the tint lives on this sprite's material, never on the shared
      * sheet texture (Invariant #21).
+     *
+     * This and every appearance prop below configure the DEFAULT material only. A
+     * game supplying its own through `material` or `children` owns its whole
+     * look, and none of them is copied onto it.
      */
     readonly color?: string | number;
     /**

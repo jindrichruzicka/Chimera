@@ -11,5 +11,9 @@ full speed while everything around it crawls. `useShaderTime()` returns a `Shade
 delta multiplied by the authoritative time scale, so a shader dilates with the match with no
 per-call-site wiring. It is cap-independent: a 30 fps game and a 144 fps one reach the same value.
 
-The object identity is stable for the life of the mount, which is what lets a material hold the
-reference it was handed on the first render. Both ship from the `components/r3f` barrel.
+The object identity is stable for the life of the mount, and the material must hold that very
+object: the hook advances `value` in the frame loop and never re-renders. Seat it in a
+`ShaderMaterial`'s constructor and hand the instance over as
+`<primitive object={material} attach="material" />`; declaring `uniforms` as a JSX prop does not
+work, because r3f stores a shallow copy of a uniform the material does not already carry. Both ship
+from the `components/r3f` barrel.
