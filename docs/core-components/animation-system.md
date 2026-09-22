@@ -334,13 +334,13 @@ All of them ship from `@chimera-engine/renderer/components/r3f` (Invariant #96);
 readers that feed them — `useAnimationSheet`, `useSpriteAnimationSheet`, `useSpriteAtlas` and
 `parseSpriteAtlas` — ship from `@chimera-engine/renderer/assets` instead (§4.10).
 
-| Export                  | What it is                                                                                                                                                                                                                             |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `useClipPlayer`         | The **mesh** binding: a declarative `clip` / `loop` / `speed` / `blendSeconds` surface over one `ClipPlayer` driving one `MeshClipBackend` on one owned `AnimationMixer`.                                                              |
-| `useSpriteClipPlayer`   | The **sprite** binding: the same declarative surface over one `SpriteClipBackend` writing a caller-owned quad. `blendSeconds` is narrowed off its options.                                                                             |
-| `AnimatedSprite`        | The sprite half as one element — an `AssetRef` to a sprite sheet in, an animated quad out. A `Mesh` with its own `PlaneGeometry`, never a `THREE.Sprite`, which shares one module-level geometry across every instance in the process. |
-| `useAnimationTimeScale` | The exported dilation scalar, for everything a game animates by hand — a camera tween, a particle rate, a shader uniform, a HUD countdown.                                                                                             |
-| `useModelAnimation`     | The pre-existing route: a bare mixer for a game that drives actions itself. Still supported, no longer the only option.                                                                                                                |
+| Export                  | What it is                                                                                                                                                                                                                                                                          |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useClipPlayer`         | The **mesh** binding: a declarative `clip` / `loop` / `speed` / `blendSeconds` surface over one `ClipPlayer` driving one `MeshClipBackend` on one owned `AnimationMixer`.                                                                                                           |
+| `useSpriteClipPlayer`   | The **sprite** binding: the same declarative surface over one `SpriteClipBackend` writing a caller-owned quad. `blendSeconds` is narrowed off its options.                                                                                                                          |
+| `AnimatedSprite`        | The sprite half as one element — an `AssetRef` to a sprite sheet in, an animated quad out. A `Mesh` with its own `PlaneGeometry`, never a `THREE.Sprite`, which shares one module-level geometry across every instance in the process. Carries the sprite appearance surface below. |
+| `useAnimationTimeScale` | The exported dilation scalar, for everything a game animates by hand — a camera tween, a particle rate, a shader uniform, a HUD countdown.                                                                                                                                          |
+| `useModelAnimation`     | The pre-existing route: a bare mixer for a game that drives actions itself. Still supported, no longer the only option.                                                                                                                                                             |
 
 Both players share `useClipPlayback.ts` — the declarative surface, the single default-priority frame
 driver, and the `ClipPlayerHandle` (`setClipSpeed`, which refuses an unusable multiplier whether or not
@@ -509,12 +509,57 @@ electron/main/runtime/RealtimeTicker.ts  # re-paces the beat sequence by the sam
 
 ---
 
+## Sprite appearance
+
+`AnimatedSprite` takes the look of one sprite as props, so the common cases need no replacement
+material. Every value is an **engine-owned name**: a game never imports `three` for a prop value
+(Invariant #1).
+
+| Prop             | Type                                                              | Absent means                  |
+| ---------------- | ----------------------------------------------------------------- | ----------------------------- |
+| `color`          | `string \| number`                                                | no tint                       |
+| `opacity`        | `number`                                                          | `three`'s own default         |
+| `blending`       | `'normal' \| 'additive' \| 'subtractive' \| 'multiply' \| 'none'` | `three`'s own default         |
+| `alphaMode`      | `'opaque' \| 'mask' \| 'blend'`                                   | the hybrid below              |
+| `alphaThreshold` | `number`                                                          | the mode's own default cutout |
+| `depthWrite`     | `boolean`                                                         | `three`'s own default         |
+| `depthTest`      | `boolean`                                                         | `three`'s own default         |
+
+An **alpha mode decides exactly two material fields**: `transparent`, and the `alphaTest` a sprite
+gets when it authors no `alphaThreshold`. `opaque` and `mask` are both untransparent and differ only
+in that cutout — `mask` defaults it to 0.5, which is what makes the mode mean anything; `blend` is
+transparent with no default cutout. Nothing in a mode decides whether the sprite writes depth: that is
+`three`'s default, and `depthWrite` overrides it in any mode.
+
+Declaring **no** `alphaMode` is a fourth state none of the three spells — `transparent` together with
+a 0.01 cutout. It is the engine's pre-existing default, kept unchanged, and pinned by value.
+
+`alphaThreshold` is honoured in **every** mode, not only `mask`, so it is a separate knob rather than
+a field one mode reads and the others ignore. The combination worth knowing about is `blend` with a
+non-zero threshold: a hard edge cut inside a soft-edged sprite.
+
+Two constraints worth stating outright:
+
+- **`opacity` does not switch transparency on.** Under `alphaMode="opaque"` or `"mask"` the material
+  is not transparent and an opacity below 1 has nothing to blend against. An explicit mode that a
+  sibling prop could override would not be explicit, so the prop is forwarded as authored.
+- **Additive sprites almost always want `depthWrite={false}`.** Without it a stack of them occludes
+  itself and the effect collapses.
+
+A tint lives on the sprite's **own material**, never on the sheet texture, which is manager-owned and
+shared by every sprite cut from it (Invariant #21), so tinting one sprite does not tint the others.
+
+These props configure the **default** material only. A game that supplies its own material owns its
+whole appearance, and none of them is copied onto it.
+
 ## Out of scope
 
 The full deferred list, with the measurements behind each entry, is in the roadmap's F82 and F89
 sections. The load-bearing ones for anyone extending this layer: no cross-client clip phase anchoring
 (two clients see a swing at phases differing by network latency, cosmetic by construction); no reverse
 or ping-pong playback anywhere on the seam; no layered or masked blending, blend trees, parametric
-blends or inertialisation — the single crossfade verb is the whole blending surface; no state-machine
+blends or inertialisation — the single crossfade verb is the whole _clip_ blending surface, which is
+a different axis from `AnimatedSprite`'s `blending` and `alphaMode` props: those decide how one
+sprite's pixels combine with the frame buffer, not how two clips combine with each other; no state-machine
 or blend-tree authoring layer, and no engine-level animation-event registry slot; no sub-beat gameplay
 windows; and no `@chimera-engine/renderer/animation` subpath.

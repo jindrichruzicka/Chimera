@@ -25,6 +25,11 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+    AdditiveBlending,
+    MultiplyBlending,
+    NoBlending,
+    NormalBlending,
+    SubtractiveBlending,
     BufferGeometry as ThreeBufferGeometry,
     Material as ThreeMaterial,
     MeshDepthMaterial as ThreeMeshDepthMaterial,
@@ -842,5 +847,229 @@ describe('the intrinsic-name match is sound and complete over three’s catalogu
         expect(exported.length).toBeGreaterThan(200);
         expect(materials.length).toBeGreaterThan(14);
         expect(materials).toContain('meshStandardMaterial');
+    });
+});
+
+describe('AnimatedSprite exposes a sprite appearance surface', () => {
+    /** The default material's committed props, once the sheet has decoded. */
+    async function materialProps(
+        element: React.ReactElement,
+    ): Promise<Readonly<Record<string, unknown>>> {
+        const { container } = renderSprite(element);
+        await waitFor(() => {
+            expect(container.querySelector('meshbasicmaterial')).not.toBeNull();
+        });
+        return intrinsicProps(container.querySelector('meshbasicmaterial')!);
+    }
+
+    it('maps each engine blending name onto three’s constant', async () => {
+        // Engine-owned names, so a game never imports `three` for a prop value.
+        // Asserted against the constants themselves rather than their numbers:
+        // three's blending values are plain integers, and a test spelling `2`
+        // would pass just as well if the mapping were wrong by coincidence.
+        const cases = [
+            ['normal', NormalBlending],
+            ['additive', AdditiveBlending],
+            ['subtractive', SubtractiveBlending],
+            ['multiply', MultiplyBlending],
+            ['none', NoBlending],
+        ] as const;
+
+        for (const [name, constant] of cases) {
+            const props = await materialProps(
+                <AnimatedSprite sheet={RUN_REF} clip="run" blending={name} />,
+            );
+            expect(props['blending'], name).toBe(constant);
+            cleanup();
+        }
+    });
+
+    it('sets no blending at all when the prop is absent', async () => {
+        // The mapping must not smuggle in a default: an absent prop leaves
+        // three's own to stand, and emitting `NormalBlending` here would look
+        // identical today and diverge the moment three changed its default.
+        const props = await materialProps(<AnimatedSprite sheet={RUN_REF} clip="run" />);
+
+        expect(props).not.toHaveProperty('blending');
+    });
+
+    it('resolves alphaMode "opaque" to an untransparent material with no default cutout', async () => {
+        const props = await materialProps(
+            <AnimatedSprite sheet={RUN_REF} clip="run" alphaMode="opaque" />,
+        );
+
+        expect(props['transparent']).toBe(false);
+        expect(props['alphaTest']).toBe(0);
+    });
+
+    it('resolves alphaMode "mask" to a cutout at the documented default threshold', async () => {
+        const props = await materialProps(
+            <AnimatedSprite sheet={RUN_REF} clip="run" alphaMode="mask" />,
+        );
+
+        expect(props['transparent']).toBe(false);
+        expect(props['alphaTest']).toBe(0.5);
+    });
+
+    it('resolves alphaMode "blend" to a transparent material with no default cutout', async () => {
+        const props = await materialProps(
+            <AnimatedSprite sheet={RUN_REF} clip="run" alphaMode="blend" />,
+        );
+
+        expect(props['transparent']).toBe(true);
+        expect(props['alphaTest']).toBe(0);
+    });
+
+    it('lets alphaThreshold overrule each mode’s own default', async () => {
+        // Authorable in every mode, not only `mask`: `alphaTest` is meaningful
+        // alongside transparency too, so the threshold is a separate knob rather
+        // than a field one mode reads and the others ignore.
+        for (const mode of ['opaque', 'mask', 'blend'] as const) {
+            const props = await materialProps(
+                <AnimatedSprite
+                    sheet={RUN_REF}
+                    clip="run"
+                    alphaMode={mode}
+                    alphaThreshold={0.25}
+                />,
+            );
+            expect(props['alphaTest'], mode).toBe(0.25);
+            cleanup();
+        }
+    });
+
+    it('leaves the pre-existing alpha default in place when alphaMode is absent', async () => {
+        // The arc pins this default separately and does not change it here. An
+        // absent `alphaMode` is NOT one of the three named modes — today's
+        // `transparent` plus a 0.01 cutout is a fourth state that none of them
+        // spells — so it has to survive the props being added.
+        const props = await materialProps(<AnimatedSprite sheet={RUN_REF} clip="run" />);
+
+        expect(props['transparent']).toBe(true);
+        expect(props['alphaTest']).toBe(0.01);
+    });
+
+    it('honours alphaThreshold with no alphaMode, over the unset-mode default', async () => {
+        const props = await materialProps(
+            <AnimatedSprite sheet={RUN_REF} clip="run" alphaThreshold={0.75} />,
+        );
+
+        expect(props['transparent']).toBe(true);
+        expect(props['alphaTest']).toBe(0.75);
+    });
+
+    it('forwards color, opacity, depthWrite and depthTest to the material', async () => {
+        const props = await materialProps(
+            <AnimatedSprite
+                sheet={RUN_REF}
+                clip="run"
+                color="#ff8800"
+                opacity={0.25}
+                depthWrite={false}
+                depthTest={false}
+            />,
+        );
+
+        expect(props['color']).toBe('#ff8800');
+        expect(props['opacity']).toBe(0.25);
+        expect(props['depthWrite']).toBe(false);
+        expect(props['depthTest']).toBe(false);
+    });
+
+    it('omits color, opacity, depthWrite and depthTest when they are not declared', async () => {
+        const props = await materialProps(<AnimatedSprite sheet={RUN_REF} clip="run" />);
+
+        expect(props).not.toHaveProperty('color');
+        expect(props).not.toHaveProperty('opacity');
+        expect(props).not.toHaveProperty('depthWrite');
+        expect(props).not.toHaveProperty('depthTest');
+    });
+
+    it('tints two sprites cut from the same sheet differently, without touching the sheet', async () => {
+        // The failure mode Invariant #21 exists to prevent: the texture is
+        // manager-owned and shared by every sprite cut from the sheet, so a tint
+        // written onto it would tint all of them. The tint belongs to the
+        // material instance.
+        const sheet = createLoadedSheet();
+        const manager = createManager({
+            load: (() => Promise.resolve(sheet)) as unknown as AssetManager['load'],
+        });
+
+        const { container } = render(
+            <AssetManagerContext.Provider value={manager}>
+                <AnimatedSprite sheet={RUN_REF} clip="run" color="#ff0000" />
+                <AnimatedSprite sheet={RUN_REF} clip="run" color="#0000ff" />
+            </AssetManagerContext.Provider>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelectorAll('meshbasicmaterial')).toHaveLength(2);
+        });
+
+        const [first, second] = [...container.querySelectorAll('meshbasicmaterial')].map(
+            (element) => intrinsicProps(element),
+        );
+        expect(first?.['color']).toBe('#ff0000');
+        expect(second?.['color']).toBe('#0000ff');
+
+        // Both materials carry the SAME texture object, and nothing wrote a tint
+        // onto it.
+        expect(first?.['map']).toBe(second?.['map']);
+        expect(first?.['map']).toBe(sheet.texture);
+        expect(sheet.texture).not.toHaveProperty('color');
+    });
+
+    it('gives stacked additive sprites a material that writes no depth', async () => {
+        // `depthWrite: false` is what keeps additive sprites from occluding each
+        // other. Asserted as material state on BOTH of a stacked pair, which is
+        // as far as a jsdom test reaches — it does not claim anything about
+        // pixels, only that neither sprite in the stack writes depth.
+        const { container } = render(
+            <AssetManagerContext.Provider value={createManager()}>
+                <AnimatedSprite
+                    sheet={RUN_REF}
+                    clip="run"
+                    position={[0, 0, 0]}
+                    blending="additive"
+                    depthWrite={false}
+                />
+                <AnimatedSprite
+                    sheet={RUN_REF}
+                    clip="run"
+                    position={[0, 0, 0.1]}
+                    blending="additive"
+                    depthWrite={false}
+                />
+            </AssetManagerContext.Provider>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelectorAll('meshbasicmaterial')).toHaveLength(2);
+        });
+
+        for (const element of container.querySelectorAll('meshbasicmaterial')) {
+            const props = intrinsicProps(element);
+            expect(props['blending']).toBe(AdditiveBlending);
+            expect(props['depthWrite']).toBe(false);
+        }
+    });
+
+    it('hands the appearance props to no caller-supplied material', async () => {
+        // A game that supplies its own material owns its whole appearance. The
+        // props configure the DEFAULT material and must not be silently dropped
+        // onto someone else's.
+        const { container } = renderSprite(
+            <AnimatedSprite sheet={RUN_REF} clip="run" color="#ff0000" blending="additive">
+                <meshStandardMaterial />
+            </AnimatedSprite>,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('meshstandardmaterial')).not.toBeNull();
+        });
+
+        const supplied = intrinsicProps(container.querySelector('meshstandardmaterial')!);
+        expect(supplied).not.toHaveProperty('color');
+        expect(supplied).not.toHaveProperty('blending');
     });
 });

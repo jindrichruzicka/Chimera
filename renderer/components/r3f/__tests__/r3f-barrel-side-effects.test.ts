@@ -77,6 +77,8 @@ import type {
     ClipEndEvent,
     UseSpriteClipPlayerOptions,
     AnimatedSpriteProps,
+    SpriteAlphaMode,
+    SpriteBlending,
     EasingFn,
     TweenState,
     TweenCallbackHandlers,
@@ -133,6 +135,11 @@ interface BarrelTypeSurface {
     // scheduler, one handler surface, whichever backend is under it.
     readonly spriteClipOptions: UseSpriteClipPlayerOptions;
     readonly spriteProps: AnimatedSpriteProps;
+    // The sprite appearance vocabulary. Named because a game that factors a
+    // sprite's look into a constant or a helper has to annotate it, and the
+    // values are engine-owned names rather than `three` constants (Invariant #1).
+    readonly spriteBlending: SpriteBlending;
+    readonly spriteAlphaMode: SpriteAlphaMode;
     readonly markerEvent: MarkerEvent;
     readonly notify: NotifyEvent;
     readonly passageStart: PassageEvent;

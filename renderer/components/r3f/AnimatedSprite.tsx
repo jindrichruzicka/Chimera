@@ -49,8 +49,15 @@
 import React, { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import type { PlaneGeometry } from 'three';
-import { PlaneGeometry as ThreePlaneGeometry } from 'three';
+import type { Blending, PlaneGeometry } from 'three';
+import {
+    AdditiveBlending,
+    MultiplyBlending,
+    NoBlending,
+    NormalBlending,
+    SubtractiveBlending,
+    PlaneGeometry as ThreePlaneGeometry,
+} from 'three';
 
 import type { AssetRef, SpriteSheetAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 
@@ -61,6 +68,97 @@ import type { UseSpriteClipPlayerOptions } from './useSpriteClipPlayer.js';
 
 /** The quad is one world unit square; `scale` is what sizes a sprite. */
 const QUAD_SIZE = 1;
+
+/**
+ * How a sprite's colour combines with what is already in the frame buffer.
+ *
+ * Engine-owned names, so a game never imports `three` for a prop value
+ * (Invariant #1). `subtractive` and `multiply` darken, `additive` brightens and
+ * `none` writes the texel straight through.
+ */
+export type SpriteBlending = 'normal' | 'additive' | 'subtractive' | 'multiply' | 'none';
+
+/**
+ * How a sprite's alpha is resolved.
+ *
+ * A mode decides exactly two material fields — `transparent`, and the `alphaTest`
+ * the sprite gets when it authors no `alphaThreshold`:
+ *
+ * - `opaque` — not transparent, and no cutout unless one is authored. What
+ *   fully-opaque art wants.
+ * - `mask` — not transparent, cutting out at `MASK_ALPHA_TEST` by default. What
+ *   pixel art almost always wants.
+ * - `blend` — transparent, and no cutout unless one is authored. What
+ *   soft-edged art wants, at the cost of depth-sorting.
+ *
+ * Nothing here decides whether the sprite writes depth: that is three's own
+ * default, and the `depthWrite` prop overrides it in any mode.
+ *
+ * Leaving `alphaMode` unset is a FOURTH state none of these three spells — see
+ * `resolveAlpha`.
+ */
+export type SpriteAlphaMode = 'opaque' | 'mask' | 'blend';
+
+/**
+ * The engine name → `three` constant table.
+ *
+ * It lives in this module because `AnimatedSprite` is not on the shell layout
+ * graph, which `shell-layout-graph-census.test.ts` walks to forbid a static value
+ * edge naming `three` from the always-mounted layout. That, and not the `three`
+ * import already here, is what makes the table free.
+ */
+const SPRITE_BLENDING: Readonly<Record<SpriteBlending, Blending>> = {
+    normal: NormalBlending,
+    additive: AdditiveBlending,
+    subtractive: SubtractiveBlending,
+    multiply: MultiplyBlending,
+    none: NoBlending,
+};
+
+/**
+ * The cutout a `mask` sprite gets when the game authors no threshold.
+ *
+ * A cutout wants a threshold near the middle of the alpha range; the value that
+ * makes `mask` mean anything is the whole reason the mode is separate from
+ * `blend`.
+ */
+const MASK_ALPHA_TEST = 0.5;
+
+/**
+ * The cutout a sprite that declares no `alphaMode` keeps.
+ *
+ * This is the pre-existing default, unchanged on purpose: `transparent` together
+ * with a 0.01 cutout is a hybrid that is neither `mask` nor `blend`, so no named
+ * mode spells it, and whether it is the right default is a separate decision
+ * from making the modes expressible. `AnimatedSprite.test.tsx` pins it by value.
+ */
+const UNSET_MODE_ALPHA_TEST = 0.01;
+
+/**
+ * The two material fields an alpha mode decides.
+ *
+ * `alphaThreshold` is honoured in EVERY mode rather than only in `mask`, because
+ * `alphaTest` is meaningful alongside transparency too. Each mode supplies its
+ * own default for it, so nothing is a field one mode reads and the others
+ * silently ignore. The combination worth knowing about is `blend` with a
+ * non-zero threshold: that cuts a hard edge INSIDE a soft-edged sprite, which is
+ * rarely what a game means by `blend`.
+ */
+function resolveAlpha(
+    mode: SpriteAlphaMode | undefined,
+    threshold: number | undefined,
+): { readonly transparent: boolean; readonly alphaTest: number } {
+    switch (mode) {
+        case 'opaque':
+            return { transparent: false, alphaTest: threshold ?? 0 };
+        case 'mask':
+            return { transparent: false, alphaTest: threshold ?? MASK_ALPHA_TEST };
+        case 'blend':
+            return { transparent: true, alphaTest: threshold ?? 0 };
+        default:
+            return { transparent: true, alphaTest: threshold ?? UNSET_MODE_ALPHA_TEST };
+    }
+}
 
 /**
  * Which intrinsic names name a material.
@@ -189,6 +287,47 @@ export interface AnimatedSpriteProps extends UseSpriteClipPlayerOptions {
     /** Whether the mesh is drawn at all. */
     readonly visible?: boolean;
     /**
+     * Tint multiplied into the sheet's texels. A CSS colour string or a packed
+     * hex number; the tint lives on this sprite's material, never on the shared
+     * sheet texture (Invariant #21).
+     */
+    readonly color?: string | number;
+    /**
+     * Sprite-wide alpha multiplier.
+     *
+     * Only visible where the alpha mode admits transparency. `alphaMode="opaque"`
+     * and `"mask"` both resolve to `transparent: false`, and an opacity below 1
+     * has nothing to blend against there. It is forwarded verbatim rather than
+     * quietly turning transparency on, because an explicit alpha mode a sibling
+     * prop could override would not be explicit — which does mean the author who
+     * declares a mode is the one this can surprise, and the author who declares
+     * none gets a working `opacity` for free.
+     */
+    readonly opacity?: number;
+    /** How this sprite combines with the frame buffer. Absent leaves three's own. */
+    readonly blending?: SpriteBlending;
+    /**
+     * How this sprite's alpha is resolved.
+     *
+     * Absent is not a synonym for any of the three: it keeps the pre-existing
+     * `transparent` plus a small cutout, a hybrid none of them spells. See
+     * `SpriteAlphaMode`.
+     */
+    readonly alphaMode?: SpriteAlphaMode;
+    /**
+     * The alpha below which a texel is discarded, overruling the mode's own
+     * default. Honoured in every mode.
+     */
+    readonly alphaThreshold?: number;
+    /**
+     * Whether the sprite writes depth. `false` is what additive sprites almost
+     * always want — without it a stack of them occludes itself and the effect
+     * collapses.
+     */
+    readonly depthWrite?: boolean;
+    /** Whether the sprite is depth-tested against what is already drawn. */
+    readonly depthTest?: boolean;
+    /**
      * A material here replaces the default unlit one; anything else is drawn as
      * a child alongside it. The sheet texture is NOT applied to a caller-supplied
      * material — a game that provides one owns its `map` too, because that is
@@ -226,6 +365,13 @@ export function AnimatedSprite({
     scale,
     renderOrder,
     visible,
+    color,
+    opacity,
+    blending,
+    alphaMode,
+    alphaThreshold,
+    depthWrite,
+    depthTest,
     children,
     ...playback
 }: Readonly<AnimatedSpriteProps>): React.ReactElement | null {
@@ -251,6 +397,8 @@ export function AnimatedSprite({
     // allocation effect's restart path.
     useSpriteClipPlayer(atlas, geometry, parsed?.sheet ?? null, playback);
 
+    const alpha = resolveAlpha(alphaMode, alphaThreshold);
+
     // Two arms, killed by two different gates. `texture === null` is the
     // behavioural one — it is what keeps a white unit square off the screen for
     // the length of the load — and a test asserts the rendered output. The
@@ -271,7 +419,25 @@ export function AnimatedSprite({
             {...(visible !== undefined ? { visible } : {})}
         >
             {!suppliesMaterial(children) && (
-                <meshBasicMaterial map={texture} transparent toneMapped={false} alphaTest={0.01} />
+                // Every appearance prop is spread conditionally rather than
+                // passed as `undefined`: an absent prop must leave three's own
+                // default standing, and writing `blending={undefined}` would
+                // assert a value this component has no opinion about.
+                //
+                // These configure the DEFAULT material only. A caller who
+                // supplies one owns its whole appearance, so nothing here is
+                // copied onto it.
+                <meshBasicMaterial
+                    map={texture}
+                    transparent={alpha.transparent}
+                    alphaTest={alpha.alphaTest}
+                    toneMapped={false}
+                    {...(color !== undefined ? { color } : {})}
+                    {...(opacity !== undefined ? { opacity } : {})}
+                    {...(blending !== undefined ? { blending: SPRITE_BLENDING[blending] } : {})}
+                    {...(depthWrite !== undefined ? { depthWrite } : {})}
+                    {...(depthTest !== undefined ? { depthTest } : {})}
+                />
             )}
             {children}
         </mesh>

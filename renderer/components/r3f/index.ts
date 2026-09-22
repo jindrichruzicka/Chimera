@@ -116,7 +116,7 @@ export type {
 } from './useClipPlayer';
 export type { EntityInterpolationOptions } from './useEntityInterpolation';
 export type { UseSpriteClipPlayerOptions } from './useSpriteClipPlayer';
-export type { AnimatedSpriteProps } from './AnimatedSprite';
+export type { AnimatedSpriteProps, SpriteAlphaMode, SpriteBlending } from './AnimatedSprite';
 export type {
     CameraMode,
     CameraPreset,

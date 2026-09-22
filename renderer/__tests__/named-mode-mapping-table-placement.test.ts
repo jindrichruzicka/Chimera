@@ -4,8 +4,8 @@
  * A named-mode prop's engine-name → `three`-constant table stays off the
  * always-mounted shell layout graph (§4.22, §4.10, §4.37).
  *
- * The tone-mapping and output-colour-space knobs each need such a table, and
- * the sampling and blending modes still to come will need more.
+ * The tone-mapping and output-colour-space knobs each need such a table, and so
+ * do the sampling and blending modes.
  * `shell-layout-graph-census.test.ts` is what forbids the edge those tables
  * would add, and this file is what keeps that census SHARP: a census whose
  * predicate silently stopped matching would go on passing, and a shrunken graph

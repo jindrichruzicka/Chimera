@@ -5,7 +5,7 @@
 Guard that a named-mode mapping table stays off the shell layout graph.
 
 The tone-mapping and output-colour-space knobs each need an engine-name → `three`-constant table,
-and the sampling and blending modes still to come will need more. Nothing the always-mounted shell
+and so do the sampling and blending modes. Nothing the always-mounted shell
 layout chunk reaches through a static **value** edge may name `three`, so where those tables live is
 a real constraint — and until now it was enforced only by a census that could itself go blunt
 without anyone noticing. A census whose predicate silently stopped matching goes on passing, and a
