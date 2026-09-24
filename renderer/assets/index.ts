@@ -48,7 +48,11 @@ export { useAnimationSheet, useSpriteAnimationSheet } from './useAnimationSheet.
 export type { ParsedModelAnimationSheet, ParsedSpriteAnimationSheet } from './animationSheet.js';
 export { useSpriteAtlas, type UseSpriteAtlasState } from './useSpriteAtlas.js';
 export { parseSpriteAtlas, type SpriteAtlas, type SpriteAtlasFrame } from './spriteAtlas.js';
-export { MalformedModelAssetError, type ModelInstance } from './ModelInstance.js';
+export {
+    MalformedModelAssetError,
+    type ModelInstance,
+    type ModelInstanceMaterialOverride,
+} from './ModelInstance.js';
 export {
     UnknownAssetManifestEntryError,
     type AssetManager,

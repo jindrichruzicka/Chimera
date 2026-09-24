@@ -1,11 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 
 import type { AssetRef, GLTFModelAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 
 import type { LoadedGltfAsset } from './AssetManager';
-import { cloneModelInstance, type ModelInstance, releaseModelInstance } from './ModelInstance.js';
+import {
+    applyModelInstanceMaterialOverride,
+    cloneModelInstance,
+    type ModelInstance,
+    type ModelInstanceMaterialOverride,
+    releaseModelInstance,
+} from './ModelInstance.js';
 import { useAsset } from './useAsset.js';
 
 export interface UseModelInstanceState {
@@ -24,7 +30,8 @@ interface CommittedClone {
  * Resolves a `gltf-model` ref through {@link useAsset} and publishes a
  * per-component {@link ModelInstance} clone of the cached scene. The cached
  * asset stays manager-owned; the clone is component-owned and is released
- * when the resolved asset identity changes and on unmount (Invariant #21).
+ * when the resolved asset identity changes, when a material override is added
+ * or removed, and on unmount (Invariant #21).
  *
  * The clone is allocated in a commit-phase effect, never during render:
  * render-phase allocation (`useMemo`) leaks under StrictMode, which
@@ -33,7 +40,12 @@ interface CommittedClone {
  * `loading` stays `true` for one extra render after the asset resolves —
  * callers already check the loading flag before reading (§6.2).
  *
- * The `ref` follows the stable-`AssetRef` rule (§13.3).
+ * The `ref` follows the stable-`AssetRef` rule (§13.3). A `materialOverride`
+ * need not be stable: the clone is keyed on whether one is given at all —
+ * adding or removing it re-clones, since that changes what the instance owns —
+ * while its values are applied in place to the materials the clone owns. That
+ * apply is a layout effect, so it lands before any consumer effect of the
+ * commit that publishes the instance, and it keeps the instance identity.
  *
  * Load failures and everything `cloneModelInstance` raises surface as
  * `error` with a `null` instance, never as a render throw; the sole
@@ -47,9 +59,15 @@ interface CommittedClone {
  * (`renderer/app/gameAssetSession.tsx`) publishes a matchless one for a
  * subtree that renders a game's assets outside a match.
  */
-export function useModelInstance(ref: AssetRef<GLTFModelAsset> | null): UseModelInstanceState {
+export function useModelInstance(
+    ref: AssetRef<GLTFModelAsset> | null,
+    materialOverride?: ModelInstanceMaterialOverride,
+): UseModelInstanceState {
     const { asset, error } = useAsset<GLTFModelAsset>(ref);
     const [committed, setCommitted] = useState<CommittedClone | null>(null);
+    const ownsMaterials = materialOverride !== undefined;
+    const color = materialOverride?.color;
+    const emissive = materialOverride?.emissive;
 
     // Keyed on the resolved asset OBJECT, never the ref string: every path
     // that swaps the cached asset under a stable ref (manager swap, manifest
@@ -63,7 +81,7 @@ export function useModelInstance(ref: AssetRef<GLTFModelAsset> | null): UseModel
         let instance: ModelInstance | null = null;
         let cloneError: Error | null = null;
         try {
-            instance = cloneModelInstance(asset);
+            instance = cloneModelInstance(asset, ownsMaterials ? {} : undefined);
         } catch (thrown) {
             cloneError = toError(thrown);
         }
@@ -75,7 +93,14 @@ export function useModelInstance(ref: AssetRef<GLTFModelAsset> | null): UseModel
             }
             setCommitted(null);
         };
-    }, [ref, asset]);
+    }, [ref, asset, ownsMaterials]);
+
+    const instance = committed !== null && committed.asset === asset ? committed.instance : null;
+    useLayoutEffect(() => {
+        if (instance !== null) {
+            applyModelInstanceMaterialOverride(instance, { color, emissive });
+        }
+    }, [instance, color, emissive]);
 
     if (ref === null) {
         return { instance: null, loading: false, error: null };
@@ -86,7 +111,7 @@ export function useModelInstance(ref: AssetRef<GLTFModelAsset> | null): UseModel
     }
 
     if (committed !== null && committed.asset === asset) {
-        return { instance: committed.instance, loading: false, error: committed.error };
+        return { instance, loading: false, error: committed.error };
     }
 
     return { instance: null, loading: true, error: null };

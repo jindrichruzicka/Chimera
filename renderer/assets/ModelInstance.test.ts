@@ -11,6 +11,9 @@ import {
     InstancedMesh,
     Mesh,
     MeshBasicMaterial,
+    MeshStandardMaterial,
+    Points,
+    PointsMaterial,
     Skeleton,
     SkinnedMesh,
     Texture,
@@ -19,6 +22,11 @@ import type { Object3D } from 'three';
 
 import type { LoadedGltfAsset } from './AssetManager';
 import {
+    GLTF_MODEL_FIXTURE_MESH_NAME,
+    loadGltfModelFixture,
+} from './__test-support__/gltfModelFixture.js';
+import {
+    applyModelInstanceMaterialOverride,
     cloneModelInstance,
     MalformedModelAssetError,
     type ModelInstance,
@@ -302,5 +310,175 @@ describe('ModelInstance module shape', () => {
             expect(specifier).not.toMatch(/^react(\/|$)/);
             expect(specifier).not.toMatch(/^@react-three\/fiber(\/|$)/);
         }
+    });
+});
+
+// ── the per-instance material override ───────────────────────────────────────
+
+function materialOf(root: Object3D, name: string): MeshStandardMaterial | MeshBasicMaterial {
+    const node = root.getObjectByName(name);
+    if (node === undefined) {
+        throw new Error(`No node named '${name}' under the root.`);
+    }
+    const material = (node as Mesh).material;
+    if (Array.isArray(material)) {
+        throw new Error(`Node '${name}' carries an array material; use materialsOf.`);
+    }
+    return material as MeshStandardMaterial | MeshBasicMaterial;
+}
+
+function litMaterialOf(root: Object3D): MeshStandardMaterial {
+    const material = materialOf(root, GLTF_MODEL_FIXTURE_MESH_NAME);
+    if (!(material instanceof MeshStandardMaterial)) {
+        throw new Error(`Expected a MeshStandardMaterial, got ${material.type}.`);
+    }
+    return material;
+}
+
+describe('cloneModelInstance with a material override', () => {
+    it('gives two clones different tints while the cached material keeps its own colour', async () => {
+        const asset = await loadGltfModelFixture('lit');
+        const cached = litMaterialOf(asset.scene);
+
+        const red = cloneModelInstance(asset, { color: 'red' });
+        const green = cloneModelInstance(asset, { color: 0x00ff00 });
+
+        expect(litMaterialOf(red.root)).not.toBe(cached);
+        expect(litMaterialOf(green.root)).not.toBe(cached);
+        expect(litMaterialOf(red.root)).not.toBe(litMaterialOf(green.root));
+        expect(litMaterialOf(red.root).color.getHexString()).toBe('ff0000');
+        expect(litMaterialOf(green.root).color.getHexString()).toBe('00ff00');
+        expect(cached.color.getHexString()).toBe('ffffff');
+    });
+
+    it('sets the emissive independently of the tint, and never on the cached material', async () => {
+        const asset = await loadGltfModelFixture('lit');
+        const cached = litMaterialOf(asset.scene);
+
+        const emissiveOnly = cloneModelInstance(asset, { emissive: 'blue' });
+        const both = cloneModelInstance(asset, { color: 'red', emissive: 0x0000ff });
+
+        expect(litMaterialOf(emissiveOnly.root).emissive.getHexString()).toBe('0000ff');
+        expect(litMaterialOf(emissiveOnly.root).color.getHexString()).toBe('ffffff');
+        expect(litMaterialOf(both.root).emissive.getHexString()).toBe('0000ff');
+        expect(litMaterialOf(both.root).color.getHexString()).toBe('ff0000');
+        expect(cached.emissive.getHexString()).toBe('000000');
+        expect(cached.color.getHexString()).toBe('ffffff');
+    });
+
+    it('multiplies the tint into the authored base colour rather than replacing it', () => {
+        const scene = new Group();
+        const mesh = new Mesh(new BufferGeometry(), new MeshStandardMaterial({ color: 0xff8000 }));
+        mesh.name = 'authored';
+        scene.add(mesh);
+
+        const instance = cloneModelInstance({ scene, animations: [] }, { color: 0x00ff00 });
+
+        // (1, 0.5, 0) × (0, 1, 0) — the authored red lane is masked, the green
+        // lane keeps the authored half-intensity. A replacing override would
+        // read 00ff00 here.
+        expect(materialOf(instance.root, 'authored').color.getHexString()).toBe('008000');
+    });
+
+    it('keeps the texture shared by reference between the owned material and the cached one', () => {
+        const scene = new Group();
+        const texture = new Texture();
+        const mesh = new Mesh(new BufferGeometry(), new MeshStandardMaterial({ map: texture }));
+        mesh.name = 'textured';
+        scene.add(mesh);
+
+        const instance = cloneModelInstance({ scene, animations: [] }, { color: 'red' });
+
+        expect(materialOf(instance.root, 'textured')).not.toBe(mesh.material);
+        expect(materialOf(instance.root, 'textured').map).toBe(texture);
+    });
+
+    it('reaches every element of an array material and every material-bearing node, not only meshes', () => {
+        const scene = new Group();
+        const first = new MeshStandardMaterial();
+        const second = new MeshStandardMaterial();
+        const multi = new Mesh(new BufferGeometry(), [first, second]);
+        multi.name = 'multi';
+        const points = new Points(new BufferGeometry(), new PointsMaterial());
+        points.name = 'points';
+        scene.add(multi, points);
+
+        const instance = cloneModelInstance({ scene, animations: [] }, { color: 'red' });
+
+        const owned = (instance.root.getObjectByName('multi') as Mesh).material;
+        expect(Array.isArray(owned)).toBe(true);
+        for (const [index, material] of (owned as MeshStandardMaterial[]).entries()) {
+            expect(material).not.toBe([first, second][index]);
+            expect(material.color.getHexString()).toBe('ff0000');
+        }
+        const ownedPoints = (instance.root.getObjectByName('points') as Points)
+            .material as PointsMaterial;
+        expect(ownedPoints).not.toBe(points.material);
+        expect(ownedPoints.color.getHexString()).toBe('ff0000');
+        expect(first.color.getHexString()).toBe('ffffff');
+        expect(second.color.getHexString()).toBe('ffffff');
+        expect(points.material.color.getHexString()).toBe('ffffff');
+    });
+
+    it('applies the tint to the unlit control arm and its emissive to nothing, without throwing', async () => {
+        const asset = await loadGltfModelFixture('unlit');
+
+        const instance = cloneModelInstance(asset, { color: 'red', emissive: 'blue' });
+
+        const material = materialOf(instance.root, GLTF_MODEL_FIXTURE_MESH_NAME);
+        expect(material).toBeInstanceOf(MeshBasicMaterial);
+        expect(material.color.getHexString()).toBe('ff0000');
+        // The property the lit fixture exists for: a MeshBasicMaterial has no
+        // emissive, and the override must not invent one.
+        expect((material as { readonly emissive?: unknown }).emissive).toBeUndefined();
+    });
+});
+
+describe('applyModelInstanceMaterialOverride', () => {
+    it('re-derives from the authored colour, so a changed tint does not compound', async () => {
+        const asset = await loadGltfModelFixture('lit');
+        const instance = cloneModelInstance(asset, { color: 'lime', emissive: 'blue' });
+
+        applyModelInstanceMaterialOverride(instance, { color: 'red' });
+
+        const material = litMaterialOf(instance.root);
+        // Compounding green then red multiplies to black; re-deriving reads red.
+        expect(material.color.getHexString()).toBe('ff0000');
+        // The emissive left out of the new override returns to the authored black.
+        expect(material.emissive.getHexString()).toBe('000000');
+        expect(litMaterialOf(asset.scene).color.getHexString()).toBe('ffffff');
+    });
+
+    it('does nothing to an instance cloned without an override', async () => {
+        const asset = await loadGltfModelFixture('lit');
+        const instance = cloneModelInstance(asset);
+
+        applyModelInstanceMaterialOverride(instance, { color: 'red' });
+
+        expect(litMaterialOf(instance.root)).toBe(litMaterialOf(asset.scene));
+        expect(litMaterialOf(asset.scene).color.getHexString()).toBe('ffffff');
+    });
+});
+
+describe('releaseModelInstance with clone-owned materials', () => {
+    it('disposes each clone-owned material once and leaves the cached material and its texture alone', () => {
+        const scene = new Group();
+        const texture = new Texture();
+        const cached = new MeshStandardMaterial({ map: texture });
+        const mesh = new Mesh(new BufferGeometry(), cached);
+        mesh.name = 'textured';
+        scene.add(mesh);
+        const cachedDispose = vi.spyOn(cached, 'dispose');
+        const textureDispose = vi.spyOn(texture, 'dispose');
+
+        const instance = cloneModelInstance({ scene, animations: [] }, { color: 'red' });
+        const ownedDispose = vi.spyOn(materialOf(instance.root, 'textured'), 'dispose');
+
+        releaseModelInstance(instance);
+        releaseModelInstance(instance);
+
+        expect(ownedDispose).toHaveBeenCalledTimes(1);
+        expect(cachedDispose).not.toHaveBeenCalled();
+        expect(textureDispose).not.toHaveBeenCalled();
     });
 });

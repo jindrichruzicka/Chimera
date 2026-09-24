@@ -39,6 +39,7 @@ import type {
     LoadedGltfAsset,
     LoadedSpriteSheetAsset,
     ModelInstance,
+    ModelInstanceMaterialOverride,
     ParsedModelAnimationSheet,
     ResolvedAsset,
     UseAssetState,
@@ -59,6 +60,7 @@ interface BarrelTypeSurface {
     readonly gltf: LoadedGltfAsset;
     readonly spriteSheet: LoadedSpriteSheetAsset;
     readonly instance: ModelInstance;
+    readonly materialOverride: ModelInstanceMaterialOverride;
     readonly resolved: ResolvedAsset;
     readonly assetState: UseAssetState<GLTFModelAsset>;
     readonly instanceState: UseModelInstanceState;

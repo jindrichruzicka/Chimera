@@ -8,7 +8,7 @@ import { act, cleanup, render, renderHook } from '@testing-library/react';
 import React, { type ReactElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AnimationClip, BufferGeometry, Group, Mesh, MeshBasicMaterial } from 'three';
+import { AnimationClip, BufferGeometry, Group, Mesh, MeshStandardMaterial } from 'three';
 import { clone as cloneWithSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type * as SkeletonUtilsModule from 'three/examples/jsm/utils/SkeletonUtils.js';
 
@@ -24,6 +24,7 @@ import {
     cloneModelInstance,
     MalformedModelAssetError,
     type ModelInstance,
+    type ModelInstanceMaterialOverride,
     releaseModelInstance,
 } from './ModelInstance.js';
 import type * as ModelInstanceModule from './ModelInstance.js';
@@ -342,7 +343,7 @@ describe('useModelInstance module shape', () => {
 
 function createGltfAsset(meshName = 'prop'): LoadedGltfAsset {
     const scene = new Group();
-    const mesh = new Mesh(new BufferGeometry(), new MeshBasicMaterial());
+    const mesh = new Mesh(new BufferGeometry(), new MeshStandardMaterial());
     mesh.name = meshName;
     scene.add(mesh);
     return { scene, animations: [new AnimationClip('idle', -1, [])] };
@@ -435,3 +436,174 @@ function createDeferred<TValue>(): Deferred<TValue> {
 async function flushMicrotasks(): Promise<void> {
     await Promise.resolve();
 }
+
+describe('useModelInstance with a material override', () => {
+    function cachedMaterial(asset: LoadedGltfAsset): MeshStandardMaterial {
+        return (asset.scene.getObjectByName('prop') as Mesh).material as MeshStandardMaterial;
+    }
+
+    function publishedMaterial(instance: ModelInstance): MeshStandardMaterial {
+        return (instance.root.getObjectByName('prop') as Mesh).material as MeshStandardMaterial;
+    }
+
+    it('gives two mounts of the same model different tints and leaves the cached material untouched after both unmount', async () => {
+        const asset = createGltfAsset();
+        const manager = createAssetManagerStub(createResolvedLoad(asset));
+        const states: (UseModelInstanceState | undefined)[] = [undefined, undefined];
+
+        function Probe({ slot, color }: { readonly slot: number; readonly color: string }): null {
+            states[slot] = useModelInstance(modelRef, { color });
+            return null;
+        }
+
+        const { unmount } = render(
+            <AssetManagerContext.Provider value={manager}>
+                <Probe slot={0} color="red" />
+                <Probe slot={1} color="lime" />
+            </AssetManagerContext.Provider>,
+        );
+        await act(async () => {
+            await flushMicrotasks();
+        });
+
+        const first = publishedMaterial(getPublishedInstance(states[0]));
+        const second = publishedMaterial(getPublishedInstance(states[1]));
+        expect(first).not.toBe(cachedMaterial(asset));
+        expect(second).not.toBe(cachedMaterial(asset));
+        expect(first.color.getHexString()).toBe('ff0000');
+        expect(second.color.getHexString()).toBe('00ff00');
+
+        unmount();
+
+        expect(cachedMaterial(asset).color.getHexString()).toBe('ffffff');
+        expect(releaseSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+        ['color', { color: 'red' }, { color: 'blue' }],
+        ['emissive', { emissive: 'red' }, { emissive: 'blue' }],
+    ] as const)(
+        'changes %s in place on a re-render, without re-cloning',
+        async (field, before, after) => {
+            const asset = createGltfAsset();
+            const manager = createAssetManagerStub(createResolvedLoad(asset));
+            let override: ModelInstanceMaterialOverride = before;
+
+            const { result, rerender } = renderHook(() => useModelInstance(modelRef, override), {
+                wrapper: createWrapper(manager),
+            });
+            await act(async () => {
+                await flushMicrotasks();
+            });
+            const instance = getPublishedInstance(result.current);
+            const clonesAfterPublish = cloneSpy.mock.calls.length;
+
+            override = after;
+            rerender();
+            await act(async () => {
+                await flushMicrotasks();
+            });
+
+            expect(cloneSpy).toHaveBeenCalledTimes(clonesAfterPublish);
+            expect(getPublishedInstance(result.current)).toBe(instance);
+            expect(publishedMaterial(instance)[field].getHexString()).toBe('0000ff');
+        },
+    );
+
+    it('colours the owned materials before any consumer effect of the publishing commit runs', async () => {
+        const asset = createGltfAsset();
+        const manager = createAssetManagerStub(createResolvedLoad(asset));
+        const seen: string[] = [];
+
+        // A child's passive effect runs BEFORE its parent's in the same commit,
+        // so an apply done from a passive effect would let this child observe
+        // the authored white first. A layout effect runs before every passive
+        // effect of the commit, which is what puts red first here.
+        function Consumer({ instance }: { readonly instance: ModelInstance | null }): null {
+            React.useEffect(() => {
+                if (instance !== null) {
+                    seen.push(publishedMaterial(instance).color.getHexString());
+                }
+            }, [instance]);
+            return null;
+        }
+
+        function Owner(): ReactElement {
+            const { instance } = useModelInstance(modelRef, { color: 'red' });
+            return <Consumer instance={instance} />;
+        }
+
+        render(
+            <AssetManagerContext.Provider value={manager}>
+                <Owner />
+            </AssetManagerContext.Provider>,
+        );
+        await act(async () => {
+            await flushMicrotasks();
+        });
+
+        expect(seen[0]).toBe('ff0000');
+    });
+
+    it('does not re-clone for a new override object carrying the same values', async () => {
+        const asset = createGltfAsset();
+        const manager = createAssetManagerStub(createResolvedLoad(asset));
+
+        const { result, rerender } = renderHook(
+            () => useModelInstance(modelRef, { color: 'red', emissive: 'blue' }),
+            { wrapper: createWrapper(manager) },
+        );
+        await act(async () => {
+            await flushMicrotasks();
+        });
+        const instance = getPublishedInstance(result.current);
+        const clonesAfterPublish = cloneSpy.mock.calls.length;
+
+        rerender();
+        await act(async () => {
+            await flushMicrotasks();
+        });
+
+        expect(cloneSpy).toHaveBeenCalledTimes(clonesAfterPublish);
+        expect(getPublishedInstance(result.current)).toBe(instance);
+        expect(publishedMaterial(instance).color.getHexString()).toBe('ff0000');
+        expect(publishedMaterial(instance).emissive.getHexString()).toBe('0000ff');
+    });
+
+    it('re-clones when an override is added to a mounted instance, and again when it is removed', async () => {
+        const asset = createGltfAsset();
+        const manager = createAssetManagerStub(createResolvedLoad(asset));
+        let override: ModelInstanceMaterialOverride | undefined = undefined;
+
+        const { result, rerender } = renderHook(() => useModelInstance(modelRef, override), {
+            wrapper: createWrapper(manager),
+        });
+        await act(async () => {
+            await flushMicrotasks();
+        });
+        const shared = getPublishedInstance(result.current);
+        expect(publishedMaterial(shared)).toBe(cachedMaterial(asset));
+
+        override = { color: 'red' };
+        rerender();
+        await act(async () => {
+            await flushMicrotasks();
+        });
+        const owned = getPublishedInstance(result.current);
+        expect(owned).not.toBe(shared);
+        expect(releaseSpy).toHaveBeenCalledWith(shared);
+        expect(publishedMaterial(owned)).not.toBe(cachedMaterial(asset));
+        expect(publishedMaterial(owned).color.getHexString()).toBe('ff0000');
+
+        override = undefined;
+        rerender();
+        await act(async () => {
+            await flushMicrotasks();
+        });
+        const sharedAgain = getPublishedInstance(result.current);
+        expect(sharedAgain).not.toBe(owned);
+        expect(releaseSpy).toHaveBeenCalledWith(owned);
+        expect(publishedMaterial(sharedAgain)).toBe(cachedMaterial(asset));
+        expect(cachedMaterial(asset).color.getHexString()).toBe('ffffff');
+    });
+});

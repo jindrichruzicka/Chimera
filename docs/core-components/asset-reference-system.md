@@ -595,9 +595,10 @@ cache-corrupting when reached by hand:
 2. **Shared skeleton.** `gltf.scene.clone()` produces distinct meshes that still share
    ONE `Skeleton` — posing either instance poses both. `useModelInstance` clones via
    `SkeletonUtils`, which re-links each clone's skeleton to its own bones.
-3. **Shared-cache disposal.** Everything reachable from a clone except its skeletons
-   and the cloned node tree itself — geometry, materials, textures,
-   `geometry.morphAttributes`, animation clips — is the cached original, shared by
+3. **Shared-cache disposal.** Everything reachable from a clone except its skeletons,
+   the cloned node tree itself and the materials a `ModelInstanceMaterialOverride`
+   copied for it — geometry, textures, `geometry.morphAttributes`, animation clips, and
+   every material of a clone given no override — is the cached original, shared by
    reference. Disposing any of it corrupts every sibling
    instance and the cache itself (Invariant #21's carve-out states the ownership rule).
 4. **Shared `boneInverses`.** Each clone's skeleton shares `boneInverses` BY REFERENCE
@@ -612,6 +613,31 @@ breaks cloning for EVERY consumer of that ref (`Object3D.copy` round-trips `user
 through JSON), and the `validate-assets` on-demand scan's receiver-name false-negative
 (see CI Validation below) applies to model loads exactly as to any other —
 keep asset-manager receivers named accordingly.
+
+### Per-instance appearance
+
+A second argument to `useModelInstance` gives one mount its own look without touching the
+cached asset. `ModelInstanceMaterialOverride` (same barrel) carries a `color` — a tint
+MULTIPLIED into each material's authored colour — and an `emissive`, which replaces the
+material's own; both take a CSS colour string or a packed `0xrrggbb` number.
+
+```tsx
+const { instance } = useModelInstance(modelRef, {
+    color: teamColor,
+    emissive: selected ? 'white' : undefined,
+});
+```
+
+What the override does is copy every material under the clone — `Material.clone()` copies
+the `Color` fields and shares the textures — and colour the copies, so the cached material
+is never written and Invariant #21's sharing rule is not relaxed: the copies are the
+clone's, and `releaseModelInstance` disposes them with its skeletons. The clone is keyed
+on whether an override is present, so adding or removing one re-clones; changing its
+values re-colours the owned materials in place and keeps the instance identity. An emissive on an unlit model (`KHR_materials_unlit`
+loads as `MeshBasicMaterial`, which has no emissive) is applied to nothing. The cost is
+a copy of every material under the root per overridden mount; a tint or emissive alone
+compiles no new shader, because three keys its program cache on a material's
+feature set rather than its colour values.
 
 ---
 

@@ -3473,6 +3473,30 @@ describe('on-demand load detection — useModelInstance and the Invariant #96 su
         expect(finding?.source.location.startsWith('useModelInstance (')).toBe(true);
     });
 
+    it('still flags an undeclared useModelInstance load when the call carries a material override as a second argument', async () => {
+        // The scan reads the ref from the first argument alone, so a second
+        // argument must neither hide the load nor change the reported ref.
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                onDemandLoadSourceFiles: ['apps/tactics/screens/board.tsx'],
+                files: {
+                    'apps/tactics/screens/board.tsx': `
+                        import { useModelInstance } from '@chimera-engine/renderer/assets';
+                        export function Board() {
+                            return useModelInstance('tactics/models/undeclared.glb', { color: 'red' });
+                        }
+                    `,
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(false);
+        expect(report.undeclaredOnDemandLoads.map((load) => load.ref)).toEqual([
+            'tactics/models/undeclared.glb',
+        ]);
+    });
+
     it('flags an undeclared useSpriteAtlas load in a game screen as a hard error', async () => {
         // `useSpriteAtlas` loads a sprite sheet on demand exactly as
         // `useModelInstance` loads a model, so leaving it out of the matched set
