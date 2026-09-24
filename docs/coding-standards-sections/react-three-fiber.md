@@ -31,7 +31,7 @@ if (asset instanceof THREE.Texture) { ... }
 - `AssetRef<T>` strings always come from content data. Never construct them as string literals in component code.
 - Do not create geometries or materials inside a component's render path. Hoist to `useMemo` or module scope.
 - `useModelInstance` allocates its clone in a commit-phase effect, so `loading` stays `true` for one extra render after the asset resolves and `instance` is `null` until then — check before reading, exactly as with `useAsset`.
-- The clone is component-owned (Invariant #21's carve-out): never dispose, mutate, or re-bind anything it shares with the cached asset — geometry, materials, textures, `geometry.morphAttributes`, animation clips, `skeleton.boneInverses`.
+- The clone is component-owned (Invariant #21's carve-out): never dispose, mutate, or re-bind anything it shares with the cached asset — geometry, materials, textures, `geometry.morphAttributes`, animation clips, `skeleton.boneInverses`. What the clone owns — its skeletons, and the material copies a `ModelInstanceMaterialOverride` makes for it — the engine disposes through `releaseModelInstance`; never dispose those by hand either.
 - One ref, many mounts: every mount gets its own clone. Never mount the cached `gltf.scene` directly — three.js reparents it and the first mount silently vanishes (§4.10, Per-Instance Model Use).
 
 ## 6.3 Render loop
