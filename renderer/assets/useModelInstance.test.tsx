@@ -438,14 +438,6 @@ async function flushMicrotasks(): Promise<void> {
 }
 
 describe('useModelInstance with a material override', () => {
-    function cachedMaterial(asset: LoadedGltfAsset): MeshStandardMaterial {
-        return (asset.scene.getObjectByName('prop') as Mesh).material as MeshStandardMaterial;
-    }
-
-    function publishedMaterial(instance: ModelInstance): MeshStandardMaterial {
-        return (instance.root.getObjectByName('prop') as Mesh).material as MeshStandardMaterial;
-    }
-
     it('gives two mounts of the same model different tints and leaves the cached material untouched after both unmount', async () => {
         const asset = createGltfAsset();
         const manager = createAssetManagerStub(createResolvedLoad(asset));
@@ -607,3 +599,80 @@ describe('useModelInstance with a material override', () => {
         expect(cachedMaterial(asset).color.getHexString()).toBe('ffffff');
     });
 });
+
+describe('useModelInstance disposes what its clone owns', () => {
+    it('disposes the clone-owned material on unmount', async () => {
+        const asset = createGltfAsset();
+        const manager = createAssetManagerStub(createResolvedLoad(asset));
+
+        const { result, unmount } = renderHook(() => useModelInstance(modelRef, { color: 'red' }), {
+            wrapper: createWrapper(manager),
+        });
+        await act(async () => {
+            await flushMicrotasks();
+        });
+        const owned = publishedMaterial(getPublishedInstance(result.current));
+        const ownedDispose = vi.spyOn(owned, 'dispose');
+        const cachedDispose = vi.spyOn(cachedMaterial(asset), 'dispose');
+
+        unmount();
+
+        expect(ownedDispose).toHaveBeenCalledTimes(1);
+        expect(cachedDispose).not.toHaveBeenCalled();
+    });
+
+    it('unmounts without throwing when the dispose of an owned material throws', async () => {
+        const asset = createGltfAsset();
+        const manager = createAssetManagerStub(createResolvedLoad(asset));
+
+        const { result, unmount } = renderHook(() => useModelInstance(modelRef, { color: 'red' }), {
+            wrapper: createWrapper(manager),
+        });
+        await act(async () => {
+            await flushMicrotasks();
+        });
+        vi.spyOn(
+            publishedMaterial(getPublishedInstance(result.current)),
+            'dispose',
+        ).mockImplementation(() => {
+            throw new Error('dispose listener failure');
+        });
+
+        expect(() => unmount()).not.toThrow();
+    });
+
+    it('disposes the clone-owned material when the resolved asset identity changes under a stable ref', async () => {
+        const managerA = createAssetManagerStub(createResolvedLoad(createGltfAsset()));
+        const managerB = createAssetManagerStub(createResolvedLoad(createGltfAsset()));
+        let currentManager = managerA;
+
+        const { result, rerender } = renderHook(
+            () => useModelInstance(modelRef, { color: 'red' }),
+            {
+                wrapper: createManagerGetterWrapper(() => currentManager),
+            },
+        );
+        await act(async () => {
+            await flushMicrotasks();
+        });
+        const firstOwned = publishedMaterial(getPublishedInstance(result.current));
+        const firstDispose = vi.spyOn(firstOwned, 'dispose');
+
+        currentManager = managerB;
+        rerender();
+        await act(async () => {
+            await flushMicrotasks();
+        });
+
+        expect(firstDispose).toHaveBeenCalledTimes(1);
+        expect(publishedMaterial(getPublishedInstance(result.current))).not.toBe(firstOwned);
+    });
+});
+
+function cachedMaterial(asset: LoadedGltfAsset): MeshStandardMaterial {
+    return (asset.scene.getObjectByName('prop') as Mesh).material as MeshStandardMaterial;
+}
+
+function publishedMaterial(instance: ModelInstance): MeshStandardMaterial {
+    return (instance.root.getObjectByName('prop') as Mesh).material as MeshStandardMaterial;
+}

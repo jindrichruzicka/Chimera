@@ -482,3 +482,47 @@ describe('releaseModelInstance with clone-owned materials', () => {
         expect(textureDispose).not.toHaveBeenCalled();
     });
 });
+
+describe('releaseModelInstance ownership boundary', () => {
+    it('disposes the material it copied, not the material a caller swapped onto the clone', () => {
+        const scene = new Group();
+        const mesh = new Mesh(new BufferGeometry(), new MeshStandardMaterial());
+        mesh.name = 'swapped';
+        scene.add(mesh);
+        const instance = cloneModelInstance({ scene, animations: [] }, { color: 'red' });
+        const copied = materialOf(instance.root, 'swapped');
+        const copiedDispose = vi.spyOn(copied, 'dispose');
+
+        // The caller's own material, put on the clone AFTER the override took
+        // its copy: it is the caller's to dispose, and the engine must not.
+        const supplied = new MeshStandardMaterial();
+        const suppliedDispose = vi.spyOn(supplied, 'dispose');
+        (instance.root.getObjectByName('swapped') as Mesh).material = supplied;
+
+        releaseModelInstance(instance);
+
+        expect(copiedDispose).toHaveBeenCalledTimes(1);
+        expect(suppliedDispose).not.toHaveBeenCalled();
+    });
+
+    it('keeps disposing the remaining owned materials and the skeletons when one material dispose throws', () => {
+        const { asset } = createTwoBoneRigAsset();
+        const extra = new Mesh(new BufferGeometry(), new MeshStandardMaterial());
+        extra.name = 'extra';
+        asset.scene.add(extra);
+        const instance = cloneModelInstance(asset, { color: 'red' });
+        const [first, second] = [
+            materialOf(instance.root, 'skin'),
+            materialOf(instance.root, 'extra'),
+        ];
+        vi.spyOn(first, 'dispose').mockImplementation(() => {
+            throw new Error('dispose listener failure');
+        });
+        const secondDispose = vi.spyOn(second, 'dispose');
+        const skeletonDispose = vi.spyOn(getSkinnedMesh(instance.root).skeleton, 'dispose');
+
+        expect(() => releaseModelInstance(instance)).not.toThrow();
+        expect(secondDispose).toHaveBeenCalledTimes(1);
+        expect(skeletonDispose).toHaveBeenCalledTimes(1);
+    });
+});
