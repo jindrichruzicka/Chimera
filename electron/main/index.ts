@@ -631,9 +631,16 @@ const CONTENT_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
     // as octet-stream DELIBERATELY, not because the table forgot it.
     '.bin': 'application/octet-stream',
     '.css': 'text/css; charset=utf-8',
+    // OpenEXR, one of the two environment-map formats — Radiance is `.hdr`
+    // below. Neither row is what makes one load: both decoders read the bytes as
+    // an arraybuffer and never look at the content type, so the rows say what
+    // the file is rather than enabling it.
+    '.exr': 'image/x-exr',
     '.flac': 'audio/flac',
     '.glb': 'model/gltf-binary',
     '.gltf': 'model/gltf+json',
+    // Radiance, the other environment-map format — see `.exr` above.
+    '.hdr': 'image/vnd.radiance',
     '.html': HTML_CONTENT_TYPE,
     '.jpeg': 'image/jpeg',
     '.jpg': 'image/jpeg',

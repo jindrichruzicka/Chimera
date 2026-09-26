@@ -47,6 +47,7 @@ export type AudioClipAsset = AssetKindBrand<'audio-clip'>;
 export type GLTFModelAsset = AssetKindBrand<'gltf-model'>;
 export type SpriteSheetAsset = AssetKindBrand<'sprite-sheet'>;
 export type ParticleConfigAsset = AssetKindBrand<'particle-config'>;
+export type EnvironmentMapAsset = AssetKindBrand<'environment-map'>;
 
 // Declaration merging can add a kind id here; what that does and does not
 // buy is under Game-Contributed Asset Kinds below.
@@ -56,6 +57,7 @@ export interface AssetKindRegistry {
     readonly 'gltf-model': GLTFModelAsset;
     readonly 'sprite-sheet': SpriteSheetAsset;
     readonly 'particle-config': ParticleConfigAsset;
+    readonly 'environment-map': EnvironmentMapAsset;
 }
 
 export type AssetKind = AssetKindRegistry[keyof AssetKindRegistry];
@@ -149,7 +151,7 @@ The manifest value is **injected via `AssetManagerContext`** at game session sta
 
 ### Per-entry texture sampling
 
-A `texture` or `sprite-sheet` entry declares how its image is sampled under
+An entry declares how its image is sampled under
 `metadata.sampling`. The vocabulary lives in
 `simulation/foundation/texture-sampling.ts`, and every value is an engine-owned name
 or a JSON scalar — never a `three` constant (Invariant #1):
@@ -189,14 +191,14 @@ at compile time; the runtime check covers what a spread or a cast carries past i
 The declaration travels with the rest of the entry's metadata: it reaches the kind's
 loader as `AssetLoadRequest.metadata`.
 
-**Applied before publication.** The default `texture` and `sprite-sheet` loaders read
-the declaration off the request and write it onto the texture while the loader is
+**Applied before publication.** The loaders that read it take the declaration off the
+request and write it onto the texture while the loader is
 still the only thing holding it (`renderer/assets/textureSampling.ts` maps each name
 to its `three` value). `AssetManager` publishes what a loader resolves, so what
 `load()` resolves and what `get()` returns is already configured: a component has no
 configuration step of its own, and no reason to write to a texture it shares with
 every other consumer of that ref. An option the entry does not declare is left as the
-loader produced it, apart from the color space.
+loader produced it.
 
 **The default color space is sRGB.** A `texture` or `sprite-sheet` entry that declares
 no `colorSpace` — including one that declares no sampling at all — is published as
@@ -249,6 +251,52 @@ paths, which makes them two refs and two cached textures. Changing a ref's decla
 sampling in a re-registered manifest evicts the cached asset like any other metadata
 change, because every declarable value survives the `JSON.stringify` comparison the
 cache uses.
+
+---
+
+### Environment maps
+
+An `environment-map` entry resolves to an equirectangular `THREE.Texture` of linear
+radiance data — the image-based light a PBR material needs before metal reads as metal.
+It ships in `assets/` and resolves through the manifest like every other asset, which
+is what keeps image-based lighting on the offline path: a CDN preset is not the
+alternative here, because the renderer CSP blocks the fetch that would make one work.
+
+```typescript
+// apps/<game>/asset-manifest.ts
+{ ref: skyRef, kind: 'environment-map', priority: 'deferred' }
+```
+
+**`.hdr` and `.exr`.** The decoder is chosen from the ref's extension — the path the
+manifest authored, rather than whatever the resolver produced for it — and each is
+imported inside its own branch, so neither is named on a path that does not use it.
+Any other extension rejects the load with
+`UnsupportedEnvironmentMapFormatError`, which names both what was refused and what is
+loadable. Radiance is served as `image/vnd.radiance` and OpenEXR as `image/x-exr`;
+neither row is what makes the load work, since both decoders read the file as an
+arraybuffer and never consult the content type.
+
+**Equirectangular only.** One image wrapping the sphere is what this kind means, and
+the mapping is written by the loader rather than left to the entry: three's default for
+a fresh texture samples it as a flat decal, which lights nothing. A cube map is not a
+second option the entry could select — it is six files. What would reopen that is a
+game that needs one; the shape it would take is a second kind, not an option on this
+one.
+
+**No colour-space default, unlike `texture`.** The decoders write
+`LinearSRGBColorSpace` themselves, because radiance data is linear; the sRGB default
+that is right for a colour image would have the renderer decode it a second time. The
+sampling vocabulary is otherwise the same one `texture` entries declare
+([Per-entry texture sampling](#per-entry-texture-sampling)), read from the same slot and
+applied in the loader before publication, so whatever the entry declares still wins —
+including a colour space, which on an HDRI is a way to be wrong.
+
+**Reaching it from a scene.** The texture is a cached shared asset like any other
+(Invariant #21): a component resolves it with `useAsset` and hands it to the renderer,
+never mutating it. Assigning it to `scene.environment` lights every standard material in
+that scene; assigning it to one material's `envMap` lights that material alone. Three
+converts an equirectangular map to the pre-filtered form a physical material samples on
+its own, so neither route needs a helper library.
 
 ---
 

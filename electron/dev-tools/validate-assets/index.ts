@@ -264,6 +264,7 @@ const engineAssetLoaderKinds = new Set([
     'gltf-model',
     'sprite-sheet',
     'particle-config',
+    'environment-map',
 ]);
 
 export async function validateAssetWorkspace(

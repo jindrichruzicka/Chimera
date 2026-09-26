@@ -4,6 +4,7 @@ import {
     type AssetKindId,
     type AssetRef,
     type AudioClipAsset,
+    type EnvironmentMapAsset,
     type GLTFModelAsset,
     type ParticleConfigAsset,
     type SpriteSheetAsset,
@@ -194,6 +195,11 @@ describe('AssetKind phantom types', () => {
 
     it('ParticleConfigAsset can be used as a generic parameter', () => {
         const ref = buildAssetRef<ParticleConfigAsset>('tactics', 'particles/blood-burst.json');
+        expect(typeof ref).toBe('string');
+    });
+
+    it('EnvironmentMapAsset can be used as a generic parameter', () => {
+        const ref = buildAssetRef<EnvironmentMapAsset>('tactics', 'environment/sky.hdr');
         expect(typeof ref).toBe('string');
     });
 

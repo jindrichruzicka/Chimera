@@ -36,6 +36,8 @@ export type GLTFModelAsset = AssetKindBrand<'gltf-model'>;
 export type SpriteSheetAsset = AssetKindBrand<'sprite-sheet'>;
 /** → plain JSON (no Three.js dependency at all) */
 export type ParticleConfigAsset = AssetKindBrand<'particle-config'>;
+/** → an equirectangular THREE.Texture of radiance data, for image-based lighting */
+export type EnvironmentMapAsset = AssetKindBrand<'environment-map'>;
 
 /**
  * Open asset-kind registry. External packages extend this interface via
@@ -47,6 +49,7 @@ export interface AssetKindRegistry {
     readonly 'gltf-model': GLTFModelAsset;
     readonly 'sprite-sheet': SpriteSheetAsset;
     readonly 'particle-config': ParticleConfigAsset;
+    readonly 'environment-map': EnvironmentMapAsset;
 }
 
 /** Union of all recognised built-in and declaration-merged asset kinds. */

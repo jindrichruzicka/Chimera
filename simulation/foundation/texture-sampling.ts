@@ -2,12 +2,11 @@
 // §4.10 — Per-entry texture sampling: the vocabulary a manifest entry declares
 // it in, and the reader that checks a declaration.
 //
-// A `'texture'` or `'sprite-sheet'` manifest entry declares how its image is
-// sampled under `metadata.sampling`. Every value is an engine-owned NAME or a
-// JSON scalar — `'nearest'`, never a graphics-library constant (Invariant #1) —
-// so a declaration survives the `JSON.stringify` comparison the renderer's
-// asset cache uses to decide whether a re-registered entry is still the same
-// asset.
+// A manifest entry declares how its image is sampled under `metadata.sampling`.
+// Every value is an engine-owned NAME or a JSON scalar — `'nearest'`, never a
+// graphics-library constant (Invariant #1) — so a declaration survives the
+// `JSON.stringify` comparison the renderer's asset cache uses to decide whether
+// a re-registered entry is still the same asset.
 //
 // Lives in `simulation/foundation/` so both `simulation/content/` (the authoring
 // builders) and `renderer/assets/` can reach the reader without the renderer
@@ -62,9 +61,9 @@ export const TEXTURE_WRAP_MODES: readonly TextureWrapMode[] = [
 ];
 
 /**
- * How one manifest entry's image is sampled. Every option is optional; an
- * omitted one is left to the loader, apart from `colorSpace`, which falls back to
- * {@link DEFAULT_TEXTURE_COLOR_SPACE}.
+ * How one manifest entry's image is sampled. Every option is optional, and an
+ * omitted one is left to the loader. Which defaults a loader supplies on top of
+ * that is the loader's — see {@link DEFAULT_TEXTURE_COLOR_SPACE}.
  */
 export interface TextureSampling {
     readonly colorSpace?: TextureColorSpace;

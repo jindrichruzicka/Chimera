@@ -7,6 +7,7 @@ import type {
     AssetKindId,
     AssetRef,
     AudioClipAsset,
+    EnvironmentMapAsset,
     GLTFModelAsset,
     ParticleConfigAsset,
     SpriteSheetAsset,
@@ -59,6 +60,7 @@ export type LoadedParticleConfigAsset = unknown;
 
 export interface ResolvedAssetRegistry {
     readonly texture: Texture;
+    readonly 'environment-map': Texture;
     readonly 'gltf-model': LoadedGltfAsset;
     readonly 'sprite-sheet': LoadedSpriteSheetAsset;
     readonly 'audio-clip': LoadedAudioClipAsset;
@@ -105,6 +107,26 @@ export interface AssetManager {
      */
     getManifestMetadata(ref: AssetRef): unknown;
     dispose(): void;
+}
+
+/**
+ * Thrown for an `environment-map` entry whose ref names a file extension the
+ * engine has no decoder for.
+ *
+ * It carries both halves a game needs to fix the manifest — what was refused and
+ * what is loadable — because the alternative is a decode error from whichever
+ * loader happened to be guessed at, which names neither.
+ */
+export class UnsupportedEnvironmentMapFormatError extends Error {
+    constructor(
+        public readonly ref: string,
+        public readonly extension: string,
+    ) {
+        super(
+            `Environment map '${ref}' has extension '${extension}'; the engine loads '.hdr' and '.exr'.`,
+        );
+        this.name = 'UnsupportedEnvironmentMapFormatError';
+    }
 }
 
 export class UnknownAssetManifestEntryError extends Error {
@@ -376,6 +398,7 @@ export function createDefaultAssetLoaderRegistry(): AssetLoaderRegistry {
         new SpriteSheetAssetLoader(),
         new AudioClipAssetLoader(),
         new ParticleConfigAssetLoader(),
+        new EnvironmentMapAssetLoader(),
     ]);
 }
 
@@ -418,6 +441,18 @@ class TextureAssetLoader implements AssetLoader<TextureAsset, Texture> {
 
     async load(request: AssetLoadRequest<TextureAsset>): Promise<Texture> {
         return loadTexture(request.url, await resolveSampling(request.metadata));
+    }
+}
+
+class EnvironmentMapAssetLoader implements AssetLoader<EnvironmentMapAsset, Texture> {
+    readonly kind = 'environment-map' as const;
+
+    async load(request: AssetLoadRequest<EnvironmentMapAsset>): Promise<Texture> {
+        return loadEnvironmentMap(
+            request.ref,
+            request.url,
+            await declaredSampling(request.metadata),
+        );
     }
 }
 
@@ -491,6 +526,74 @@ async function loadTexture(url: string, sampling: TextureSampling): Promise<Text
     return texture;
 }
 
+/** The shape both environment-map decoders share; neither is named statically. */
+interface EnvironmentMapDecoder {
+    load(
+        url: string,
+        onLoad: (texture: Texture) => void,
+        onProgress: undefined,
+        onError: (error: unknown) => void,
+    ): unknown;
+}
+
+/**
+ * Loads one equirectangular environment map, reaching `three` and the decoder
+ * through DYNAMIC imports for the reason `loadTexture` above records.
+ *
+ * Each decoder is imported inside its own branch rather than beside the other,
+ * so neither is named on a path that does not use it.
+ *
+ * **The mapping is written here rather than declared.** Equirectangular is what
+ * this kind means — one image wrapping the sphere — and three's default for a
+ * fresh texture is `UVMapping`, which samples it as a flat decal and lights
+ * nothing. There is no second mapping for the entry to choose between: a cube
+ * map is six files.
+ *
+ * **No colour-space default is applied**, unlike the `texture` kinds. Both
+ * decoders write `LinearSRGBColorSpace` themselves because what they produce is
+ * linear radiance, and the sRGB default that is right for a colour image would
+ * have the renderer decode it a second time. Whatever the entry declares still
+ * wins, on this option as on the others.
+ */
+async function loadEnvironmentMap(
+    ref: string,
+    url: string,
+    sampling: TextureSampling,
+): Promise<Texture> {
+    const decoder = await createEnvironmentMapDecoder(ref);
+    const three = await import('three');
+    const texture = await new Promise<Texture>((resolve, reject) => {
+        decoder.load(url, resolve, undefined, reject);
+    });
+    texture.mapping = three.EquirectangularReflectionMapping;
+    applyTextureSampling(texture, sampling, three);
+    return texture;
+}
+
+/**
+ * The decoder for `ref`'s extension.
+ *
+ * Keyed on the REF, not the resolved URL: the ref is the path the manifest
+ * authored, so the format stays a property of what the game declared rather
+ * than of whatever the resolver produced for it.
+ *
+ * @throws {UnsupportedEnvironmentMapFormatError} For any other extension.
+ */
+async function createEnvironmentMapDecoder(ref: string): Promise<EnvironmentMapDecoder> {
+    const extension = getAssetExtension(ref);
+    if (extension === '.hdr') {
+        // `HDRLoader`, not `RGBELoader`: three deprecated the latter, and
+        // constructing one logs a warning on every load.
+        const { HDRLoader } = await import('three/examples/jsm/loaders/HDRLoader.js');
+        return new HDRLoader();
+    }
+    if (extension === '.exr') {
+        const { EXRLoader } = await import('three/examples/jsm/loaders/EXRLoader.js');
+        return new EXRLoader();
+    }
+    throw new UnsupportedEnvironmentMapFormatError(ref, extension);
+}
+
 async function loadGltf(url: string): Promise<LoadedGltfAsset> {
     const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
     const loader = new GLTFLoader();
@@ -521,6 +624,21 @@ async function resolveSampling(metadata: unknown): Promise<TextureSampling> {
     const { resolveTextureSampling } =
         await import('@chimera-engine/simulation/foundation/texture-sampling.js');
     return resolveTextureSampling(metadata);
+}
+
+/**
+ * The sampling an entry DECLARES, with no default filled in — the reader
+ * {@link resolveSampling} wraps, minus the colour space it supplies.
+ *
+ * Separate from that one rather than a parameter on it, so each kind's default
+ * is a named thing a test can pin on its own.
+ *
+ * @throws {InvalidTextureSamplingError} When the declaration is not valid.
+ */
+async function declaredSampling(metadata: unknown): Promise<TextureSampling> {
+    const { readTextureSampling } =
+        await import('@chimera-engine/simulation/foundation/texture-sampling.js');
+    return readTextureSampling(metadata) ?? {};
 }
 
 async function loadSpriteSheet(url: string, metadata: unknown): Promise<LoadedSpriteSheetAsset> {

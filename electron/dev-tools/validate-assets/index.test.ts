@@ -184,6 +184,7 @@ describe('validateAssetWorkspace', () => {
             ['gltf-model', 'models/rig.glb'],
             ['sprite-sheet', 'sprites/hero.png'],
             ['particle-config', 'particles/spark.json'],
+            ['environment-map', 'environment/sky.hdr'],
         ] as const;
         const report = await validateAssetWorkspace({
             workspaceRoot,

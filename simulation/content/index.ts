@@ -14,6 +14,7 @@ export {
     type GLTFModelAsset,
     type SpriteSheetAsset,
     type ParticleConfigAsset,
+    type EnvironmentMapAsset,
     MalformedAssetRefError,
     buildAssetRef,
     parseAssetRef,

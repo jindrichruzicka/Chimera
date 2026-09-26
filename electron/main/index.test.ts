@@ -1660,6 +1660,23 @@ describe('renderer app protocol', () => {
         expect(response.headers.get('content-type')).toBe(expected);
     });
 
+    // The two environment-map formats. Radiance has an IANA-registered type;
+    // OpenEXR has none, so the row carries the conventional `x-` form.
+    it.each([
+        ['sky.hdr', 'image/vnd.radiance'],
+        ['sky.exr', 'image/x-exr'],
+        ['sky.HDR', 'image/vnd.radiance'],
+    ])('serves %s as %s', (name, expected) => {
+        const response = buildRendererProtocolResponse({
+            filePath: `/abs/path/games/tactics/assets/environment/${name}`,
+            data: Buffer.from('fake-radiance-bytes'),
+            rangeHeader: null,
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.headers.get('content-type')).toBe(expected);
+    });
+
     it('answers a ranged request for a JPEG with the whole file', () => {
         // A row also decides range serving. An image type is not range-capable,
         // so a `Range` header on one is ignored rather than answered with 206.
