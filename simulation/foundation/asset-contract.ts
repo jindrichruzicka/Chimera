@@ -11,9 +11,12 @@
 // `@chimera-engine/simulation/content/AssetRef.js` remains the unchanged public
 // import path.
 //
-// `AssetKindRegistry` is open through TypeScript declaration merging so games
-// and extension packages can contribute custom asset kinds without editing
-// engine core — augment THIS module (`./asset-contract.js`).
+// `AssetKindRegistry` is an `interface`, so declaration merging can add a kind
+// id to it — augment THIS module (`./asset-contract.js`). What that adds is a
+// distinct ref type. It does not make the kind loadable: asset loaders are the
+// engine's, registered by `createDefaultAssetLoaderRegistry` in the renderer's
+// asset layer, so loading a ref of a merged kind rejects with
+// `UnknownAssetKindError` (§4.10).
 //
 // This module is PURE TYPE DECLARATIONS only — zero runtime code, zero
 // workspace imports.

@@ -18,10 +18,11 @@
 // agree or `validate:assets` will look for your files under another game's
 // directory.
 //
-// LOADER COVERAGE. `kind` selects the loader the engine resolves the file with;
-// the set it registers is `createDefaultAssetLoaderRegistry` in the renderer's
-// asset layer, and a `kind` with no loader throws `UnknownAssetKindError` on
-// first use rather than at build time.
+// LOADER COVERAGE. `kind` selects the loader the engine resolves the file with,
+// and the loaders are the engine's: the set it registers is
+// `createDefaultAssetLoaderRegistry` in the renderer's asset layer, and there is
+// no seam for a game to add one. A `kind` that set does not cover throws
+// `UnknownAssetKindError` on first use.
 //
 // PRIORITY. `deferred` loads on first use and is the right default. `critical`
 // preloads before the game starts — reach for it only when loading-on-demand is

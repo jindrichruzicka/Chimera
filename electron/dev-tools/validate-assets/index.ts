@@ -18,7 +18,6 @@ import {
     isPrefixUnaryExpression,
     isPropertyAccessExpression,
     isPropertyAssignment,
-    isPropertyDeclaration,
     isSatisfiesExpression,
     isStringLiteral,
     isVariableDeclaration,
@@ -73,8 +72,6 @@ const ASSET_MANIFEST_FILE_NAMES: ReadonlySet<string> = new Set([
 ]);
 /** Engine-side scene descriptors, scanned alongside each game's own. */
 const SCENE_ROOT = ['simulation', 'scene'] as const;
-/** Engine-side asset loaders, scanned to widen the known asset-kind set. */
-const RENDERER_ASSETS_ROOT = ['renderer', 'assets'] as const;
 /** Checked for game assets, which are forbidden here rather than resolved. */
 const RENDERER_PUBLIC_ASSETS_ROOT = ['renderer', 'public', 'assets'] as const;
 
@@ -82,7 +79,6 @@ export interface WorkspaceFileHost {
     findDataJsonFiles(workspaceRoot: string): Promise<readonly string[]>;
     findSceneSourceFiles(workspaceRoot: string): Promise<readonly string[]>;
     findAssetManifestFiles?(workspaceRoot: string): Promise<readonly string[]>;
-    findAssetLoaderSourceFiles?(workspaceRoot: string): Promise<readonly string[]>;
     findGameFontSourceFiles?(workspaceRoot: string): Promise<readonly string[]>;
     findRendererPublicAssetFiles?(workspaceRoot: string): Promise<readonly string[]>;
     findOnDemandLoadSourceFiles?(workspaceRoot: string): Promise<readonly string[]>;
@@ -93,7 +89,6 @@ export interface WorkspaceFileHost {
 export interface ValidateAssetWorkspaceOptions {
     readonly workspaceRoot: string;
     readonly host?: WorkspaceFileHost;
-    readonly assetLoaderKinds?: readonly string[];
 }
 
 export type AssetReferenceSourceKind =
@@ -257,7 +252,14 @@ const SPRITE_SHEET_KIND = 'sprite-sheet';
 
 const assetRefCandidatePattern = /^[^\0/]+\/[^\0]*$/u;
 const externalOrAbsoluteAssetPattern = /^(?:[A-Za-z][A-Za-z0-9+.-]*:|\/)/u;
-const defaultAssetLoaderKinds = new Set([
+/**
+ * Every asset kind the engine registers a loader for — the whole membership set
+ * this gate checks a manifest's kinds against, because asset loaders are the
+ * engine's and a game registers none. The runtime side is
+ * `createDefaultAssetLoaderRegistry` in the renderer's asset layer; a kind absent
+ * from both is reported here rather than rejecting a load in the shipped app.
+ */
+const engineAssetLoaderKinds = new Set([
     'texture',
     'audio-clip',
     'gltf-model',
@@ -274,9 +276,6 @@ export async function validateAssetWorkspace(
     const sceneSourceFiles = [...(await host.findSceneSourceFiles(workspaceRoot))].sort();
     const assetManifestFiles = [
         ...(await (host.findAssetManifestFiles?.(workspaceRoot) ?? [])),
-    ].sort();
-    const assetLoaderSourceFiles = [
-        ...(await (host.findAssetLoaderSourceFiles?.(workspaceRoot) ?? [])),
     ].sort();
     const gameFontSourceFiles = [
         ...(await (host.findGameFontSourceFiles?.(workspaceRoot) ?? [])),
@@ -380,17 +379,6 @@ export async function validateAssetWorkspace(
         malformed.push(...collected.malformed);
     }
 
-    const assetLoaderKinds = new Set<string>([
-        ...defaultAssetLoaderKinds,
-        ...(options.assetLoaderKinds ?? []),
-    ]);
-    for (const filePath of assetLoaderSourceFiles) {
-        const sourceText = await host.readFile(filePath);
-        for (const kind of collectAssetLoaderKinds(sourceText, filePath)) {
-            assetLoaderKinds.add(kind);
-        }
-    }
-
     const missing: MissingAssetReference[] = [];
     for (const ref of [...refs, ...manifestRefs, ...shellManifestRefs]) {
         const expectedPath = resolve(
@@ -432,7 +420,7 @@ export async function validateAssetWorkspace(
     // below without widening this one.
     const manifestRefSet = new Set(manifestRefs.map((ref) => ref.ref));
     const unmanifested = refs.filter((ref) => !manifestRefSet.has(ref.ref));
-    const unknownKinds = manifestKinds.filter((entry) => !assetLoaderKinds.has(entry.kind));
+    const unknownKinds = manifestKinds.filter((entry) => !engineAssetLoaderKinds.has(entry.kind));
 
     // An on-demand load is "declared" if its ref appears in ANY declared surface
     // (data JSON, scene requiredAssets, either asset manifest, or font src).
@@ -646,8 +634,6 @@ export function createNodeWorkspaceFileHost(): WorkspaceFileHost {
         findDataJsonFiles: async (workspaceRoot) => findDataJsonFiles(workspaceRoot),
         findSceneSourceFiles: async (workspaceRoot) => findSceneSourceFiles(workspaceRoot),
         findAssetManifestFiles: async (workspaceRoot) => findAssetManifestFiles(workspaceRoot),
-        findAssetLoaderSourceFiles: async (workspaceRoot) =>
-            findAssetLoaderSourceFiles(workspaceRoot),
         findGameFontSourceFiles: async (workspaceRoot) => findGameFontSourceFiles(workspaceRoot),
         findRendererPublicAssetFiles: async (workspaceRoot) =>
             findRendererPublicAssetFiles(workspaceRoot),
@@ -1733,36 +1719,6 @@ function readWholeBeat(expression: Expression): number | undefined {
     return beat === undefined || !Number.isInteger(beat) || beat < 0 ? undefined : beat;
 }
 
-function collectAssetLoaderKinds(sourceText: string, filePath: string): readonly string[] {
-    const sourceFile = createSourceFile(
-        filePath,
-        sourceText,
-        ScriptTarget.Latest,
-        true,
-        getScriptKind(filePath),
-    );
-    const kinds = new Set<string>();
-
-    visit(sourceFile);
-
-    return [...kinds].sort();
-
-    function visit(node: Node): void {
-        if (
-            (isPropertyAssignment(node) || isPropertyDeclaration(node)) &&
-            isPropertyName(node.name, 'kind') &&
-            node.initializer !== undefined
-        ) {
-            const kind = readStringExpression(node.initializer);
-            if (kind !== undefined) {
-                kinds.add(kind);
-            }
-        }
-
-        forEachChild(node, visit);
-    }
-}
-
 /**
  * Pre-scans a manifest source file for `const X = { member: '<ref>' as ... }` object
  * literals, yielding `[`${constName}.${member}`, refString]` entries. Enables tier-B
@@ -2229,20 +2185,6 @@ async function findAssetManifestFiles(workspaceRoot: string): Promise<readonly s
     return collectFiles(appsRoot, (filePath) => ASSET_MANIFEST_FILE_NAMES.has(basename(filePath)));
 }
 
-async function findAssetLoaderSourceFiles(workspaceRoot: string): Promise<readonly string[]> {
-    const roots = [
-        resolve(workspaceRoot, ...GAMES_ROOT),
-        resolve(workspaceRoot, ...RENDERER_ASSETS_ROOT),
-    ];
-    const files: string[] = [];
-
-    for (const root of roots) {
-        files.push(...(await collectFiles(root, isAssetLoaderSourceFile)));
-    }
-
-    return files.sort();
-}
-
 async function findGameFontSourceFiles(workspaceRoot: string): Promise<readonly string[]> {
     const appsRoot = resolve(workspaceRoot, ...GAMES_ROOT);
     return collectFiles(appsRoot, isGameFontSourceFile);
@@ -2338,14 +2280,6 @@ function isOnDemandLoadSourceFile(filePath: string): boolean {
         segments.some((segment) => onDemandLoadDirectories.has(segment)) ||
         hasAppsAnchoredSurfaceSegment(segments)
     );
-}
-
-function isAssetLoaderSourceFile(filePath: string): boolean {
-    if (!isSceneSourceFile(filePath)) {
-        return false;
-    }
-    const fileName = basename(filePath).toLowerCase();
-    return fileName.includes('asset-loader') || fileName.includes('assetloaders');
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
