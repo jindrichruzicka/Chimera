@@ -23,7 +23,7 @@ The simulation layer is pure TypeScript with no DOM, no Three.js, and no file-sy
 | `apps/<name>/asset-manifest.ts`            | The match inventory: `AssetRef`s the game exposes there, runtime kind id, load priority, and optional loader metadata                                |
 | `apps/<name>/shell-asset-manifest.ts`      | The same declaration for what the shell renders and sounds, forwarded as `shellBackgroundAssets` / `shellAudioAssets`                                |
 | `renderer/assets/AssetResolver.ts`         | `AssetRef<T>` → `file://` URL (env-aware: dev vs prod)                                                                                               |
-| `renderer/assets/AssetLoaderRegistry.ts`   | Runtime kind id → loader, open to game-contributed loaders without engine edits                                                                      |
+| `renderer/assets/AssetLoaderRegistry.ts`   | Runtime kind id → loader, for the loaders the engine registers                                                                                       |
 | `renderer/assets/AssetManager.ts`          | Loads, caches, and disposes resolved assets                                                                                                          |
 | `renderer/assets/AssetPreloader.ts`        | Bulk-preloads all `critical` manifest entries as a session opens                                                                                     |
 | `renderer/assets/criticalAssetPreload.ts`  | Runs that preload, and gates a route's reveal on it — see [Where the critical preload runs](#where-the-critical-preload-runs)                        |
@@ -48,8 +48,8 @@ export type GLTFModelAsset = AssetKindBrand<'gltf-model'>;
 export type SpriteSheetAsset = AssetKindBrand<'sprite-sheet'>;
 export type ParticleConfigAsset = AssetKindBrand<'particle-config'>;
 
-// Open registry: games and extension packages add their own kind ids here
-// through TypeScript declaration merging.
+// Declaration merging can add a kind id here; what that does and does not
+// buy is under Game-Contributed Asset Kinds below.
 export interface AssetKindRegistry {
     readonly texture: TextureAsset;
     readonly 'audio-clip': AudioClipAsset;
@@ -92,24 +92,16 @@ The `T` parameter is intentionally embedded in the brand. This keeps refs for di
 
 ### Game-Contributed Asset Kinds
 
-Games and first-party extension libraries may contribute new phantom kinds without changing `simulation/content/AssetRef.ts`:
+`AssetKindRegistry` is a TypeScript `interface`, so declaration merging can add a kind
+to it. What that buys is a distinct ref type and nothing else: the kind has no loader,
+because [loaders are engine-owned](#loaders-are-engine-owned), and an entry declaring
+one cannot load.
 
-```typescript
-// apps/<game>/assets/asset-kinds.ts
-import type { AssetKindBrand } from '@chimera-engine/simulation/content/AssetRef.js';
-
-export interface GameVoxelAsset extends AssetKindBrand<'<game>:voxel'> {
-    readonly __gameVoxelAsset: unique symbol;
-}
-
-declare module '@chimera-engine/simulation/content/AssetRef.js' {
-    interface AssetKindRegistry {
-        readonly '<game>:voxel': GameVoxelAsset;
-    }
-}
-```
-
-Custom kind ids should be namespaced by game or package (`<game>:voxel`, `<package>:deck-art`) so independent extensions cannot collide accidentally.
+Loading one rejects with `UnknownAssetKindError`. `validate:assets` reports a kind the
+engine registers no loader for under **Manifest kinds without loader coverage**, under
+the same statically-readable-entry rules the ref walk follows — an entry it cannot read
+contributes nothing rather than failing, which `index.test.ts` pins in both directions
+([CI Validation](#ci-validation)).
 
 ---
 
@@ -303,7 +295,7 @@ maps `/game-assets/<gameId>/<relativePath>` to the game-owned asset directory af
 checks. In the monorepo this directory is `apps/<gameId>/assets/`; in a future package-split build
 the same protocol can resolve to an installed game package asset root.
 
-## `AssetLoaderRegistry` — Extensible Runtime Loading
+## `AssetLoaderRegistry` — Runtime Loading
 
 ```typescript
 export interface AssetLoadRequest<T extends AssetKind = AssetKind> {
@@ -325,7 +317,25 @@ export interface AssetLoaderRegistry {
 }
 ```
 
-The default registry contains the built-in loaders for `texture`, `gltf-model`, `sprite-sheet`, `audio-clip`, and `particle-config`. Games register additional loaders during renderer/session wiring and pass the composed registry into `AssetManager`; engine renderer code still receives it by dependency injection rather than importing any specific game package.
+### Loaders are engine-owned
+
+`createDefaultAssetLoaderRegistry` builds the registry, and the kinds it registers are
+the kinds that load. A game registers no loader and composes no registry: the public
+assets barrel publishes neither the loader types nor a manager factory, and Invariant
+#96 keeps the modules behind it out of a game's reach, so there is nothing to build a
+registry with. A new kind is engine work.
+
+The cost of that is real and is accepted rather than argued away: a game wanting a
+format the engine does not load has no way to add one, and waits. What makes it the
+cheaper side is the size of the alternative. A registration surface means
+`AssetLoader`, `AssetLoadRequest` and the registry interface become public API and
+every later change to them breaks adopters — and it needs a channel to carry a
+composed registry to whichever surface built the manager, and Invariant #21 enumerates
+those owners. That is a commitment to make on its own merits.
+
+What declaration merging on `AssetKindRegistry` still buys is under
+[Game-Contributed Asset Kinds](#game-contributed-asset-kinds): a distinct ref type,
+and not a loadable asset.
 
 ---
 

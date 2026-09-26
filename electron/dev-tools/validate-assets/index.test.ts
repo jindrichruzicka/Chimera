@@ -175,35 +175,83 @@ describe('validateAssetWorkspace', () => {
         expect(output).toContain('tactics:voxel');
     });
 
-    it('accepts game-contributed loader kinds discovered from loader source files', async () => {
+    it('accepts an entry under every kind the engine registers a loader for', async () => {
+        // One entry per kind, so dropping any single member of the gate's set
+        // turns that entry's kind unknown and reds this case.
+        const entries = [
+            ['texture', 'textures/grass.webp'],
+            ['audio-clip', 'audio/theme.ogg'],
+            ['gltf-model', 'models/rig.glb'],
+            ['sprite-sheet', 'sprites/hero.png'],
+            ['particle-config', 'particles/spark.json'],
+        ] as const;
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
                 assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
-                assetLoaderSourceFiles: ['apps/tactics/asset-loaders.ts'],
                 files: {
                     'apps/tactics/asset-manifest.ts': `
                         export const tacticsAssetManifest = {
                             gameId: 'tactics',
                             entries: [
-                                { ref: 'tactics/voxels/castle.vox', kind: 'tactics:voxel', priority: 'critical' },
+                                ${entries
+                                    .map(
+                                        ([kind, relativePath]) =>
+                                            `{ ref: 'tactics/${relativePath}', kind: '${kind}', priority: 'deferred' }`,
+                                    )
+                                    .join(',')}
                             ],
                         };
                     `,
-                    'apps/tactics/asset-loaders.ts': `
-                        export const tacticsVoxelLoader = {
-                            kind: 'tactics:voxel',
-                            async load() {
-                                return {};
-                            },
-                        };
-                    `,
-                    'apps/tactics/assets/voxels/castle.vox': '',
+                    ...Object.fromEntries(
+                        entries.map(([, relativePath]) => [
+                            `apps/tactics/assets/${relativePath}`,
+                            '',
+                        ]),
+                    ),
                 },
             }),
         });
 
+        expect(report.unknownKinds).toEqual([]);
         expect(report.ok).toBe(true);
+        expect(report.checkedRefs).toBe(entries.length);
+    });
+
+    it('refuses a game-declared kind even where the game ships a loader beside it', async () => {
+        // Against the REAL file host: an entry under a kind of the game's own,
+        // the file present on disk, and a loader declaring that kind in the
+        // game's own source. Loaders are the engine's, so none of it is
+        // coverage.
+        const dir = await createTempDir('chimera-assets-test');
+        const gameRoot = join(dir, 'apps', 'tactics');
+        await mkdir(join(gameRoot, 'assets', 'voxels'), { recursive: true });
+        await writeFile(join(gameRoot, 'assets', 'voxels', 'castle.vox'), '');
+        await writeFile(
+            join(gameRoot, 'asset-manifest.ts'),
+            `export const tacticsAssetManifest = {
+                gameId: 'tactics',
+                entries: [
+                    { ref: 'tactics/voxels/castle.vox', kind: 'tactics:voxel', priority: 'critical' },
+                ],
+            };`,
+        );
+        await writeFile(
+            join(gameRoot, 'asset-loaders.ts'),
+            `export const tacticsVoxelLoader = {
+                kind: 'tactics:voxel',
+                async load() {
+                    return {};
+                },
+            };`,
+        );
+
+        const report = await validateAssetWorkspace({ workspaceRoot: dir });
+        const output = formatAssetValidationReport(report, dir);
+
+        expect(report.unknownKinds.map((entry) => entry.kind)).toEqual(['tactics:voxel']);
+        expect(report.ok).toBe(false);
+        expect(output).toContain('Manifest kinds without loader coverage:');
     });
 
     it('validates self-hosted game font source files owned by the game package', async () => {
@@ -2513,7 +2561,6 @@ interface HostFixture {
     readonly dataJsonFiles?: readonly string[];
     readonly sceneSourceFiles?: readonly string[];
     readonly assetManifestFiles?: readonly string[];
-    readonly assetLoaderSourceFiles?: readonly string[];
     readonly gameFontSourceFiles?: readonly string[];
     readonly rendererPublicAssetFiles?: readonly string[];
     readonly onDemandLoadSourceFiles?: readonly string[];
@@ -2535,10 +2582,6 @@ function createHost(fixture: HostFixture): WorkspaceFileHost {
             (fixture.sceneSourceFiles ?? []).map((relativePath) => toAbsolutePath(relativePath)),
         findAssetManifestFiles: async () =>
             (fixture.assetManifestFiles ?? []).map((relativePath) => toAbsolutePath(relativePath)),
-        findAssetLoaderSourceFiles: async () =>
-            (fixture.assetLoaderSourceFiles ?? []).map((relativePath) =>
-                toAbsolutePath(relativePath),
-            ),
         findGameFontSourceFiles: async () =>
             (fixture.gameFontSourceFiles ?? []).map((relativePath) => toAbsolutePath(relativePath)),
         findRendererPublicAssetFiles: async () =>

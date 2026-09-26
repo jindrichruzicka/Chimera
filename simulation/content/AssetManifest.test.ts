@@ -52,7 +52,7 @@ describe('AssetManifestEntry', () => {
         expect(entry.priority).toBe('deferred');
     });
 
-    it('accepts custom asset kinds contributed by a game package', () => {
+    it('accepts a declaration-merged kind id on an entry, at the type level', () => {
         const entry: AssetManifestEntry<TacticsShaderAsset> = {
             ref: buildAssetRef<TacticsShaderAsset>('tactics', 'shaders/fog.shader.json'),
             kind: 'tactics:shader',

@@ -27,6 +27,10 @@
  * Which surface disposes which manager is enumerated in Invariant #21 and
  * not restated here.
  *
+ * The loader side is the same rule: a game registers no loader, so
+ * `AssetLoader`, `AssetLoaderRegistry` and the registry factory are not here
+ * either. What that decides and what it costs is §4.10's.
+ *
  * The sprite half of the sheet seam ships from here too, now that there is
  * something to draw with (`AnimatedSprite`, `useSpriteClipPlayer`):
  * `useSpriteAtlas` measures a loaded sheet's cells, `useSpriteAnimationSheet`
