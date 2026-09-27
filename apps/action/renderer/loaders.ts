@@ -63,12 +63,18 @@ export async function loadActionRendererGame(): Promise<LoadedRendererGame> {
  * The shell payload — everything the menu, the live background and the game's
  * own `/select` page need.
  *
- * `shellBackgroundAssets` is deliberately ABSENT while `shellAudioAssets` is
- * present, and both point at the same file when a game needs both: the
- * background renders r3f geometry with plain materials and loads no declared
- * file, so a session opened for it would build a manager with nothing to
- * resolve. What the shell DOES load is audio, and that resolves through the
- * app-level `AudioManager`, which only `shellAudioAssets` binds a delegate for.
+ * `shellBackgroundAssets` and `shellAudioAssets` point at the same file, which
+ * is the shape a game needing both takes: one shell inventory, forwarded twice.
+ * They are not interchangeable. `shellAudioAssets` binds the delegate the
+ * app-level `AudioManager` resolves a clip through; `shellBackgroundAssets` opens
+ * an asset session around the background subtree, which is what lets the scene's
+ * own components resolve a ref with `useAsset`. The background needs the second
+ * because its mirror ball reflects a declared environment map.
+ *
+ * Forwarding one inventory to both costs a duplicate warm-up: each session runs
+ * its own critical preload, so the two menu clips are fetched and decoded once
+ * per session rather than once. Accepted here rather than worked around; the sky
+ * itself is `deferred` and is warmed by neither.
  */
 export async function loadActionRendererGameShell(): Promise<LoadedRendererGameShell> {
     // Awaited, not fire-and-forget: the shell renders as soon as this resolves,
@@ -98,6 +104,7 @@ export async function loadActionRendererGameShell(): Promise<LoadedRendererGameS
         // the menu, where the buttons are the surface.
         shellBackgroundInteractive: true,
         shellAudioAssets: actionShellAssetManifest,
+        shellBackgroundAssets: actionShellAssetManifest,
         // The menu bed. Its clip declares an `outro` cue, which is what earns the
         // CUE-ALIGNED handoff into a match rather than a fade timed from the
         // moment the player pressed Start (§4.25).

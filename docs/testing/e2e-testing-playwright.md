@@ -131,6 +131,8 @@ apps/action/e2e/
 │   ├── action-snapshot.ts       # Arena reads off the projected snapshot — NOT a clock
 │   ├── attribute-timeline.ts    # MutationObserver recorder for the camera phase attributes
 │   ├── canvas-darkening.ts      # Screenshot decode + darkened-pixel count (this app's own copy)
+│   ├── canvas-hues.ts           # Lit-green pixel count, for the menu's reflected environment
+│   │                            #   map (this app's own copy)
 │   ├── enter-match.ts           # Menu → /select → a revealed match, and the Leave that ends it
 │   └── route-trace.ts           # Records the routes a window VISITS (this app's own copy)
 ├── pages/

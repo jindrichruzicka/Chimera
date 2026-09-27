@@ -65,6 +65,14 @@ vi.mock('./ActionShellCameraRig.js', () => ({
     },
 }));
 
+vi.mock('../components/ActionMenuMirror.js', () => ({
+    // Doubled for the same reason the ground plane is: this suite mounts the
+    // background outside any provider, and the real mirror resolves its sky
+    // through `useAsset`, whose context hook throws when there is none
+    // (Invariant #83). What the real one does is its own suite's.
+    ActionMenuMirror: () => <div data-testid="action-shell-mirror" />,
+}));
+
 vi.mock('../components/ActionGroundPlane.js', () => ({
     ActionGroundPlane: ({
         ground,
@@ -205,6 +213,16 @@ describe('ActionShellBackground — the scene', () => {
                 seed.shape,
             ).toBeInTheDocument();
         }
+    });
+
+    it('mounts the mirror ball inside the canvas', () => {
+        // Inside, not beside: it is a three.js mesh, so a mount outside the
+        // canvas would be a React element with nothing to render it.
+        render(<ActionShellBackground />);
+
+        expect(screen.getByTestId('action-shell-canvas')).toContainElement(
+            screen.getByTestId('action-shell-mirror'),
+        );
     });
 
     it('gives the host element a stable test id', () => {

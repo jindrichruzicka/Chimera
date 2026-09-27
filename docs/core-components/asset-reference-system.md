@@ -296,7 +296,21 @@ including a colour space, which on an HDRI is a way to be wrong.
 never mutating it. Assigning it to `scene.environment` lights every standard material in
 that scene; assigning it to one material's `envMap` lights that material alone. Three
 converts an equirectangular map to the pre-filtered form a physical material samples on
-its own, so neither route needs a helper library.
+its own, so neither route needs a helper library. `apps/action` does the second on its
+menu background, and `apps/action/e2e/tests/environment-map.spec.ts` reads the result off
+the screen.
+
+**Ship at least 64 px wide.** That pre-filtering is where a small image fails, and it
+fails silently: below that width a physical material renders BLACK, with nothing logged. A
+basic material is unaffected, because it does not pre-filter. The threshold was found by
+rendering one.
+
+**Offline is the design, and a game can still leave.** The renderer CSP declares no
+`connect-src`, so a cross-origin fetch falls to `default-src 'self'` and is refused —
+which is why this asset kind exists rather than a CDN preset. `renderer/app/layout.test.tsx`
+pins the absence. What a game CAN do is replace its own `layout.tsx` with a laxer policy:
+that route to a CDN environment map is the game's call on its own app, and the engine
+neither takes it nor forbids it.
 
 ---
 

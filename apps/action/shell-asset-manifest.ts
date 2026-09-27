@@ -1,13 +1,11 @@
-// The action app's SHELL inventory — what the menu sounds, loaded outside a
-// match (§4.25).
+// The action app's SHELL inventory — what the menu sounds and reflects, loaded
+// outside a match (§4.25, §4.10).
 //
 // A separate file from `asset-manifest.ts`, and the separation is a build fact
 // rather than taste: `validate-assets` tells a shell inventory from a match one
 // by the file's NAME, and the two shell payload fields that carry one
 // (`shellBackgroundAssets`, `shellAudioAssets`) resolve against owners the match
-// manager is not inside. The background renders r3f geometry with plain
-// materials and loads no file, so only `shellAudioAssets` is forwarded from
-// `renderer/loaders.ts`; this manifest is the audio one.
+// manager is not inside. `renderer/loaders.ts` forwards this file as both.
 //
 // Both clips are `critical`, so the shell session's own warm-up decodes them
 // before the menu needs them: a bed that streamed in after the menu painted
@@ -17,7 +15,11 @@
 // app's own constants. No renderer, no electron.
 
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
-import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
+import type {
+    AssetRef,
+    AudioClipAsset,
+    EnvironmentMapAsset,
+} from '@chimera-engine/simulation/content/AssetRef.js';
 import { audioClipEntry } from '@chimera-engine/simulation/content/audioManifest.js';
 
 import { ACTION_GAME_ID } from './simulation/constants.js';
@@ -41,6 +43,23 @@ import { ACTION_GAME_ID } from './simulation/constants.js';
 export const actionShellAudioRefs = {
     menuBed: 'action/audio/music/menu-bed.wav' as AssetRef<AudioClipAsset>,
     select: 'action/audio/sfx/select.wav' as AssetRef<AudioClipAsset>,
+} as const;
+
+/**
+ * The sky the menu's mirror sphere reflects.
+ *
+ * GENERATED, not exported from a tool: `tools/gen-action-environment-hdr.ts`
+ * emits it and a byte-equality test holds the committed file equal to that
+ * output, because a Radiance image cannot be reviewed by reading it. What the
+ * image contains, and why those hues, is that generator's to say.
+ *
+ * `deferred`, so the menu paints on its own schedule and gains the reflection
+ * when the image arrives. Nothing is wrong with the frames before it: a mirror
+ * with no environment is dark, which is the honest picture of a scene that has
+ * no sky yet.
+ */
+export const actionShellEnvironmentRefs = {
+    menuSky: 'action/environment/menu-sky.hdr' as AssetRef<EnvironmentMapAsset>,
 } as const;
 
 /**
@@ -85,5 +104,10 @@ export const actionShellAssetManifest: AssetManifest = {
         // No sheet: a 120 ms tick has no intro, no loop and no tail to name, and
         // an entry with `cues` would owe a `durationSeconds` for nothing to read.
         audioClipEntry({ ref: actionShellAudioRefs.select, priority: 'critical' }),
+        {
+            ref: actionShellEnvironmentRefs.menuSky,
+            kind: 'environment-map',
+            priority: 'deferred',
+        },
     ],
 };

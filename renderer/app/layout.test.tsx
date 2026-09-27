@@ -105,6 +105,21 @@ describe('RootLayout', () => {
         expect(content).toContain("base-uri 'none'");
     });
 
+    it('declares no connect-src, so a cross-origin fetch falls to default-src', () => {
+        // The ABSENCE is the load-bearing half, and the assertions above would
+        // not notice one being added. It is what makes an asset the engine does
+        // not serve itself unreachable — §4.10's offline environment maps rest
+        // on it — and what a game overrides by replacing this layout with its
+        // own.
+        const renderedDocument = renderLayoutDocument();
+        const content =
+            renderedDocument
+                .querySelector('meta[http-equiv="Content-Security-Policy"]')
+                ?.getAttribute('content') ?? '';
+
+        expect(content).not.toContain('connect-src');
+    });
+
     it('mounts ConnectionStatusIndicator so status is visible on every route', () => {
         const renderedDocument = renderLayoutDocument();
 

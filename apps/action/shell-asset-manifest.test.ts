@@ -22,6 +22,7 @@ import { ACTION_GAME_ID } from './simulation/constants.js';
 import {
     actionShellAssetManifest,
     actionShellAudioRefs,
+    actionShellEnvironmentRefs,
     actionShellMusicCues,
 } from './shell-asset-manifest.js';
 
@@ -44,11 +45,42 @@ describe('action shell asset manifest', () => {
         }
     });
 
-    it('declares every entry as an audio clip the shell session preloads', () => {
-        for (const entry of actionShellAssetManifest.entries) {
-            expect(entry.kind, entry.ref).toBe('audio-clip');
-            expect(entry.priority, entry.ref).toBe('critical');
+    it('preloads both clips and defers the sky', () => {
+        // The clips are 'critical' because a bed that streamed in after the menu
+        // painted would start late. The sky is not: a mirror with nothing to
+        // reflect is dark, which is a frame worth showing rather than one worth
+        // waiting for.
+        const byRef = new Map(
+            actionShellAssetManifest.entries.map((entry) => [entry.ref, entry] as const),
+        );
+
+        for (const ref of Object.values(actionShellAudioRefs)) {
+            expect(byRef.get(ref)?.kind, ref).toBe('audio-clip');
+            expect(byRef.get(ref)?.priority, ref).toBe('critical');
         }
+        expect(byRef.get(actionShellEnvironmentRefs.menuSky)?.kind).toBe('environment-map');
+        expect(byRef.get(actionShellEnvironmentRefs.menuSky)?.priority).toBe('deferred');
+    });
+
+    it('lists the sky exactly once, beside the clips', () => {
+        const refs = actionShellAssetManifest.entries.map((entry) => entry.ref);
+
+        expect(refs).toContain(actionShellEnvironmentRefs.menuSky);
+        expect(new Set(refs).size).toBe(refs.length);
+    });
+
+    it('declares nothing this file does not name', () => {
+        // Exhaustive over ENTRIES, not over the known refs: the per-ref case
+        // above says every ref it knows is declared correctly and would not
+        // notice a fourth entry appearing beside them.
+        const declared = [
+            ...Object.values(actionShellAudioRefs),
+            ...Object.values(actionShellEnvironmentRefs),
+        ];
+
+        expect(actionShellAssetManifest.entries.map((entry) => entry.ref).sort()).toEqual(
+            [...declared].sort(),
+        );
     });
 
     it('attaches the mirrored cue sheet to the BED entry', () => {

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { ACTION_GAME_ID } from './simulation/constants.js';
-import { actionShellAudioRefs } from './shell-asset-manifest.js';
+import { actionShellAudioRefs, actionShellEnvironmentRefs } from './shell-asset-manifest.js';
 
 // Locks the contract of the apps/action electron-builder packaging config. Like
 // its apps/tactics sibling it reads the YAML as text and asserts shape rather
@@ -89,10 +89,33 @@ describe('apps/action electron-builder.yml packaging config', () => {
         // The config names a DIRECTORY, so this is not a per-file allowlist to
         // keep in step — what it holds is that the directory it names is the one
         // the refs resolve into, and that the files are actually committed.
-        for (const ref of Object.values(actionShellAudioRefs)) {
+        //
+        // The environment map is in here for a reason beyond completeness: the
+        // `from: assets` block carries no extension filter, so an `.hdr` needs no
+        // packaging change to ship. This is what verifies that rather than
+        // assuming it — the file is under the directory the config names.
+        const shellRefs = [
+            ...Object.values(actionShellAudioRefs),
+            ...Object.values(actionShellEnvironmentRefs),
+        ];
+
+        for (const ref of shellRefs) {
             const relative = String(ref).slice(`${ACTION_GAME_ID}/`.length);
             expect(existsSync(path.join(appRoot, 'assets', relative)), String(ref)).toBe(true);
         }
+    });
+
+    it('filters nothing out of the game asset directory it copies', () => {
+        // A `filter:` under the assets block would turn "every committed asset
+        // ships" into "every asset the filter admits ships", and the test above
+        // could not tell the difference: it reads the repo, not the package.
+        const assetsBlock =
+            /-\s*from:\s*assets\s*\n\s*to:\s*apps\/action\/assets\s*\n([\s\S]*?)(?=\n\s*-\s|\n\S|$)/u.exec(
+                content,
+            );
+
+        expect(assetsBlock).not.toBeNull();
+        expect(assetsBlock?.[1] ?? '').not.toMatch(/filter:/u);
     });
 
     it('ships no data directory, because the app declares no content collections', () => {

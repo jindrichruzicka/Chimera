@@ -41,6 +41,7 @@ import { useSound } from '@chimera-engine/renderer/audio';
 import { getShellState, setShellDraft, useShellState } from '@chimera-engine/renderer/game';
 
 import { ActionGroundPlane } from '../components/ActionGroundPlane.js';
+import { ActionMenuMirror } from '../components/ActionMenuMirror.js';
 import { ActionPrimitiveMesh } from '../components/ActionPrimitiveMesh.js';
 import { ActionSelectionRing } from '../components/ActionSelectionRing.js';
 import {
@@ -128,6 +129,7 @@ export function ActionShellBackground(): React.ReactElement {
                     shadowCameraExtent={ACTION_ARENA_SHADOW_EXTENT}
                 />
                 {SHELL_SCENE.ground !== null && <ActionGroundPlane ground={SHELL_SCENE.ground} />}
+                <ActionMenuMirror />
                 {SHELL_SCENE.primitives.map((primitive) => (
                     <React.Fragment key={primitive.id}>
                         <ActionPrimitiveMesh

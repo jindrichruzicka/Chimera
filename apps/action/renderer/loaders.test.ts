@@ -88,13 +88,15 @@ describe('action renderer loaders', () => {
         expect(shell.shellBackgroundInteractive).toBe(true);
     });
 
-    it('declares NO background asset manifest, because the scene loads no file', async () => {
-        // A session opened for a subtree with nothing to resolve builds a
-        // manager for nothing. The primitives are r3f geometry with plain
-        // materials.
+    it('opens a background asset session over the same shell inventory', async () => {
+        // The two fields are forwarded from one file and are not
+        // interchangeable: the audio one binds the delegate a clip resolves
+        // through, this one puts an asset session around the background subtree
+        // so its own components can resolve a ref. The menu's mirror ball needs
+        // the second.
         const shell = await loadActionRendererGameShell();
 
-        expect(shell.shellBackgroundAssets).toBeUndefined();
+        expect(shell.shellBackgroundAssets).toBe(actionShellAssetManifest);
     });
 
     it('opens the shell audio session over the shell inventory', async () => {

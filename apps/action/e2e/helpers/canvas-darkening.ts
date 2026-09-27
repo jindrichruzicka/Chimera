@@ -17,7 +17,7 @@ export interface CanvasRgbaFrame {
 }
 
 /** Below this alpha a pixel is treated as not drawn. */
-const MIN_VISIBLE_ALPHA = 32;
+export const MIN_VISIBLE_ALPHA = 32;
 
 /** Decode a PNG screenshot buffer into a full-resolution RGBA frame. */
 export function decodePngToRgbaFrame(encodedPng: Buffer): CanvasRgbaFrame {
@@ -64,7 +64,8 @@ function channelSum(rgba: ArrayLike<number>, pixelOffset: number): number {
     return (rgba[pixelOffset] ?? 0) + (rgba[pixelOffset + 1] ?? 0) + (rgba[pixelOffset + 2] ?? 0);
 }
 
-function assertValidFrame(frame: CanvasRgbaFrame): void {
+/** Throws unless `frame`’s byte count matches the size it declares. */
+export function assertValidFrame(frame: CanvasRgbaFrame): void {
     const expectedChannelCount = frame.width * frame.height * 4;
     if (frame.rgba.length !== expectedChannelCount) {
         throw new Error(
