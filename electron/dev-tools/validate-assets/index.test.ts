@@ -4,6 +4,8 @@ import { dirname, join, relative, sep } from 'node:path';
 import type { AudioClipMetadata } from '@chimera-engine/simulation/foundation/audio-cue-sheet.js';
 import { describe, expect, it, vi } from 'vitest';
 
+import { ENGINE_ASSET_LOADER_KIND_IDS } from '@chimera-engine/simulation/foundation/engine-asset-kinds.js';
+
 import { createTempDir } from '../__test-support__/tempDir.js';
 
 import {
@@ -176,16 +178,13 @@ describe('validateAssetWorkspace', () => {
     });
 
     it('accepts an entry under every kind the engine registers a loader for', async () => {
-        // One entry per kind, so dropping any single member of the gate's set
-        // turns that entry's kind unknown and reds this case.
-        const entries = [
-            ['texture', 'textures/grass.webp'],
-            ['audio-clip', 'audio/theme.ogg'],
-            ['gltf-model', 'models/rig.glb'],
-            ['sprite-sheet', 'sprites/hero.png'],
-            ['particle-config', 'particles/spark.json'],
-            ['environment-map', 'environment/sky.hdr'],
-        ] as const;
+        // One entry per declared kind, taken from the declaration itself, so a
+        // kind added to it cannot arrive without an acceptance row here. The
+        // paths carry no extension the gate reads — it has no extension
+        // allow-list, which the pair of cases below pins.
+        const entries = ENGINE_ASSET_LOADER_KIND_IDS.map(
+            (kind) => [kind, `fixtures/${kind}.asset`] as const,
+        );
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
@@ -217,6 +216,70 @@ describe('validateAssetWorkspace', () => {
         expect(report.unknownKinds).toEqual([]);
         expect(report.ok).toBe(true);
         expect(report.checkedRefs).toBe(entries.length);
+    });
+
+    it('reports a missing environment map like any other missing ref', async () => {
+        // A pin, not new behaviour: refs are resolved against disk without
+        // regard to kind, so the HDRI a game forgot to commit is reported by
+        // the same walk that reports a missing texture.
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
+                files: {
+                    'apps/tactics/asset-manifest.ts': `
+                        export const tacticsAssetManifest = {
+                            gameId: 'tactics',
+                            entries: [
+                                { ref: 'tactics/environment/sky.hdr', kind: 'environment-map', priority: 'deferred' },
+                            ],
+                        };
+                    `,
+                },
+            }),
+        });
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(report.missing.map((reference) => reference.ref)).toEqual([
+            'tactics/environment/sky.hdr',
+        ]);
+        expect(report.unknownKinds).toEqual([]);
+        expect(report.ok).toBe(false);
+        expect(output).toContain('apps/tactics/assets/environment/sky.hdr');
+    });
+
+    it.each([
+        ['an environment map under a texture kind', 'environment/sky.hdr', 'texture'],
+        ['a PNG under the environment-map kind', 'environment/sky.png', 'environment-map'],
+    ])('accepts %s, because no extension allow-list exists', async (_label, relativePath, kind) => {
+        // Both of these are authoring mistakes the RUNTIME catches — the first
+        // decodes an HDRI as an image, the second is refused by the
+        // environment-map loader. Neither is this tool's to catch, and a rule
+        // that made it so would be a new restriction on every kind at once,
+        // needing its own justification. Pinned so introducing one is a
+        // deliberate act rather than a side effect.
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
+                files: {
+                    'apps/tactics/asset-manifest.ts': `
+                        export const tacticsAssetManifest = {
+                            gameId: 'tactics',
+                            entries: [
+                                { ref: 'tactics/${relativePath}', kind: '${kind}', priority: 'deferred' },
+                            ],
+                        };
+                    `,
+                    [`apps/tactics/assets/${relativePath}`]: '',
+                },
+            }),
+        });
+
+        expect(report.unknownKinds).toEqual([]);
+        expect(report.missing).toEqual([]);
+        expect(report.ok).toBe(true);
     });
 
     it('refuses a game-declared kind even where the game ships a loader beside it', async () => {

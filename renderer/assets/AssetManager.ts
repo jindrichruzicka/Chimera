@@ -391,15 +391,28 @@ export function createAssetManager(
     return new DefaultAssetManager(resolver, loaderRegistry, manifest);
 }
 
-export function createDefaultAssetLoaderRegistry(): AssetLoaderRegistry {
-    return createAssetLoaderRegistry([
+/**
+ * The loaders {@link createDefaultAssetLoaderRegistry} is built from.
+ *
+ * Exported for one reader: the guard holding the registered kinds equal to
+ * `ENGINE_ASSET_LOADER_KIND_IDS`, the list `validate:assets` refuses a manifest
+ * kind against. It hands over the LOADERS rather than their kind ids so there is
+ * no second list to drift — the guard reads `kind` off the same objects the
+ * registry is built from, and any edit here moves both at once.
+ */
+export function defaultAssetLoaders(): readonly AssetLoader[] {
+    return [
         new TextureAssetLoader(),
         new GltfAssetLoader(),
         new SpriteSheetAssetLoader(),
         new AudioClipAssetLoader(),
         new ParticleConfigAssetLoader(),
         new EnvironmentMapAssetLoader(),
-    ]);
+    ];
+}
+
+export function createDefaultAssetLoaderRegistry(): AssetLoaderRegistry {
+    return createAssetLoaderRegistry(defaultAssetLoaders());
 }
 
 /**

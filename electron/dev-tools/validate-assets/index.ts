@@ -37,6 +37,7 @@ import {
     MalformedAssetRefError,
     parseAssetRef,
 } from '@chimera-engine/simulation/foundation/asset-ref-parse.js';
+import { ENGINE_ASSET_LOADER_KIND_IDS } from '@chimera-engine/simulation/foundation/engine-asset-kinds.js';
 
 import { isDirectInvocation } from '../dev-harness/harness.js';
 
@@ -253,19 +254,15 @@ const SPRITE_SHEET_KIND = 'sprite-sheet';
 const assetRefCandidatePattern = /^[^\0/]+\/[^\0]*$/u;
 const externalOrAbsoluteAssetPattern = /^(?:[A-Za-z][A-Za-z0-9+.-]*:|\/)/u;
 /**
- * Every asset kind the engine registers a loader for — the membership set this
- * gate checks a manifest's kinds against, because asset loaders are the engine's
- * and a game registers none. The runtime side is
- * `createDefaultAssetLoaderRegistry` in the renderer's asset layer.
+ * The membership set this gate checks a manifest's kinds against, because asset
+ * loaders are the engine's and a game registers none.
+ *
+ * Taken from the shared declaration rather than restated here: the runtime side
+ * is `createDefaultAssetLoaderRegistry` in the renderer's asset layer, which no
+ * published subpath exposes, and a second copy is how the gate comes to refuse a
+ * kind the engine loads.
  */
-const engineAssetLoaderKinds = new Set([
-    'texture',
-    'audio-clip',
-    'gltf-model',
-    'sprite-sheet',
-    'particle-config',
-    'environment-map',
-]);
+const engineAssetLoaderKinds: ReadonlySet<string> = new Set(ENGINE_ASSET_LOADER_KIND_IDS);
 
 export async function validateAssetWorkspace(
     options: ValidateAssetWorkspaceOptions,
