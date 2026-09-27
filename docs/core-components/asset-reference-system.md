@@ -291,6 +291,14 @@ sampling vocabulary is otherwise the same one `texture` entries declare
 applied in the loader before publication, so whatever the entry declares still wins —
 including a colour space, which on an HDRI is a way to be wrong.
 
+That linear tag has to survive the route a scene hands the texture to, and `envMap` is
+one of the slots r3f re-tags sRGB. What spares it is the TYPE the decoder emits, not the
+slot, so the claim needs two files:
+`renderer/components/r3f/__tests__/r3f-texture-color-space.test.tsx` puts an 8-bit and a
+half-float texture on that same slot and holds that only the first is re-tagged, and
+`renderer/assets/AssetManager.environmentMap.test.ts` holds that the decoder emits the
+second.
+
 **Reaching it from a scene.** The texture is a cached shared asset like any other
 (Invariant #21): a component resolves it with `useAsset` and hands it to the renderer,
 never mutating it. Assigning it to `scene.environment` lights every standard material in
@@ -311,6 +319,14 @@ which is why this asset kind exists rather than a CDN preset. `renderer/app/layo
 pins the absence. What a game CAN do is replace its own `layout.tsx` with a laxer policy:
 that route to a CDN environment map is the game's call on its own app, and the engine
 neither takes it nor forbids it.
+
+**What the offline proof establishes, and where it stops.** `environment-map.spec.ts`
+records the URLs the app's session requests and asserts every scheme is one the app serves
+itself, so what it shows is that nothing was asked of the network — not that an attempt
+would have been refused. Its recorder attaches after the app has booted, which it states
+at its own site.
+The packaged side is read from the build config rather than out of a package, by
+`apps/action/electron-builder.test.ts`.
 
 ---
 
