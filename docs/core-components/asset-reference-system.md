@@ -314,6 +314,51 @@ neither takes it nor forbids it.
 
 ---
 
+### GPU-compressed textures are out, for now
+
+There is no `.ktx2` or Basis asset kind, and a game should plan for UNCOMPRESSED
+texture memory: an 8-bit RGBA image costs `width × height × 4` bytes on the GPU, plus a
+third again if it carries mipmaps, and a physically-based material set is several images
+per material. What the engine does offer against that is fewer or smaller images, and the
+mipmap third — `generateMipmaps` is declarable per entry
+([Per-entry texture sampling](#per-entry-texture-sampling)).
+
+**What decided it was not packaging.** Both apps' electron-builder configs copy their
+asset directory with no extension filter, so a compressed file ships with no config
+change, and the transcoder would be served from the app's own protocol like anything else
+under `assets/`. A `.wasm` content-type row is not needed for it either: `KTX2Loader`
+reads the binary as an arraybuffer and hands it to the transcoder, which compiles from
+those bytes rather than streaming a response — for the reason
+[Environment maps](#environment-maps) gives about its own rows.
+
+**The obstacle is where the asset layer sits.** three's `KTX2Loader` refuses to load or
+even to parse without `detectSupport(renderer)` — the renderer is what tells it which
+compressed formats the GPU accepts, so it is needed to choose a transcode target before
+any byte is decoded. Managers are built outside a canvas (Invariant #21 enumerates their
+owners), and a game that mounts no canvas never creates a `WebGLRenderer` at all. A
+compressed-texture loader would therefore need the GPU device carried into a layer that
+today knows nothing about it, which is a new dependency direction and a change to the
+shape of `AssetLoader`.
+
+`renderer/assets/__tests__/compressed-texture-premise.test.ts` holds that refusal to load
+without a renderer against the installed three, so this paragraph reds rather than ages if
+the requirement goes away.
+
+**A second cost, unmeasured.** `KTX2Loader` transcodes in a worker it creates from a
+`blob:` URL. Read against the shipped policy — `default-src 'self'`, with no `worker-src`
+and no `blob:` — that does not look admitted, but nothing here has run it to find out. A
+yes would have to settle it before anything else; it is recorded so the next reader starts
+from it rather than rediscovering it.
+
+**Nothing is half-built**, deliberately: a partial surface would be a game's first sign
+that the answer was yes.
+
+**What would reopen it** is a game whose texture memory is measured and does not fit,
+together with a decision about how the renderer reaches the asset layer and what the CSP
+above admits. The measurement is what would justify the work; the other two are the work.
+
+---
+
 ## `AssetResolver` — Environment-Aware URL Resolution
 
 ```typescript
