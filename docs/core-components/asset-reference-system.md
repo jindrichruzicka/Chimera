@@ -298,7 +298,7 @@ one of the slots r3f re-tags sRGB. What spares it is the TYPE the decoder emits,
 slot, so the claim needs two files:
 `renderer/components/r3f/__tests__/r3f-texture-color-space.test.tsx` puts an 8-bit and a
 half-float texture on that same slot and holds that only the first is re-tagged, and
-`renderer/assets/AssetManager.environmentMap.test.ts` holds that the decoder emits the
+`renderer/assets/AssetManager.environmentMap.test.ts` holds that both decoders emit the
 second.
 
 **Reaching it from a scene.** The texture is a cached shared asset like any other
