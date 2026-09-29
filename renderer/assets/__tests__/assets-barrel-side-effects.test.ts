@@ -82,6 +82,7 @@ describe('@chimera-engine/renderer/assets barrel', () => {
             'MalformedModelAssetError',
             'NoActiveGameSessionError',
             'UnknownAssetManifestEntryError',
+            'UnsupportedEnvironmentMapFormatError',
             'parseSpriteAtlas',
             'useAnimationSheet',
             'useAsset',

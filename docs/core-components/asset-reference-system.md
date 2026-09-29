@@ -272,9 +272,11 @@ manifest authored, rather than whatever the resolver produced for it — and eac
 imported inside its own branch, so neither is named on a path that does not use it.
 Any other extension rejects the load with
 `UnsupportedEnvironmentMapFormatError`, which names both what was refused and what is
-loadable. Radiance is served as `image/vnd.radiance` and OpenEXR as `image/x-exr`;
-neither row is what makes the load work, since both decoders read the file as an
-arraybuffer and never consult the content type.
+loadable. The class is on the `@chimera-engine/renderer/assets` barrel, so a game
+recognises this refusal with `instanceof` against the `error` `useAsset` reports.
+Radiance is served as `image/vnd.radiance` and OpenEXR as `image/x-exr`; neither row
+is what makes the load work, since both decoders read the file as an arraybuffer and
+never consult the content type.
 
 **Equirectangular only.** One image wrapping the sphere is what this kind means, and
 the mapping is written by the loader rather than left to the entry: three's default for

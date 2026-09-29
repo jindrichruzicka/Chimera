@@ -59,6 +59,7 @@ export {
 } from './ModelInstance.js';
 export {
     UnknownAssetManifestEntryError,
+    UnsupportedEnvironmentMapFormatError,
     type AssetManager,
     type LoadedGltfAsset,
     type LoadedSpriteSheetAsset,

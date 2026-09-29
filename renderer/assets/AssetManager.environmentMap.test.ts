@@ -200,9 +200,7 @@ describe('the environment-map loader', () => {
         await expect(manager.load(ref)).rejects.toThrow(/\.png/u);
         await expect(manager.load(ref)).rejects.toThrow(/\.hdr/u);
         await expect(manager.load(ref)).rejects.toThrow(/\.exr/u);
-        // error.name is consumer-visible: the logging pipeline serialises it,
-        // and it is all a log reader gets — the class is not on the assets
-        // barrel for a game to recognise.
+        // error.name is consumer-visible: the logging pipeline serialises it.
         await expect(manager.load(ref)).rejects.toHaveProperty(
             'name',
             'UnsupportedEnvironmentMapFormatError',
