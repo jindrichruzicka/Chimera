@@ -1375,8 +1375,7 @@ describe('blank template shell contributions', () => {
 
     it('forwards that inventory as both shell fields a menu resolves through', async () => {
         // The two fields publish to different owners — the background's manager
-        // goes to its own subtree, the audio one becomes the app-level
-        // delegate — so a game that wants both points both at this one file.
+        // goes to its own subtree, the audio one becomes the app-level delegate.
         const shell = await shellPayloadFields();
         expect(shell.get('shellAudioAssets')).toBe('__gameCamel__ShellAssetManifest');
         expect(shell.get('shellBackgroundAssets')).toBe('__gameCamel__ShellAssetManifest');

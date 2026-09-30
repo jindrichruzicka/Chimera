@@ -14,11 +14,11 @@
 // plays, or the first texture a menu background loads, is one entry below and
 // nothing else. The two fields resolve through different owners (the
 // background's manager publishes to its own subtree; the audio one becomes the
-// app-level delegate the sound hooks reach), which is why a game that wants both
-// points both at this one file. Forwarding `shellAudioAssets` while it is empty
-// is not free the way an absent field is: the engine opens an asset session over
-// it on the shell screens. It resolves nothing and sounds nothing, and it is
-// what makes the first clip added below play without a second edit.
+// app-level delegate the sound hooks reach). Forwarding `shellAudioAssets`
+// while it is empty is not free the way an absent field is: the engine opens an
+// asset session over it on the shell screens. It resolves nothing and sounds
+// nothing, and it is what makes the first clip added below play without a
+// second edit.
 //
 // The ref grammar, the `kind` set and the `priority` choice are the ones
 // `asset-manifest.ts` writes out in full; a ref declared here resolves under
