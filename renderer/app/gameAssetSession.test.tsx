@@ -5,12 +5,12 @@ import { act, cleanup, render, renderHook, waitFor } from '@testing-library/reac
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
 import type {
-    AssetRef,
-    AudioClipAsset,
-    GLTFModelAsset,
-} from '@chimera-engine/simulation/content/AssetRef.js';
+    AssetManifest,
+    AssetManifestEntry,
+} from '@chimera-engine/simulation/content/AssetManifest.js';
+import type { AssetRef, GLTFModelAsset } from '@chimera-engine/simulation/content/AssetRef.js';
+import { ENGINE_ASSET_LOADER_KIND_IDS } from '@chimera-engine/simulation/foundation/engine-asset-kinds.js';
 
 import type { AssetManager } from '../assets/AssetManager';
 import * as assetManagerModule from '../assets/AssetManager';
@@ -39,14 +39,36 @@ function manifestWith(gameId: string): AssetManifest {
     };
 }
 
-const CRITICAL_REF = 'demo/audio/music/bed.wav' as AssetRef<AudioClipAsset>;
+const CRITICAL_REF = 'demo/models/hero.glb' as AssetRef<GLTFModelAsset>;
 
 /** One critical entry alongside the deferred one, so the priority filter is falsifiable. */
 function manifestWithCriticalEntry(gameId: string): AssetManifest {
     const base = manifestWith(gameId);
     return {
         gameId: base.gameId,
-        entries: [{ ref: CRITICAL_REF, kind: 'audio-clip', priority: 'critical' }, ...base.entries],
+        entries: [{ ref: CRITICAL_REF, kind: 'gltf-model', priority: 'critical' }, ...base.entries],
+    };
+}
+
+/**
+ * One CRITICAL entry of every kind the engine loads, each under its own ref and
+ * carrying its kind as metadata. Built from the engine's own kind list, so a kind
+ * added there is warmed here without an edit.
+ */
+function manifestWithEveryCriticalKind(gameId: string): AssetManifest {
+    return {
+        gameId,
+        // Cast per entry: the entry type ties each ref's brand to its kind, which a
+        // ref minted from the kind id cannot state.
+        entries: ENGINE_ASSET_LOADER_KIND_IDS.map(
+            (kind) =>
+                ({
+                    ref: `${gameId}/every-kind/${kind}`,
+                    kind,
+                    priority: 'critical',
+                    metadata: { probe: kind },
+                }) as AssetManifestEntry,
+        ),
     };
 }
 
@@ -294,6 +316,44 @@ describe('GameAssetSession', () => {
         expect(loadedRefs).toEqual([CRITICAL_REF]);
     });
 
+    it('warms every critical kind except the audio clip', async () => {
+        // Why the clip is left out is §4.10's (Where the critical preload runs).
+        const { loadedRefs } = instrumentAssetManagers();
+        const manifest = manifestWithEveryCriticalKind('demo');
+
+        render(
+            <GameAssetSession assetManifest={manifest}>
+                <span data-testid="child" />
+            </GameAssetSession>,
+        );
+        await settleSession();
+
+        expect(loadedRefs).toEqual(
+            manifest.entries
+                .filter((entry) => entry.kind !== 'audio-clip')
+                .map((entry) => String(entry.ref)),
+        );
+    });
+
+    it('keeps the clip it did not warm registered, so its subtree can still load it', async () => {
+        instrumentAssetManagers();
+        const capture = captureManager();
+
+        render(
+            <GameAssetSession assetManifest={manifestWithEveryCriticalKind('demo')}>
+                <capture.Probe />
+            </GameAssetSession>,
+        );
+        await settleSession();
+
+        // Read AFTER the warm-up, which re-registers the manifest it is handed:
+        // one that DROPPED the clip instead of leaving it to load on demand
+        // would have unregistered it, and a `useAsset` of it would reject.
+        expect(
+            capture.manager().getManifestMetadata('demo/every-kind/audio-clip' as AssetRef),
+        ).toEqual({ probe: 'audio-clip' });
+    });
+
     it('never loads into a manager it has already disposed when the manifest identity changes', async () => {
         // The manager lives in state, so a naive preload effect reads the
         // PREVIOUS manager on the render that changes the manifest — after this
@@ -324,9 +384,7 @@ describe('GameAssetSession', () => {
     it('reports nothing when its own teardown fails a preload still in flight', async () => {
         // Tearing this session down disposes the manager it owns, and every
         // load still in flight rejects with that. A teardown is not a failure,
-        // so the session must abandon its preload's REPORT in the same cleanup;
-        // without that, an ordinary unmount mid-bed logs an `asset-preload`
-        // error.
+        // so the session must abandon its preload's REPORT in the same cleanup.
         //
         // TWO sessions failed by one stimulus, differing in one thing — only
         // the first tears down. The second is the control leg, and it is what

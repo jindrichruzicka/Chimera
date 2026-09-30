@@ -86,6 +86,26 @@ export function useRendererGameAssetManager(
     );
 }
 
+/**
+ * `assetManifest` as a {@link GameAssetSession} warms it: every `audio-clip`
+ * entry left to load on demand, whatever priority it declares.
+ *
+ * Why clips, and what the rule leaves duplicated, is §4.10's (Where the
+ * critical preload runs).
+ *
+ * Demoted rather than dropped: `preloadCritical` re-registers the manifest it is
+ * handed, so dropping the entry would unregister the clip, and a subtree that
+ * loads it directly must still resolve it.
+ */
+function withoutAudioClipWarmUp(assetManifest: AssetManifest): AssetManifest {
+    return {
+        gameId: assetManifest.gameId,
+        entries: assetManifest.entries.map((entry) =>
+            entry.kind === 'audio-clip' ? { ...entry, priority: 'deferred' } : entry,
+        ),
+    };
+}
+
 export interface GameAssetSessionProps {
     readonly assetManifest: AssetManifest;
     readonly children: ReactNode;
@@ -124,9 +144,9 @@ export function GameAssetSession({
         const manager = createRendererGameAssetManager(assetManifest);
         setAssetManager(manager);
         // The §4.10 critical preload for a session with no `GameShell` above
-        // it. GameShell runs the same warm-up for a match; nothing else would
-        // run it here, so a game marking a ref critical for a route like this
-        // would otherwise get the deferred behaviour it declared against.
+        // it, less the audio clips (`withoutAudioClipWarmUp`). Nothing else
+        // would run it here, so a game marking a ref critical for a route like
+        // this would otherwise get the deferred behaviour it declared against.
         //
         // Started HERE, in the effect that owns the manager, rather than from
         // `useCriticalAssetPreload` beside it: React runs every cleanup before
@@ -137,7 +157,10 @@ export function GameAssetSession({
         // keeps the dispose's rejections out of the log; the two statements'
         // relative order does not matter, since the rejection lands a microtask
         // later than both.
-        const abandonPreload = startCriticalAssetPreload(manager, assetManifest);
+        const abandonPreload = startCriticalAssetPreload(
+            manager,
+            withoutAudioClipWarmUp(assetManifest),
+        );
 
         return () => {
             abandonPreload();

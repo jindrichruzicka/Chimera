@@ -596,7 +596,10 @@ uses, so `useAsset` / `useModelInstance` / `useAnimationSheet` resolve on `main-
 `lobby` and every declared `page`. The session is **keyed to the mount**:
 
 - It is built in a commit-phase effect when the background mounts (Invariant #21), and it runs that
-  manifest's critical preload (§4.10), exactly as it does for a page.
+  manifest's critical preload (§4.10), exactly as it does for a page. That preload skips audio
+  clips, which is what a game forwarding the same inventory as `shellAudioAssets` needs to know:
+  [§4.10](asset-reference-system.md#where-the-critical-preload-runs) says why, and what both
+  sessions still warm.
 - It is disposed when the background unmounts, which the shell-state surface flip off a background
   surface does in one render — so no background session survives into a match, and there is no warm
   cache across `/game`. What that flip is NOT is simultaneous with the router's: `ShellStateBridge`

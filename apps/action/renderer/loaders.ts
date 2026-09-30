@@ -63,18 +63,17 @@ export async function loadActionRendererGame(): Promise<LoadedRendererGame> {
  * The shell payload — everything the menu, the live background and the game's
  * own `/select` page need.
  *
- * `shellBackgroundAssets` and `shellAudioAssets` point at the same file, which
- * is the shape a game needing both takes: one shell inventory, forwarded twice.
- * They are not interchangeable. `shellAudioAssets` binds the delegate the
+ * `shellBackgroundAssets` and `shellAudioAssets` point at the same file. They
+ * are not interchangeable. `shellAudioAssets` binds the delegate the
  * app-level `AudioManager` resolves a clip through; `shellBackgroundAssets` opens
  * an asset session around the background subtree, which is what lets the scene's
  * own components resolve a ref with `useAsset`. The background needs the second
  * because its mirror ball reflects a declared environment map.
  *
- * Forwarding one inventory to both costs a duplicate warm-up: each session runs
- * its own critical preload, so the two menu clips are fetched and decoded once
- * per session rather than once. Accepted here rather than worked around; the sky
- * itself is `deferred` and is warmed by neither.
+ * Each session runs its own critical preload over this inventory. The two menu
+ * clips are warmed by the audio session alone, since a background session leaves
+ * audio clips to load on demand (§4.10); the sky is `deferred` and is warmed by
+ * neither.
  */
 export async function loadActionRendererGameShell(): Promise<LoadedRendererGameShell> {
     // Awaited, not fire-and-forget: the shell renders as soon as this resolves,

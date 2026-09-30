@@ -500,7 +500,21 @@ export interface AssetManager {
 | ----------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | `GameShell` (`useGameAssetManager`) | the match-level manager — injected by `/game` and `/replays/player`, or the fallback it builds | the `assetManifest` prop                  |
 | `GameAssetSession`                  | the manager it builds for a subtree with no `GameShell` above it                               | its `assetManifest` prop                  |
+| `ShellAudioSession`                 | the manager it builds and binds as the app-level delegate on shell surfaces (§4.25)            | the shell payload's `shellAudioAssets`    |
 | `/game`, `/replays/player`          | the manager the route builds and then injects into `GameShell`                                 | the loaded game's, promoted (gate, below) |
+
+**A subtree session does not warm audio clips.** `GameAssetSession` treats every `audio-clip`
+entry as `deferred` for its warm-up, and for nothing else: the manager still registers the entry,
+so a subtree that loads the clip directly still resolves it. `AudioManager` loads a clip through the
+app-level delegate, and a `GameAssetSession` never registers as that delegate (Invariant #21), so a
+clip it warmed is not one `AudioManager` plays. This is what stops a game that forwards one shell
+inventory as both `shellAudioAssets` and `shellBackgroundAssets` from decoding its menu bed twice.
+Every other critical entry in that inventory is still warmed by both sessions, because each
+session's manager has a reader that can ask for those kinds; that duplicate is accepted, and it is
+bounded by what the game marks `critical`. A game that wants to avoid it can forward a separate,
+background-only inventory as `shellBackgroundAssets` instead: a `shell-asset-manifest.ts` is
+discovered by its whole basename at any depth under `apps/`, so one in a subdirectory is validated
+too. `renderer/__tests__/shell-shared-inventory-warm-up.test.tsx` counts what each session loads.
 
 The module exposes the preload three ways. Two of them differ by where the caller allocates its
 manager. `useCriticalAssetPreload` is the effect wrapper, for a manager whose identity moves in the

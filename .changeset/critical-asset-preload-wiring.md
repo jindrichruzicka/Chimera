@@ -30,12 +30,9 @@ Properties of that call that callers can rely on:
   dropped, leaving the deferred on-demand path intact. A teardown-time rejection (the
   owner disposing the manager it owns) reports nothing.
 
-Two consequences worth naming for adopters. A `GameShell` handed a manifest with a
-critical entry and **no** `assetManager` now reports its fallback manager's unconfigured
-resolver, where it previously stayed silent — that combination can never load anything.
-And any route mounting `GameAssetSession` with a manifest now pays for that manifest's
-critical entries, whatever the route renders: in this repo the Tactics `/model-showcase`
-route fetches and decodes the two ambience beds it does not use.
+A `GameShell` handed a manifest with a critical entry and **no** `assetManager` now
+reports its fallback manager's unconfigured resolver, where it previously stayed silent —
+that combination can never load anything.
 
 Scene-level `requiredAssets` promotion (`markRequiredAssetsCritical`, the
 `TransitionOverlay` progress gate) is a separate arm; the scene transitions doc
