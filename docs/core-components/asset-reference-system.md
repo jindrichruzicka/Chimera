@@ -365,10 +365,9 @@ without a renderer against the installed three, so this paragraph reds rather th
 the requirement goes away.
 
 **A second cost, unmeasured.** `KTX2Loader` transcodes in a worker it creates from a
-`blob:` URL. Read against the shipped policy — `default-src 'self'`, with no `worker-src`
-and no `blob:` — that does not look admitted, but nothing here has run it to find out. A
-yes would have to settle it before anything else; it is recorded so the next reader starts
-from it rather than rediscovering it.
+`blob:` URL. Read against the shipped policy (`renderer/app/layout.tsx`), that does not
+look admitted, but nothing here has run it to find out. A yes would have to settle it before
+anything else; it is recorded so the next reader starts from it rather than rediscovering it.
 
 **Nothing is half-built**, deliberately: a partial surface would be a game's first sign
 that the answer was yes.
