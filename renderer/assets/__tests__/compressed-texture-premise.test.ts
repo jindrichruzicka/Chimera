@@ -78,8 +78,6 @@ function createWorkerScope(): {
     readonly messageListeners: ((event: { readonly data: unknown }) => void)[];
 } {
     const wasm = installedBasisFile('basis_transcoder.wasm');
-    // Answers like a served file, so the streaming branch — when it is taken —
-    // goes on to hand the response to `instantiateStreaming`.
     const fetched = vi.fn(async () => ({
         ok: true,
         arrayBuffer: async () =>
@@ -143,7 +141,7 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-describe("the premise behind §4.10's compressed-texture decision", () => {
+describe("§4.10's compressed-texture decision", () => {
     it('refuses to load without a renderer handed to detectSupport', () => {
         // The asset layer builds its loaders in `createDefaultAssetLoaderRegistry`,
         // reached from managers built outside any canvas (Invariant #21 enumerates
@@ -216,7 +214,7 @@ describe("the premise behind §4.10's compressed-texture decision", () => {
         loader.dispose();
     });
 
-    it('streams in that same scope when no binary is handed over', async () => {
+    it('streams when no binary is handed over', async () => {
         // The control for the case above: without it, "never streamed" could just
         // as well mean this scope cannot observe a stream at all.
         const worker = createWorkerScope();

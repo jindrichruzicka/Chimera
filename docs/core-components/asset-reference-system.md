@@ -348,8 +348,8 @@ under `assets/`. A `.wasm` content-type row is not needed for it either: `KTX2Lo
 reads the binary as an arraybuffer and hands it to the transcoder, which compiles from
 those bytes rather than streaming a response — for the reason
 [Environment maps](#environment-maps) gives about its own rows. The premise file named
-below holds that against the installed three by running the worker `KTX2Loader` builds:
-the transcoder compiles from the bytes it was posted, and neither fetches nor streams.
+below holds that against the installed three: the transcoder compiles from the bytes it was
+posted, and neither fetches nor streams.
 
 **The obstacle is where the asset layer sits.** three's `KTX2Loader` refuses to load or
 even to parse without `detectSupport(renderer)` — the renderer is what tells it which
