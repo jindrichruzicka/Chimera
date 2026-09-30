@@ -9,8 +9,7 @@ every asset owner there is: the manager in context on `main-menu`, `settings`,
 `lobby` and a game's declared pages is the app-level `DelegatingAssetManager`, which
 held no background manifest, so a background's `useAsset` / `useModelInstance` /
 `useAnimationSheet` rejected `NoActiveGameSessionError`. With the manifest declared
-they resolve against the game's own manager, and that manifest's critical entries are
-preloaded like a page's.
+they resolve against the game's own manager.
 
 The session is reused, not rebuilt: `GameAssetSession` already owns the one-effect
 allocate → preload → abandon → dispose lifecycle a manager with no `GameShell` above
