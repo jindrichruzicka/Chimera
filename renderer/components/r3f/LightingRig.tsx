@@ -14,14 +14,14 @@
  *
  * `castShadow` is the LIGHT's half of the shadow switch. The canvas half is the
  * shadow quality `<GameCanvas>` resolves, and the rig reads that same
- * resolution to size its key light's shadow map and to stop casting at `off` —
- * camera-system.md §4.22 "Lighting".
+ * resolution to size its key light's shadow map, and at `off` to stop casting
+ * and release that map — camera-system.md §4.22 "Lighting".
  */
 
 import React from 'react';
 import type { DirectionalLight } from 'three';
 import type { Vector3Tuple } from '../../types/r3f-types.js';
-import { resizeShadowMap, shadowMapSize } from './rendererConfig.js';
+import { releaseShadowMap, resizeShadowMap, shadowMapSize } from './rendererConfig.js';
 import { useCanvasShadowQuality } from './shadowQualityContext.js';
 
 export type LightingRigProps = Readonly<{
@@ -62,10 +62,15 @@ export function LightingRig({
 
     // A layout effect, so the size is on the light before the frame that
     // renders it — and a changed quality reaches a mounted light without a
-    // remount.
+    // remount. At `off` the light stops casting, so the map built at the last
+    // quality is released rather than held, and its size is kept for a return.
     React.useLayoutEffect(() => {
         const keyLight = keyLightRef.current;
-        if (keyLight === null || mapSize === null) {
+        if (keyLight === null) {
+            return;
+        }
+        if (mapSize === null) {
+            releaseShadowMap(keyLight.shadow);
             return;
         }
         resizeShadowMap(keyLight.shadow, mapSize);

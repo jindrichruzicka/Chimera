@@ -476,13 +476,14 @@ export type LightingRigProps = Readonly<{
 
 | Resolved quality | Key light shadow map |
 | ---------------- | -------------------- |
-| `off`            | not cast             |
+| `off`            | not cast; released   |
 | `basic`          | 512 × 512            |
 | `percentage`     | 1024 × 1024          |
 | `soft`           | 2048 × 2048          |
 | `variance`       | 2048 × 2048          |
 
 - **A quality change applies live, without a remount**: the rig releases the shadow map built at the old size, and the next frame allocates one at the new size.
+- **A change to `off` releases the map** and any blur pass, and keeps the map's size, so a return to the same quality allocates at that size.
 - The rig reads the resolution from the `GameCanvas` it is mounted in, so mounting it outside one throws.
 - The route reaches the rig's key light only. A hand-rolled light's shadow map size is the game's to author.
 - **Hand-rolled lights remain supported.** The rig renders ordinary r3f lights and suppresses nothing, so a game adds its own lights beside it as siblings — or skips the rig and writes its lights exactly as before.

@@ -18,6 +18,7 @@ import { installFakeDisplay } from './__test-support__/fakeDisplay';
 import {
     applyColorConfig,
     readDeviceRatio,
+    releaseShadowMap,
     resizeShadowMap,
     resolveRenderScale,
     resolveShadowQuality,
@@ -144,10 +145,82 @@ describe('resizeShadowMap', () => {
     });
 });
 
+describe('releaseShadowMap', () => {
+    it('disposes the map, its depth texture and the blur pass, and nulls both fields', () => {
+        const { shadow } = new DirectionalLight();
+        const allocated = plantShadowTargets(shadow);
+
+        releaseShadowMap(shadow);
+
+        expect(shadow.map).toBeNull();
+        expect(shadow.mapPass).toBeNull();
+        expect(allocated.depthTextureDispose).toHaveBeenCalledOnce();
+        expect(allocated.mapDispose).toHaveBeenCalledOnce();
+        expect(allocated.mapPassDispose).toHaveBeenCalledOnce();
+    });
+
+    it('disposes the depth texture before the map', () => {
+        const { shadow } = new DirectionalLight();
+        const allocated = plantShadowTargets(shadow);
+
+        releaseShadowMap(shadow);
+
+        const [depthTextureOrder] = allocated.depthTextureDispose.mock.invocationCallOrder;
+        const [mapOrder] = allocated.mapDispose.mock.invocationCallOrder;
+        expect(depthTextureOrder).toBeLessThan(mapOrder!);
+    });
+
+    it('releases a map held without a blur pass', () => {
+        const { shadow } = new DirectionalLight();
+        const allocated = plantShadowTargets(shadow, { withBlurPass: false });
+        expect(shadow.mapPass).toBeNull();
+
+        releaseShadowMap(shadow);
+
+        expect(shadow.map).toBeNull();
+        expect(allocated.depthTextureDispose).toHaveBeenCalledOnce();
+        expect(allocated.mapDispose).toHaveBeenCalledOnce();
+    });
+
+    it('releases a blur pass when no map is held', () => {
+        const { shadow } = new DirectionalLight();
+        const mapPassDispose = vi.fn();
+        shadow.mapPass = { dispose: mapPassDispose } as unknown as WebGLRenderTarget;
+
+        releaseShadowMap(shadow);
+
+        expect(mapPassDispose).toHaveBeenCalledOnce();
+        expect(shadow.mapPass).toBeNull();
+    });
+
+    it('leaves the map size as it was', () => {
+        const { shadow } = new DirectionalLight();
+        shadow.mapSize.set(1024, 1024);
+        plantShadowTargets(shadow);
+
+        releaseShadowMap(shadow);
+
+        expect(shadow.mapSize.toArray()).toEqual([1024, 1024]);
+    });
+
+    it('leaves a shadow three has not allocated for untouched', () => {
+        const { shadow } = new DirectionalLight();
+
+        releaseShadowMap(shadow);
+
+        expect(shadow.map).toBeNull();
+        expect(shadow.mapPass).toBeNull();
+        expect(shadow.mapSize.toArray()).toEqual([512, 512]);
+    });
+});
+
 /** Stands in for the render targets three allocates when it first renders a casting light. */
 function plantShadowTargets(
     shadow: DirectionalLight['shadow'],
-    { withDepthTexture = true }: Readonly<{ withDepthTexture?: boolean }> = {},
+    {
+        withDepthTexture = true,
+        withBlurPass = true,
+    }: Readonly<{ withDepthTexture?: boolean; withBlurPass?: boolean }> = {},
 ): Readonly<{
     map: WebGLRenderTarget;
     mapDispose: ReturnType<typeof vi.fn>;
@@ -162,7 +235,9 @@ function plantShadowTargets(
         depthTexture: withDepthTexture ? { dispose: depthTextureDispose } : null,
     } as unknown as WebGLRenderTarget;
     shadow.map = map;
-    shadow.mapPass = { dispose: mapPassDispose } as unknown as WebGLRenderTarget;
+    shadow.mapPass = withBlurPass
+        ? ({ dispose: mapPassDispose } as unknown as WebGLRenderTarget)
+        : null;
 
     return { map, mapDispose, mapPassDispose, depthTextureDispose };
 }

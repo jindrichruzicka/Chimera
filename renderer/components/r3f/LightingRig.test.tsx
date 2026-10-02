@@ -4,12 +4,13 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import { useThree } from '@react-three/fiber';
 import ReactThreeTestRenderer, { type ReactThreeTest } from '@react-three/test-renderer';
-import type {
-    AmbientLight,
-    DirectionalLight,
-    Object3D,
-    PointLight,
+import {
+    Texture,
     WebGLRenderTarget,
+    type AmbientLight,
+    type DirectionalLight,
+    type Object3D,
+    type PointLight,
 } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import { LightingRig } from './LightingRig';
@@ -292,6 +293,86 @@ describe('LightingRig shadow quality', () => {
             await renderer.unmount();
         }
     });
+
+    it("releases the key light's shadow map and blur pass when the quality turns 'off'", async () => {
+        const renderer = await ReactThreeTestRenderer.create(
+            underCanvas(<LightingRig />, 'variance'),
+        );
+
+        try {
+            const key = onlyObject<DirectionalLight>(renderer.scene, 'DirectionalLight');
+            const allocated = fakeShadowTargets(key);
+
+            await renderer.update(underCanvas(<LightingRig />, 'off'));
+
+            expect(onlyObject<DirectionalLight>(renderer.scene, 'DirectionalLight')).toBe(key);
+            expect(key.castShadow).toBe(false);
+            expect(key.shadow.map).toBeNull();
+            expect(key.shadow.mapPass).toBeNull();
+            expect(allocated.depthTextureDispose).toHaveBeenCalledOnce();
+            expect(allocated.mapDispose).toHaveBeenCalledOnce();
+            expect(allocated.mapPassDispose).toHaveBeenCalledOnce();
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
+    it("releases a map held without a blur pass when the quality turns 'off'", async () => {
+        const renderer = await ReactThreeTestRenderer.create(
+            underCanvas(<LightingRig />, 'percentage'),
+        );
+
+        try {
+            const key = onlyObject<DirectionalLight>(renderer.scene, 'DirectionalLight');
+            const allocated = fakeShadowTargets(key, { withBlurPass: false });
+            expect(key.shadow.mapPass).toBeNull();
+
+            await renderer.update(underCanvas(<LightingRig />, 'off'));
+
+            expect(key.shadow.map).toBeNull();
+            expect(allocated.depthTextureDispose).toHaveBeenCalledOnce();
+            expect(allocated.mapDispose).toHaveBeenCalledOnce();
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
+    it("keeps the map size through 'off'", async () => {
+        const renderer = await ReactThreeTestRenderer.create(
+            underCanvas(<LightingRig />, 'percentage'),
+        );
+
+        try {
+            const key = onlyObject<DirectionalLight>(renderer.scene, 'DirectionalLight');
+            fakeShadowTargets(key);
+
+            await renderer.update(underCanvas(<LightingRig />, 'off'));
+            expect(key.shadow.mapSize.toArray()).toEqual([1024, 1024]);
+
+            await renderer.update(underCanvas(<LightingRig />, 'percentage'));
+            expect(key.castShadow).toBe(true);
+            expect(key.shadow.mapSize.toArray()).toEqual([1024, 1024]);
+            expect(key.shadow.map).toBeNull();
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
+    it("disposes nothing when it mounts directly at 'off'", async () => {
+        const targetDispose = vi.spyOn(WebGLRenderTarget.prototype, 'dispose');
+        const textureDispose = vi.spyOn(Texture.prototype, 'dispose');
+        const renderer = await ReactThreeTestRenderer.create(underCanvas(<LightingRig />, 'off'));
+
+        try {
+            const key = onlyObject<DirectionalLight>(renderer.scene, 'DirectionalLight');
+            expect(key.shadow.map).toBeNull();
+            expect(key.shadow.mapPass).toBeNull();
+            expect(targetDispose).not.toHaveBeenCalled();
+            expect(textureDispose).not.toHaveBeenCalled();
+        } finally {
+            await renderer.unmount();
+        }
+    });
 });
 
 /**
@@ -321,7 +402,10 @@ function underCanvas(node: ReactNode, quality: ShadowQuality = 'soft'): React.Re
  * Stands in for the render targets three allocates the first time it renders a
  * casting light. The test renderer draws nothing, so none exist until planted.
  */
-function fakeShadowTargets(light: DirectionalLight): Readonly<{
+function fakeShadowTargets(
+    light: DirectionalLight,
+    { withBlurPass = true }: Readonly<{ withBlurPass?: boolean }> = {},
+): Readonly<{
     map: WebGLRenderTarget;
     mapDispose: ReturnType<typeof vi.fn>;
     mapPassDispose: ReturnType<typeof vi.fn>;
@@ -335,7 +419,9 @@ function fakeShadowTargets(light: DirectionalLight): Readonly<{
         depthTexture: { dispose: depthTextureDispose },
     } as unknown as WebGLRenderTarget;
     light.shadow.map = map;
-    light.shadow.mapPass = { dispose: mapPassDispose } as unknown as WebGLRenderTarget;
+    light.shadow.mapPass = withBlurPass
+        ? ({ dispose: mapPassDispose } as unknown as WebGLRenderTarget)
+        : null;
 
     return { map, mapDispose, mapPassDispose, depthTextureDispose };
 }
