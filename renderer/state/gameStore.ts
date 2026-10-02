@@ -46,9 +46,8 @@ export interface SnapshotStore {
 
     /**
      * Drop the current match snapshot and all derived in-match state back to
-     * initial. Routing/lifecycle only — called by navigation effects on a
-     * match → lobby or match → main-menu transition, NOT from render. Distinct
-     * from the `apply*` mutators above.
+     * initial. Routing/lifecycle only — called by navigation effects, NOT from
+     * render. Distinct from the `apply*` mutators above.
      */
     reset(): void;
 }

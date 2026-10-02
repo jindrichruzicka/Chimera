@@ -33,7 +33,7 @@ export interface PerfSample {
     readonly frameMsP95: number;
     /** Latest authoritative sim tick from gameStore. */
     readonly simTick: number;
-    /** Authoritative snapshots received per second (rolling 1 s count). */
+    /** Arrivals recorded through `recordSnapshotReceived`, per second (rolling 1 s count). */
     readonly actionsPerSec: number;
     /** Own-action dispatch → matching snapshot RTT in ms; null until measured. */
     readonly actionRoundTripMs: number | null;

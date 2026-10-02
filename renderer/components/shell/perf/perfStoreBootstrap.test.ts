@@ -99,9 +99,8 @@ describe('bootstrapPerfStore()', () => {
     });
 
     it('records nothing when the match is reset after a snapshot arrived', () => {
-        // `reset()` — the match → lobby or main-menu transition — drops the
-        // snapshot back to null. The subscription sees that change, and there
-        // is no tick in it to record.
+        // `reset()` drops the snapshot back to null. The subscription sees that
+        // change, and there is no tick in it to record.
         const gameStore = createGameStore();
         const perfStore = createPerfStore();
         const recordSnapshotReceived = vi.spyOn(perfStore.getState(), 'recordSnapshotReceived');
@@ -123,19 +122,79 @@ describe('bootstrapPerfStore()', () => {
         // stamped by the injected clock and 600 when stamped by
         // `performance.now()`.
         vi.spyOn(performance, 'now').mockImplementation(() => 1600);
-        try {
-            const gameStore = createGameStore();
-            const perfStore = createPerfStore();
+        const gameStore = createGameStore();
+        const perfStore = createPerfStore();
 
-            const stop = bootstrapPerfStore(gameStore, perfStore, () => 1500);
-            perfStore.getState().recordActionDispatched(1000);
-            gameStore.getState().applySnapshot(makeSnapshot(5));
+        const stop = bootstrapPerfStore(gameStore, perfStore, () => 1500);
+        perfStore.getState().recordActionDispatched(1000);
+        gameStore.getState().applySnapshot(makeSnapshot(5));
 
-            expect(perfStore.getState().sample.actionRoundTripMs).toBe(500);
-            stop();
-        } finally {
-            vi.restoreAllMocks();
-        }
+        expect(perfStore.getState().sample.actionRoundTripMs).toBe(500);
+        stop();
+    });
+
+    it('stamps a snapshot arrival with performance.now() when no clock is injected', () => {
+        // The app passes two arguments, so the default clock is the one that
+        // ships. `Date.now()` is set apart from `performance.now()`, so the
+        // round trip names the clock that stamped the arrival.
+        vi.spyOn(performance, 'now').mockImplementation(() => 1600);
+        vi.spyOn(Date, 'now').mockImplementation(() => 50_000);
+        const gameStore = createGameStore();
+        const perfStore = createPerfStore();
+
+        const stop = bootstrapPerfStore(gameStore, perfStore);
+        perfStore.getState().recordActionDispatched(1000);
+        gameStore.getState().applySnapshot(makeSnapshot(5));
+
+        expect(perfStore.getState().sample.actionRoundTripMs).toBe(600);
+        stop();
+    });
+
+    it('reads the clock at each snapshot arrival, not at bootstrap', () => {
+        let nowMs = 1000;
+        const gameStore = createGameStore();
+        const perfStore = createPerfStore();
+
+        const stop = bootstrapPerfStore(gameStore, perfStore, () => nowMs);
+
+        perfStore.getState().recordActionDispatched(1100);
+        nowMs = 1500;
+        gameStore.getState().applySnapshot(makeSnapshot(5));
+        expect(perfStore.getState().sample.actionRoundTripMs).toBe(400);
+
+        perfStore.getState().recordActionDispatched(1600);
+        nowMs = 1900;
+        gameStore.getState().applySnapshot(makeSnapshot(6));
+        expect(perfStore.getState().sample.actionRoundTripMs).toBe(300);
+        stop();
+    });
+
+    it('stamps a snapshot arrival with the unrounded clock reading', () => {
+        const gameStore = createGameStore();
+        const perfStore = createPerfStore();
+
+        const stop = bootstrapPerfStore(gameStore, perfStore, () => 1500.75);
+        perfStore.getState().recordActionDispatched(1000.25);
+        gameStore.getState().applySnapshot(makeSnapshot(5));
+
+        expect(perfStore.getState().sample.actionRoundTripMs).toBe(500.5);
+        stop();
+    });
+
+    it('records a snapshot whose tick moved backwards', () => {
+        // A restore's snapshot carries an earlier checkpoint's tick (see
+        // `currentTick` in `gameStore.ts`).
+        const gameStore = createGameStore();
+        const perfStore = createPerfStore();
+        const recordSnapshotReceived = vi.spyOn(perfStore.getState(), 'recordSnapshotReceived');
+
+        const stop = bootstrapPerfStore(gameStore, perfStore, () => 1500);
+        gameStore.getState().applySnapshot(makeSnapshot(5));
+        gameStore.getState().applySnapshot(makeSnapshot(3));
+
+        expect(recordSnapshotReceived).toHaveBeenCalledTimes(2);
+        expect(recordSnapshotReceived).toHaveBeenNthCalledWith(2, 3, 1500);
+        stop();
     });
 
     it('decays actionsPerSec to 0 between sporadic snapshots (turn-based games)', () => {
