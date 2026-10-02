@@ -9,8 +9,11 @@
 import type { Page } from '@playwright/test';
 
 import { test, expect } from '../fixtures/direct-game.fixture';
-import { countDarkenedPixels, decodePngToRgbaFrame } from '../helpers/canvas-pixels';
-import type { CanvasRgbaFrame } from '../helpers/canvas-pixels';
+import {
+    countDarkenedPixels,
+    decodePngToRgbaFrame,
+    type CanvasRgbaFrame,
+} from '../../../../tools/e2e/canvas-frames';
 import { waitForCanvasFrame } from '../helpers/canvas-probe';
 import { GamePage } from '../pages/GamePage';
 

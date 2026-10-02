@@ -1,11 +1,8 @@
-import { PNG } from 'pngjs';
-
-export interface CanvasRgbaFrame {
-    readonly width: number;
-    readonly height: number;
-    /** Tightly packed RGBA bytes; accepts plain arrays as well as Buffer/Uint8Array. */
-    readonly rgba: ArrayLike<number>;
-}
+import {
+    assertValidFrame,
+    MIN_VISIBLE_ALPHA,
+    type CanvasRgbaFrame,
+} from '../../../../tools/e2e/canvas-frames';
 
 export interface CanvasPixelStats {
     readonly width: number;
@@ -26,7 +23,6 @@ export interface CanvasColor {
     readonly b: number;
 }
 
-const MIN_VISIBLE_ALPHA = 32;
 const MIN_COLOR_ALPHA = 80;
 const MIN_NONBLANK_CHANNEL_SUM = 48;
 const MIN_BLUE_CHANNEL = 90;
@@ -138,58 +134,6 @@ export function summarizeOpaqueColor(frame: CanvasRgbaFrame): CanvasColor {
     };
 }
 
-/**
- * How many pixels are darker in `after` than in `before` by at least
- * `minSumDrop`, measured on the sum of the three colour channels. A pixel
- * transparent in either frame is skipped. Used to find where a shadow landed
- * between two frames of an otherwise identical scene.
- */
-export function countDarkenedPixels(
-    before: CanvasRgbaFrame,
-    after: CanvasRgbaFrame,
-    minSumDrop: number,
-): number {
-    assertValidFrame(before);
-    assertValidFrame(after);
-    if (before.width !== after.width || before.height !== after.height) {
-        throw new Error(
-            `Canvas pixel frames differ in size: ${before.width}x${before.height} and ${after.width}x${after.height}.`,
-        );
-    }
-
-    let darkened = 0;
-    for (let pixelOffset = 0; pixelOffset < before.rgba.length; pixelOffset += 4) {
-        if (
-            (before.rgba[pixelOffset + 3] ?? 0) < MIN_VISIBLE_ALPHA ||
-            (after.rgba[pixelOffset + 3] ?? 0) < MIN_VISIBLE_ALPHA
-        ) {
-            continue;
-        }
-        const drop = channelSum(before.rgba, pixelOffset) - channelSum(after.rgba, pixelOffset);
-        if (drop >= minSumDrop) {
-            darkened += 1;
-        }
-    }
-
-    return darkened;
-}
-
-function channelSum(rgba: ArrayLike<number>, pixelOffset: number): number {
-    return (rgba[pixelOffset] ?? 0) + (rgba[pixelOffset + 1] ?? 0) + (rgba[pixelOffset + 2] ?? 0);
-}
-
-/**
- * Decode a PNG screenshot buffer into a full-resolution RGBA frame entirely in
- * the test process. Pixel reads must never round-trip through the renderer:
- * on CI runners the software-GL renderer main thread is the contended
- * resource, and shipping decoded pixels over CDP cost seconds per read
- * (the original cause of the tactics-3d-render CI failures).
- */
-export function decodePngToRgbaFrame(encodedPng: Buffer): CanvasRgbaFrame {
-    const png = PNG.sync.read(encodedPng);
-    return { width: png.width, height: png.height, rgba: png.data };
-}
-
 export function formatCanvasPixelStats(stats: CanvasPixelStats): string {
     return [
         `canvas=${stats.width}x${stats.height}`,
@@ -201,21 +145,6 @@ export function formatCanvasPixelStats(stats: CanvasPixelStats): string {
         `amber=${stats.amberPixels}`,
         `magenta=${stats.magentaPixels}`,
     ].join(' ');
-}
-
-function assertValidFrame(frame: CanvasRgbaFrame): void {
-    if (!Number.isInteger(frame.width) || frame.width <= 0) {
-        throw new Error('Canvas pixel frame width must be a positive integer.');
-    }
-    if (!Number.isInteger(frame.height) || frame.height <= 0) {
-        throw new Error('Canvas pixel frame height must be a positive integer.');
-    }
-    const expectedChannelCount = frame.width * frame.height * 4;
-    if (frame.rgba.length !== expectedChannelCount) {
-        throw new Error(
-            `Canvas pixel frame has ${frame.rgba.length} RGBA values; expected ${expectedChannelCount}.`,
-        );
-    }
 }
 
 function isNonBlankPixel(red: number, green: number, blue: number, alpha: number): boolean {

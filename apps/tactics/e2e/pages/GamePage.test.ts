@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Locator, Page } from '@playwright/test';
 import { PNG } from 'pngjs';
-import type { CanvasRgbaFrame } from '../helpers/canvas-pixels';
+import type { CanvasRgbaFrame } from '../../../../tools/e2e/canvas-frames';
 import {
     TACTICS_CAMERA_POSITION,
     TACTICS_CAMERA_WORLD_BOUNDS,

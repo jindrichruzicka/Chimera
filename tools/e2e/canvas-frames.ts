@@ -1,8 +1,11 @@
 import { PNG } from 'pngjs';
 
 /**
- * Reading shadows out of a live canvas: decode a screenshot, then count the
- * pixels that went dark between two frames of an otherwise identical scene.
+ * tools/e2e/canvas-frames.ts
+ *
+ * Reading a live canvas in the reference apps' Playwright e2e suites: decode a
+ * screenshot into an RGBA frame, then count the pixels that went dark between
+ * two frames of an otherwise identical scene.
  *
  * Decoding happens in the TEST process, never through `page.evaluate` — a
  * pixel payload shipped over CDP from a busy renderer is slow enough to eat a
@@ -64,8 +67,13 @@ function channelSum(rgba: ArrayLike<number>, pixelOffset: number): number {
     return (rgba[pixelOffset] ?? 0) + (rgba[pixelOffset + 1] ?? 0) + (rgba[pixelOffset + 2] ?? 0);
 }
 
-/** Throws unless `frame`’s byte count matches the size it declares. */
 export function assertValidFrame(frame: CanvasRgbaFrame): void {
+    if (!Number.isInteger(frame.width) || frame.width <= 0) {
+        throw new Error('Canvas pixel frame width must be a positive integer.');
+    }
+    if (!Number.isInteger(frame.height) || frame.height <= 0) {
+        throw new Error('Canvas pixel frame height must be a positive integer.');
+    }
     const expectedChannelCount = frame.width * frame.height * 4;
     if (frame.rgba.length !== expectedChannelCount) {
         throw new Error(

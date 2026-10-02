@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { decodePngToRgbaFrame } from '../../../../tools/e2e/canvas-frames';
 import {
-    decodePngToRgbaFrame,
     formatCanvasPixelStats,
     summarizeOpaqueColor,
     type CanvasColor,

@@ -14,8 +14,11 @@ import type { Locator, Page } from '@playwright/test';
 
 import { ACTION_GAME_ID } from '@chimera-engine/action/simulation/constants.js';
 import { expect, test } from '../fixtures/electron.fixture';
-import { countDarkenedPixels, decodePngToRgbaFrame } from '../helpers/canvas-darkening';
-import type { CanvasRgbaFrame } from '../helpers/canvas-darkening';
+import {
+    countDarkenedPixels,
+    decodePngToRgbaFrame,
+    type CanvasRgbaFrame,
+} from '../../../../tools/e2e/canvas-frames';
 import { SHELL_LOAD_TIMEOUT_MS } from '../helpers/enter-match';
 import { ActionShellBackgroundPage } from '../pages/ActionShellBackgroundPage';
 

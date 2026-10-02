@@ -36,7 +36,7 @@
 
 import { expect, test } from '../fixtures/electron.fixture';
 import { openE2eWindow } from '../fixtures/open-window';
-import { decodePngToRgbaFrame } from '../helpers/canvas-darkening';
+import { decodePngToRgbaFrame } from '../../../../tools/e2e/canvas-frames';
 import { countLitGreen } from '../helpers/canvas-hues';
 import { SHELL_LOAD_TIMEOUT_MS } from '../helpers/enter-match';
 import { ActionShellBackgroundPage } from '../pages/ActionShellBackgroundPage';

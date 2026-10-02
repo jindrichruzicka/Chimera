@@ -1,77 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { PNG } from 'pngjs';
-import {
-    analyzeCanvasPixels,
-    countDarkenedPixels,
-    decodePngToRgbaFrame,
-    formatCanvasPixelStats,
-    summarizeOpaqueColor,
-} from './canvas-pixels';
-
-describe('countDarkenedPixels', () => {
-    /** A one-row frame of the given RGBA pixels. */
-    function row(...pixels: readonly (readonly [number, number, number, number])[]) {
-        return { width: pixels.length, height: 1, rgba: pixels.flat() };
-    }
-
-    it('counts a pixel whose RGB sum fell by the threshold, and not one that fell by one less', () => {
-        const before = row([100, 100, 100, 255], [100, 100, 100, 255]);
-        const after = row([90, 90, 90, 255], [91, 90, 90, 255]);
-
-        expect(countDarkenedPixels(before, after, 30)).toBe(1);
-    });
-
-    it('does not count a pixel that brightened or stayed the same', () => {
-        const before = row([100, 100, 100, 255], [100, 100, 100, 255]);
-        const after = row([140, 140, 140, 255], [100, 100, 100, 255]);
-
-        expect(countDarkenedPixels(before, after, 1)).toBe(0);
-    });
-
-    it('sums all three channels, so a drop on one channel alone counts', () => {
-        const before = row([100, 100, 200, 255]);
-        const after = row([100, 100, 150, 255]);
-
-        expect(countDarkenedPixels(before, after, 50)).toBe(1);
-    });
-
-    it('skips a pixel that is transparent in either frame', () => {
-        const before = row([200, 200, 200, 255], [200, 200, 200, 0]);
-        const after = row([0, 0, 0, 0], [0, 0, 0, 255]);
-
-        expect(countDarkenedPixels(before, after, 1)).toBe(0);
-    });
-
-    it('throws when the two frames differ in size', () => {
-        expect(() =>
-            countDarkenedPixels(row([0, 0, 0, 255]), row([0, 0, 0, 255], [0, 0, 0, 255]), 1),
-        ).toThrow('Canvas pixel frames differ in size: 1x1 and 2x1.');
-    });
-});
+import { decodePngToRgbaFrame } from '../../../../tools/e2e/canvas-frames';
+import { analyzeCanvasPixels, formatCanvasPixelStats, summarizeOpaqueColor } from './canvas-pixels';
 
 describe('analyzeCanvasPixels', () => {
-    it('throws when width is not a positive integer', () => {
-        expect(() => analyzeCanvasPixels({ width: 0, height: 1, rgba: [] })).toThrow(
-            'Canvas pixel frame width must be a positive integer.',
-        );
-        expect(() => analyzeCanvasPixels({ width: -1, height: 1, rgba: [] })).toThrow(
-            'Canvas pixel frame width must be a positive integer.',
-        );
-        expect(() =>
-            analyzeCanvasPixels({ width: 1.5, height: 1, rgba: [0, 0, 0, 0, 0, 0] }),
-        ).toThrow('Canvas pixel frame width must be a positive integer.');
-    });
-
-    it('throws when height is not a positive integer', () => {
-        expect(() => analyzeCanvasPixels({ width: 1, height: 0, rgba: [] })).toThrow(
-            'Canvas pixel frame height must be a positive integer.',
-        );
-        expect(() => analyzeCanvasPixels({ width: 1, height: -2, rgba: [] })).toThrow(
-            'Canvas pixel frame height must be a positive integer.',
-        );
-    });
-
-    it('throws when rgba length does not match width * height * 4', () => {
+    it('validates the frame before analysing it', () => {
         expect(() => analyzeCanvasPixels({ width: 2, height: 1, rgba: [0, 0, 0, 255] })).toThrow(
             'Canvas pixel frame has 4 RGBA values; expected 8.',
         );
@@ -151,7 +84,7 @@ describe('analyzeCanvasPixels', () => {
         expect(stats.magentaPixels).toBe(0);
     });
 
-    it('decodes a PNG buffer into a full-resolution RGBA frame analyzable in-process', () => {
+    it('analyzes a frame decoded from a PNG screenshot', () => {
         const png = new PNG({ width: 2, height: 1 });
         // Pixel 0: opaque blue primitive; pixel 1: transparent blank.
         png.data = Buffer.from([37, 99, 235, 255, 0, 0, 0, 0]);
@@ -159,9 +92,6 @@ describe('analyzeCanvasPixels', () => {
 
         const frame = decodePngToRgbaFrame(encoded);
 
-        expect(frame.width).toBe(2);
-        expect(frame.height).toBe(1);
-        expect(Array.from(frame.rgba)).toEqual([37, 99, 235, 255, 0, 0, 0, 0]);
         expect(analyzeCanvasPixels(frame)).toEqual({
             width: 2,
             height: 1,

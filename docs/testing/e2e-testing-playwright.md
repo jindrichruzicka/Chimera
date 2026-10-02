@@ -130,7 +130,6 @@ apps/action/e2e/
 │   │                            #   beside them — a selection, not a census
 │   ├── action-snapshot.ts       # Arena reads off the projected snapshot — NOT a clock
 │   ├── attribute-timeline.ts    # MutationObserver recorder for the camera phase attributes
-│   ├── canvas-darkening.ts      # Screenshot decode + darkened-pixel count (this app's own copy)
 │   ├── canvas-hues.ts           # Lit-green pixel count, for the menu's reflected environment
 │   │                            #   map (this app's own copy)
 │   ├── enter-match.ts           # Menu → /select → a revealed match, and the Leave that ends it
@@ -147,6 +146,8 @@ apps/action/e2e/
                                  #   the tactics tree gives — `ls apps/action/e2e/tests/` is
                                  #   the census.
 ```
+
+Both suites decode screenshots and count darkened pixels through one module, `tools/e2e/canvas-frames.ts`, rather than each keeping a copy. A game directory may not import another's, so it sits outside both. Each shadow spec keeps its own darkening threshold, because the two scenes' floors differ in brightness.
 
 ---
 

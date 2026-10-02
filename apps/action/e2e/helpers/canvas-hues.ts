@@ -12,12 +12,13 @@
  * Dominance thresholds rather than exact colours: what reaches the screen is a
  * pre-filtered blur of the image, tone-mapped and encoded, so no pixel carries
  * the authored bytes. What survives all of that is which channel leads.
- *
- * What this file shares with `canvas-darkening.ts` beside it is imported rather
- * than copied.
  */
 
-import { assertValidFrame, MIN_VISIBLE_ALPHA, type CanvasRgbaFrame } from './canvas-darkening';
+import {
+    assertValidFrame,
+    MIN_VISIBLE_ALPHA,
+    type CanvasRgbaFrame,
+} from '../../../../tools/e2e/canvas-frames';
 
 /**
  * How bright the leading channel must be.
