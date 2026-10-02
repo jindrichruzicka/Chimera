@@ -484,7 +484,22 @@ export type LightingRigProps = Readonly<{
 
 - **A quality change applies live, without a remount**: the rig releases the shadow map built at the old size, and the next frame allocates one at the new size.
 - **A change to `off` releases the map** and any blur pass, and keeps the map's size, so a return to the same quality allocates at that size.
-- The rig reads the resolution from the `GameCanvas` it is mounted in, so mounting it outside one throws.
+- The rig reads the resolution from the `GameCanvas` it is mounted in. Mounted outside one, with no `ShadowQualityProvider` above it, it throws.
+- **A component test mounts the rig under `ShadowQualityProvider`.** A game that tests a scene component with `@react-three/test-renderer` has no `GameCanvas` to resolve a quality, so it wraps the scene in the provider, which the same barrel exports, with the quality to test at:
+
+```tsx
+import { ShadowQualityProvider } from '@chimera-engine/renderer/components/r3f';
+
+const renderer = await ReactThreeTestRenderer.create(
+    <ShadowQualityProvider quality="percentage">
+        <MyScene /> {/* renders <LightingRig /> */}
+    </ShadowQualityProvider>,
+);
+```
+
+- **Why a provider and not a prop.** A `quality` prop on the rig would have to be forwarded by every component between the test and the rig, starting with the game's own scene component, which is what a test mounts. The provider wraps that component instead. It throws when mounted inside a `GameCanvas` or inside another `ShadowQualityProvider`, so a rig under a `GameCanvas` reads the canvas's resolution and no other.
+    - Invariant #83: `ShadowQualityContext` keeps its `null` default, and `useCanvasShadowQuality` still throws when no provider is above it. The provider supplies a value; it is not a non-throwing carve-out like `IconContext`.
+    - Invariant #96: the r3f barrel exports `ShadowQualityProvider`. `ShadowQualityContext` and `useCanvasShadowQuality` stay internal, as `InteractionContext` does beside the exported `InteractionBlocker`.
 - The route reaches the rig's key light only. A hand-rolled light's shadow map size is the game's to author.
 - **Hand-rolled lights remain supported.** The rig renders ordinary r3f lights and suppresses nothing, so a game adds its own lights beside it as siblings — or skips the rig and writes its lights exactly as before.
 

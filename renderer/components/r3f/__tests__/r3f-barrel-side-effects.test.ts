@@ -284,12 +284,17 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         // barrels export a Provider plus its useX() accessor and never the raw
         // context object; this one follows them, so a nested provider still gets
         // its value from a component rather than hand-built.
+        //
+        // ShadowQualityProvider is for a game's component test, where no
+        // GameCanvas exists. The raw ShadowQualityContext stays internal, so a
+        // game can provide a quality only through that component.
         expect(Object.keys(r3fBarrel).sort()).toEqual([
             'AnimatedSprite',
             'CameraAnimationCancelled',
             'GameCanvas',
             'InteractionBlocker',
             'LightingRig',
+            'ShadowQualityProvider',
             'easeIn',
             'easeInOut',
             'easeOut',

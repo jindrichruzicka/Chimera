@@ -61,6 +61,10 @@
  * **The lighting rig.** `LightingRig` is a default ambient + directional key
  * light a game mounts as a canvas child instead of hand-rolling the pair. It
  * renders ordinary r3f lights, so a game's own lights still mount beside it.
+ * `ShadowQualityProvider` is for a game's component test, where no
+ * `GameCanvas` exists to hand the rig its shadow quality. The raw context
+ * stays internal, so a game can provide a quality only through that
+ * component.
  *
  * The renderer-configuration types (`ShadowQuality`, `ToneMappingMode`,
  * `OutputColorSpace`, `RenderScale`, plus `WebGLContextOptions` and its
@@ -103,6 +107,7 @@ export { useSpriteClipPlayer } from './useSpriteClipPlayer';
 export { useShaderTime } from './useShaderTime';
 export { AnimatedSprite } from './AnimatedSprite';
 export { LightingRig } from './LightingRig';
+export { ShadowQualityProvider } from './shadowQualityContext';
 export type { LightingRigProps } from './LightingRig';
 export type {
     ClipEndEvent,

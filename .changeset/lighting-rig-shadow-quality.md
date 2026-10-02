@@ -11,5 +11,3 @@ whatever `castShadow` says.
 
 A quality change applies live, without remounting the canvas: the rig releases the shadow map three
 built at the old size, so the next frame allocates one at the new size.
-
-`LightingRig` must be mounted inside a `GameCanvas`; outside one it throws.
