@@ -1,5 +1,79 @@
 # create-chimera-game
 
+## 1.0.0-rc.14
+
+### Patch Changes
+
+- d2b5a44: Record that asset loaders are engine-owned, and make `validate:assets` say so.
+
+    The asset docs promised that games register additional loaders and pass a composed registry into
+    `AssetManager`. Nothing in the tree did that: every construction site passes no registry, and the
+    public assets barrel publishes neither the loader types nor the manager factory, so there was
+    nothing to build a registry with and nowhere to hand one in. The decision recorded in §4.10 is that
+    the kinds the engine registers a loader for are the whole set, with the cost stated — a game that
+    wants a format the engine does not load waits for the engine.
+
+    `chimera-validate-assets` no longer widens its known-kind set by scanning game source for loader
+    declarations. That scan accepted a kind the runtime would then refuse. The set the gate checks
+    against is now the kinds the engine registers a loader for. No file in this repo was reached by the
+    scan, so nothing that passed for a real reason starts failing.
+
+    Declaration merging on `AssetKindRegistry` still types a distinct ref. What it never did was make
+    the kind loadable, and the gate above is where that is now said out loud.
+
+- 7d5fff3: Light the blank template's playfield with the engine's `LightingRig`.
+
+    A freshly scaffolded game's playfield now mounts a `GameCanvas` on the `top-down` preset with
+    `<LightingRig />` inside it, behind the existing welcome panel. The comment beside the rig explains
+    why it is there, that it must stay a child of `GameCanvas`, and that lights of your own can be
+    added beside it.
+
+    The template's playfield test stands the r3f barrel in with a mock, because react-three-fiber's
+    canvas throws under jsdom, and asserts the rig is mounted inside the canvas.
+
+- 3f8deee: Stop the blank template's shell manifest from saying a game that wants both shell fields must point
+  both at that one file.
+
+    The template still forwards `shell-asset-manifest.ts` as both `shellAudioAssets` and
+    `shellBackgroundAssets`, and that remains a valid shape. What was wrong is the claim that it is the
+    required one: `validate:assets` finds a `shell-asset-manifest.ts` by its file name at any depth under
+    `apps/`, so a game can also forward a separate, background-only inventory as `shellBackgroundAssets`.
+    The comment now describes the two fields and leaves the choice open. Comment only; the scaffolded
+    files are otherwise unchanged.
+
+- 53ff0ec: Default a texture's color space to sRGB. **Data maps must now declare `colorSpace: 'none'`.**
+
+    A `texture` or `sprite-sheet` manifest entry that declares no `colorSpace` is now published as
+    `'srgb'`. Until now it was published with no color space at all, which is three's default for a bare
+    texture.
+
+    What that changes in an existing game depends on how the game hands the texture to a material,
+    because `@react-three/fiber` tags a texture sRGB itself on some routes and not on others. What r3f
+    does on each route below is pinned against the installed version by
+    `renderer/components/r3f/__tests__/r3f-texture-color-space.test.tsx`.
+    - **A color image set as a JSX prop on a color slot — `<meshStandardMaterial map={texture} />` — does
+      not change.** r3f already tagged it sRGB when the prop was applied. This is the route the engine's
+      own `AnimatedSprite` takes for its default material.
+    - **A color image passed through constructor `args`, or assigned to a material the game built
+      itself, now renders darker than before.** r3f does not tag a texture on
+      either route (`<meshStandardMaterial args={[{ map: texture }]} />`, `material.map = texture`).
+      Those were uploaded without an sRGB decode, so their stored values were shaded as if they were
+      linear. If you had compensated for that look on one of these routes, take the compensation out.
+    - **A data map that declares nothing is now wrong.** Roughness, metalness, normal, ambient-occlusion
+      and mask images are not color and must not be decoded. r3f leaves a texture on a data slot
+      (`roughnessMap`, `normalMap`) alone, so until now an undeclared one stayed untagged, which is right
+      for it; it now arrives tagged sRGB, and r3f leaves that alone too. Declare it:
+      `textureEntry({ ref, priority, sampling: { colorSpace: 'none' } })`.
+
+    A texture inside a `.glb` is unaffected: `GLTFLoader` configures those, not the asset manifest.
+
+    The default is `DEFAULT_TEXTURE_COLOR_SPACE`, exported from `@chimera-engine/simulation/content`
+    beside the sampling vocabulary. Data maps stay a declared option rather than a second asset kind.
+
+    The blank template's worked `asset-manifest.ts` example now declares its banner through
+    `textureEntry` with an explicit `colorSpace: 'srgb'`, so the first texture a new game declares shows
+    that the option exists.
+
 ## 1.0.0-rc.13
 
 ### Minor Changes

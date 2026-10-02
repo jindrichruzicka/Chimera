@@ -1,5 +1,18 @@
 # @chimera-engine/ai
 
+## 1.0.0-rc.14
+
+### Patch Changes
+
+- Updated dependencies [9684821]
+- Updated dependencies [6745e3c]
+- Updated dependencies [e9c3160]
+- Updated dependencies [53ff0ec]
+- Updated dependencies [5117c6c]
+- Updated dependencies [85ccade]
+- Updated dependencies [f36b101]
+    - @chimera-engine/simulation@1.0.0-rc.14
+
 ## 1.0.0-rc.13
 
 ### Minor Changes

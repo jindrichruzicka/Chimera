@@ -1,5 +1,55 @@
 # @chimera-engine/tactics
 
+## 0.9.1-rc.7
+
+### Patch Changes
+
+- 9684821: Add `display.shadowQuality` and `display.renderScale` engine settings.
+
+    Graphics quality becomes a **player** setting, not only an author setting — the same class of knob
+    as the existing `display.targetFps`. `shadowQuality` is a tier name (`off` | `low` | `medium` |
+    `high`); `renderScale` is a fraction of what would otherwise be drawn (`0.5` | `0.75` | `1`). Both
+    defaults reproduce what the canvas rendered before either existed.
+
+    Both values are engine-owned names and scalars. Per Invariant #1 nothing stored in `simulation/` may
+    name a `three` symbol, so the tier becomes a shadow-map type on the renderer side alone.
+
+    The three halves of a `display` field have to agree and only one of them is self-checking:
+    `engineSettingsZodShape` carries no type annotation, so a field added to the `EngineSettings`
+    interface and to `ENGINE_DEFAULTS` but forgotten in the Zod shape compiles, and
+    `SettingsMerger.validatePatch` then strips it — discarding the player's stored override on every
+    load. The red-first test for this task drives a stored override through `validatePatch` against the
+    REAL shape and failed with `{ display: {} }` before the Zod half existed.
+
+    `apps/tactics` supplies its own settings-page definition, so it opts out of
+    `ENGINE_DEFAULT_SETTINGS_DEFINITION` and would have silently lost both rows. Its definition carries
+    them and its own field-list pin names them, which is the test that catches this class. `apps/action`
+    and the blank template ship no settings-page definition and pick the rows up from the engine default
+    tab set; all three spread `ENGINE_DEFAULTS` and `engineSettingsZodShape` into their schemas, so they
+    inherit persistence and validation.
+
+    `display.renderScale` is the first display field whose stored value is fractional. Its descriptor
+    parses with a numeric parser rather than `display.targetFps`'s `parseIntegerValue`, which would
+    truncate `0.75` to `0` — a value the schema rejects, so the override would be refused rather than
+    stored.
+
+    Tokens are added to the engine key catalogue, the English bundle and the Czech bundle, and the
+    documented surfaces that enumerate the engine field set name both fields.
+
+- e161e4b: Adopt `LightingRig` in both reference apps, so the shadows their meshes already ask for render.
+
+    The tactics board, the action playfield and the action shell background now mount `LightingRig`
+    instead of a hand-rolled ambient + directional pair, keeping each scene's intensities and key light
+    position. Tactics' old key light did not cast, so its units' `castShadow` and its ground's
+    `receiveShadow` rendered nothing even with shadow mapping on; the rig's key light casts.
+
+    Both apps default `display.shadowQuality` to `medium` over the engine's `off`, so a fresh install
+    shows the shadows, and a player can still turn them off.
+
+    `LightingRig` gains `shadowCameraExtent`, the half-side of the box its key light's shadow covers.
+    Omitted, it keeps three's own `5`; the action arena is wider than that, so both action scenes size
+    the box from the arena.
+
 ## 0.9.1-rc.6
 
 ### Patch Changes

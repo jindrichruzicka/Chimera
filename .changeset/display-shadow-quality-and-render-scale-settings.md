@@ -8,9 +8,8 @@ Add `display.shadowQuality` and `display.renderScale` engine settings.
 
 Graphics quality becomes a **player** setting, not only an author setting — the same class of knob
 as the existing `display.targetFps`. `shadowQuality` is a tier name (`off` | `low` | `medium` |
-`high`); `renderScale` is a fraction of the display's own pixel ratio (`0.5` | `0.75` | `1`), so `1`
-is native. Both defaults reproduce what the canvas rendered before either existed: shadow mapping
-off, native scale.
+`high`); `renderScale` is a fraction of what would otherwise be drawn (`0.5` | `0.75` | `1`). Both
+defaults reproduce what the canvas rendered before either existed.
 
 Both values are engine-owned names and scalars. Per Invariant #1 nothing stored in `simulation/` may
 name a `three` symbol, so the tier becomes a shadow-map type on the renderer side alone.

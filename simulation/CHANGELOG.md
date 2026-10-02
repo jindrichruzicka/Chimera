@@ -1,5 +1,172 @@
 # @chimera-engine/simulation
 
+## 1.0.0-rc.14
+
+### Minor Changes
+
+- 6745e3c: Declare the engine's asset-kind ids once, and guard the two readers against drifting apart.
+
+    `validate:assets` reports a manifest kind the engine registers no loader for. Which kinds those are
+    was written down twice — once as a literal set inside the tool, once as the loaders
+    `createDefaultAssetLoaderRegistry` builds — with nothing holding the two equal. A gate that refuses a
+    kind the engine loads turns a working manifest into a failed build; a gate that accepts one the engine
+    cannot load moves the failure into the shipped game.
+
+    `ENGINE_ASSET_LOADER_KIND_IDS` in `@chimera-engine/simulation/foundation/engine-asset-kinds.js` is now
+    the one declaration. The tool builds its membership set from it, and a guard asserts the default
+    loader registry registers exactly those kinds — in both directions, since a declared kind with no
+    loader passes a manifest the runtime then refuses, and a loader with no declaration is a gate that
+    refuses a file the engine can load. The list is typed against `AssetKindId`, so an id with no phantom
+    brand behind it is a compile error.
+
+    Two properties of the tool are now pinned rather than merely true. A missing environment map is
+    reported by the same walk that reports any other missing ref. And no extension allow-list exists: an
+    HDRI declared under the `texture` kind, or a PNG under `environment-map`, still passes — both are
+    authoring mistakes the runtime catches, and a rule making them the gate's business would be a new
+    restriction across every kind, needing its own justification.
+
+- e9c3160: Add an `environment-map` asset kind, so an HDRI ships in `assets/` and lights a PBR scene.
+
+    A physically-based material without image-based lighting reads as flat plastic whatever its
+    roughness and metalness say, and until now there was no asset kind that could carry the light: the
+    registered kinds were `texture`, `audio-clip`, `gltf-model`, `sprite-sheet` and `particle-config`,
+    none of which decodes an HDRI.
+
+    An `environment-map` entry resolves to an equirectangular `THREE.Texture` of linear radiance data.
+    `.hdr` and `.exr` are loaded, the decoder chosen from the ref's extension and imported inside its own
+    branch so neither is named on a path that does not use it. Any other extension rejects with
+    `UnsupportedEnvironmentMapFormatError`, which names both the extension refused and the ones that
+    load. `validate:assets` knows the kind, so an entry declaring it passes the build gate.
+
+    Two things differ from the `texture` kinds on purpose. The equirectangular mapping is written by the
+    loader rather than declared, because three's default for a fresh texture samples the image as a flat
+    decal and lights nothing. And no colour-space default is applied: the decoders write
+    `LinearSRGBColorSpace` themselves, and the sRGB default that suits a colour image would have the
+    renderer decode radiance a second time. Everything an entry does declare through the existing
+    sampling vocabulary is still applied.
+
+    `chimera://` serves Radiance as `image/vnd.radiance` and OpenEXR as `image/x-exr`. Neither row is what
+    makes the load work — both decoders read the file as an arraybuffer — so the rows say what the file
+    is rather than enabling it.
+
+    Applying the texture is ordinary React Three Fiber: `scene.environment` lights every standard material
+    in the scene, a material's `envMap` lights one. Three converts an equirectangular map to the
+    pre-filtered form a physical material samples, so neither route needs a helper library.
+
+- 53ff0ec: Default a texture's color space to sRGB. **Data maps must now declare `colorSpace: 'none'`.**
+
+    A `texture` or `sprite-sheet` manifest entry that declares no `colorSpace` is now published as
+    `'srgb'`. Until now it was published with no color space at all, which is three's default for a bare
+    texture.
+
+    What that changes in an existing game depends on how the game hands the texture to a material,
+    because `@react-three/fiber` tags a texture sRGB itself on some routes and not on others. What r3f
+    does on each route below is pinned against the installed version by
+    `renderer/components/r3f/__tests__/r3f-texture-color-space.test.tsx`.
+    - **A color image set as a JSX prop on a color slot — `<meshStandardMaterial map={texture} />` — does
+      not change.** r3f already tagged it sRGB when the prop was applied. This is the route the engine's
+      own `AnimatedSprite` takes for its default material.
+    - **A color image passed through constructor `args`, or assigned to a material the game built
+      itself, now renders darker than before.** r3f does not tag a texture on
+      either route (`<meshStandardMaterial args={[{ map: texture }]} />`, `material.map = texture`).
+      Those were uploaded without an sRGB decode, so their stored values were shaded as if they were
+      linear. If you had compensated for that look on one of these routes, take the compensation out.
+    - **A data map that declares nothing is now wrong.** Roughness, metalness, normal, ambient-occlusion
+      and mask images are not color and must not be decoded. r3f leaves a texture on a data slot
+      (`roughnessMap`, `normalMap`) alone, so until now an undeclared one stayed untagged, which is right
+      for it; it now arrives tagged sRGB, and r3f leaves that alone too. Declare it:
+      `textureEntry({ ref, priority, sampling: { colorSpace: 'none' } })`.
+
+    A texture inside a `.glb` is unaffected: `GLTFLoader` configures those, not the asset manifest.
+
+    The default is `DEFAULT_TEXTURE_COLOR_SPACE`, exported from `@chimera-engine/simulation/content`
+    beside the sampling vocabulary. Data maps stay a declared option rather than a second asset kind.
+
+    The blank template's worked `asset-manifest.ts` example now declares its banner through
+    `textureEntry` with an explicit `colorSpace: 'srgb'`, so the first texture a new game declares shows
+    that the option exists.
+
+- 5117c6c: Let a manifest entry declare how its texture is sampled.
+
+    A `texture` or `sprite-sheet` entry can carry a `sampling` declaration under `metadata.sampling`:
+    `colorSpace`, `magFilter`, `minFilter`, `wrapS`, `wrapT`, `flipY`, `anisotropy` and
+    `generateMipmaps`. The values are engine-owned names and JSON scalars — `'nearest'`, not a graphics
+    library's constant — so a declaration survives the JSON comparison the asset cache uses to decide
+    whether a re-registered entry is still the same asset.
+
+    `textureEntry({ ref, priority, sampling })` is new on `@chimera-engine/simulation/content`, and
+    `spriteAnimationEntry` takes an optional `sampling` that it writes beside the clip sheet. Both check
+    the declaration and throw `InvalidTextureSamplingError`, naming every fault, for a misspelled option
+    or a value outside the vocabulary. An entry authored without `sampling` is unchanged.
+
+    `validate-assets` now peels `textureEntry(...)` like the other entry builders. Before this, an entry
+    authored through it was skipped, so its ref was never looked for on disk.
+
+- 85ccade: Guard the timer payload against values a save cannot hold.
+
+    `GameTimer.payload` and `FiredTimerAction.payload` narrow from `Record<string, unknown>` to
+    `TimerPayload`: JSON-persistable values with integer numbers — strings, integers, booleans, `null`,
+    arrays and plain objects, nested as the fired action needs. `TimerManager.create` refuses a
+    non-integer number, a `bigint`, an `undefined`, a function, a symbol, a `Date`, a `Map` or a class
+    instance with a `RangeError` naming the field, at any depth: a `FixedPoint` (a `bigint`) used to be
+    accepted and then made the match unsavable at the first autosave, a float is forbidden in simulation
+    state, and a function, a `NaN`, a `Date` or a `Map` came back from a save as something else. A timer
+    authored with a string entity id or a nested target is unaffected.
+
+### Patch Changes
+
+- 9684821: Add `display.shadowQuality` and `display.renderScale` engine settings.
+
+    Graphics quality becomes a **player** setting, not only an author setting — the same class of knob
+    as the existing `display.targetFps`. `shadowQuality` is a tier name (`off` | `low` | `medium` |
+    `high`); `renderScale` is a fraction of what would otherwise be drawn (`0.5` | `0.75` | `1`). Both
+    defaults reproduce what the canvas rendered before either existed.
+
+    Both values are engine-owned names and scalars. Per Invariant #1 nothing stored in `simulation/` may
+    name a `three` symbol, so the tier becomes a shadow-map type on the renderer side alone.
+
+    The three halves of a `display` field have to agree and only one of them is self-checking:
+    `engineSettingsZodShape` carries no type annotation, so a field added to the `EngineSettings`
+    interface and to `ENGINE_DEFAULTS` but forgotten in the Zod shape compiles, and
+    `SettingsMerger.validatePatch` then strips it — discarding the player's stored override on every
+    load. The red-first test for this task drives a stored override through `validatePatch` against the
+    REAL shape and failed with `{ display: {} }` before the Zod half existed.
+
+    `apps/tactics` supplies its own settings-page definition, so it opts out of
+    `ENGINE_DEFAULT_SETTINGS_DEFINITION` and would have silently lost both rows. Its definition carries
+    them and its own field-list pin names them, which is the test that catches this class. `apps/action`
+    and the blank template ship no settings-page definition and pick the rows up from the engine default
+    tab set; all three spread `ENGINE_DEFAULTS` and `engineSettingsZodShape` into their schemas, so they
+    inherit persistence and validation.
+
+    `display.renderScale` is the first display field whose stored value is fractional. Its descriptor
+    parses with a numeric parser rather than `display.targetFps`'s `parseIntegerValue`, which would
+    truncate `0.75` to `0` — a value the schema rejects, so the override would be refused rather than
+    stored.
+
+    Tokens are added to the engine key catalogue, the English bundle and the Czech bundle, and the
+    documented surfaces that enumerate the engine field set name both fields.
+
+- f36b101: Honour a client's `engine:sync_request` on a host with no ticker, and keep the request out of the undo
+  history and the replay recording.
+
+    A client whose snapshot delta will not apply asks for a keyframe with `engine:sync_request`, stamped with
+    the tick of the last snapshot it holds. On a turn-based host the envelope reached `ActionPipeline` as
+    stamped, so a request behind the host's tick was refused with `StaleActionError` before Stage 7 could
+    force the full snapshot, and the client waited for the next keyframe.
+
+    The host's per-action fan-out now applies `engine:sync_request` at its current tick on every host. The
+    helper that re-stamps envelopes is renamed from `restampForHeartbeatHost` to `envelopeToApply`; every other
+    action on a host with no ticker is still applied as stamped, so a stale action there is still refused.
+
+    `ActionPipeline` Stage 6 no longer appends `engine:sync_request` to `ActionHistory`. Undo replays the
+    history since the memento minus its last `steps` entries, so an entry for the request was the step a
+    player's undo removed.
+
+    `buildHostSessionPipeline` no longer passes `engine:sync_request` to the replay recording.
+    `ReplayPlayer.step()` refuses a recorded action that does not advance the tick by exactly one, so a
+    recording across a re-sync could not be played past it.
+
 ## 1.0.0-rc.13
 
 ### Minor Changes

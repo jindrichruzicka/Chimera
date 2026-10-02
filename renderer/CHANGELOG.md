@@ -1,5 +1,471 @@
 # @chimera-engine/renderer
 
+## 1.0.0-rc.14
+
+### Minor Changes
+
+- 1c8d524: Stop a non-material child deleting `AnimatedSprite`'s material.
+
+    `AnimatedSprite` used `children ?? <default/>`, so **any** child suppressed the default material —
+    `false` included. `<AnimatedSprite>{flag && <Mat/>}</AnimatedSprite>` with the flag off rendered a
+    mesh carrying `three`'s implicit white `MeshBasicMaterial` and no map, and so did a non-material
+    child such as a nested `<group>`, an `<Html>` label or text.
+
+    The default is now emitted whenever `children` carries no material, and `children` is always
+    rendered rather than standing in for the material. **This changes rendered output for existing
+    callers**: a sprite that passed a non-material child previously drew an unmapped white quad and now
+    draws its sheet, and a material-carrying child still replaces the default exactly as before.
+
+    Which children count as a material is decided by `attach` first — in both directions, so
+    `<meshDepthMaterial attach="customDepthMaterial"/>` is not read as the mesh's material — then by an
+    `object` holding a material instance, then by a fragment's contents, then by an intrinsic's name,
+    with a component read as the material.
+
+- e9c3160: Add an `environment-map` asset kind, so an HDRI ships in `assets/` and lights a PBR scene.
+
+    A physically-based material without image-based lighting reads as flat plastic whatever its
+    roughness and metalness say, and until now there was no asset kind that could carry the light: the
+    registered kinds were `texture`, `audio-clip`, `gltf-model`, `sprite-sheet` and `particle-config`,
+    none of which decodes an HDRI.
+
+    An `environment-map` entry resolves to an equirectangular `THREE.Texture` of linear radiance data.
+    `.hdr` and `.exr` are loaded, the decoder chosen from the ref's extension and imported inside its own
+    branch so neither is named on a path that does not use it. Any other extension rejects with
+    `UnsupportedEnvironmentMapFormatError`, which names both the extension refused and the ones that
+    load. `validate:assets` knows the kind, so an entry declaring it passes the build gate.
+
+    Two things differ from the `texture` kinds on purpose. The equirectangular mapping is written by the
+    loader rather than declared, because three's default for a fresh texture samples the image as a flat
+    decal and lights nothing. And no colour-space default is applied: the decoders write
+    `LinearSRGBColorSpace` themselves, and the sRGB default that suits a colour image would have the
+    renderer decode radiance a second time. Everything an entry does declare through the existing
+    sampling vocabulary is still applied.
+
+    `chimera://` serves Radiance as `image/vnd.radiance` and OpenEXR as `image/x-exr`. Neither row is what
+    makes the load work — both decoders read the file as an arraybuffer — so the rows say what the file
+    is rather than enabling it.
+
+    Applying the texture is ordinary React Three Fiber: `scene.environment` lights every standard material
+    in the scene, a material's `envMap` lights one. Three converts an equirectangular map to the
+    pre-filtered form a physical material samples, so neither route needs a helper library.
+
+- 3c8f7f8: Export `UnsupportedEnvironmentMapFormatError` from `@chimera-engine/renderer/assets`.
+
+    An `environment-map` entry whose ref names an extension the engine does not decode rejects its load
+    with this error, and `useAsset` reports it as its `error`. The class was not on the barrel, so a game
+    could not import it and had no documented way to tell this refusal from any other failed load. It
+    now sits beside `UnknownAssetManifestEntryError` and `MalformedModelAssetError`, and a game
+    recognises it with `instanceof`, which also types its `ref` and `extension` fields.
+
+    Additive: nothing is removed or renamed, and the error's `name` and message are unchanged.
+
+- a7f43d8: Add a per-instance material override to `useModelInstance`.
+
+    Every mount of a `gltf-model` ref shared its materials with the cached asset, so there was no
+    sanctioned way to tint one unit and not its siblings — the selection, damage and team-colour
+    affordances of a game whose units are loaded models. `useModelInstance` now takes a
+    second argument, `ModelInstanceMaterialOverride` (exported from the same `assets` barrel), with a
+    `color` that is multiplied into each material's authored colour and an `emissive` that replaces it;
+    both accept a CSS colour string or a packed `0xrrggbb` number.
+
+    An override makes the clone own a copy of every material under its root — `Material.clone()`
+    copies the `Color` fields and shares the textures — so the cached material is never written and
+    Invariant #21's sharing rule is unchanged. `releaseModelInstance` disposes those copies alongside
+    the clone's skeletons. The clone is keyed on whether an override is present: adding or removing one
+    re-clones, while changing its values re-colours the owned materials in place and keeps the instance
+    identity. An emissive on an unlit model (`MeshBasicMaterial` has no emissive field) is applied to
+    nothing. The cost is a copy of every material under the root per overridden mount; a tint or emissive
+    alone triggers no shader compile, as three keys its program cache on a material's feature
+    set rather than its colour values.
+
+- e1de476: Add `useShaderTime`, a shader time uniform that follows engine time.
+
+    A shader that animates needs a time uniform, and the hand-rolled version — accumulate the frame
+    delta, or read the R3F clock — works until the player enables slow motion, at which point it runs at
+    full speed while everything around it crawls. `useShaderTime()` returns a `ShaderTimeUniform`
+    (`{ value: number }`, structurally `three`'s `IUniform<number>`) whose value advances by the frame
+    delta multiplied by the authoritative time scale, so a shader dilates with the match with no
+    per-call-site wiring. It is cap-independent: a 30 fps game and a 144 fps one reach the same value.
+
+    The object identity is stable for the life of the mount, and the material must hold that very
+    object: the hook advances `value` in the frame loop and never re-renders. Seat it in a
+    `ShaderMaterial`'s constructor and hand the instance over as
+    `<primitive object={material} attach="material" />`; declaring `uniforms` as a JSX prop does not
+    work, because r3f stores a shallow copy of a uniform the material does not already carry. Both ship
+    from the `components/r3f` barrel.
+
+- c968d76: Give `AnimatedSprite` an appearance surface and a custom-material seam.
+
+    `AnimatedSpriteProps` now takes `color`, `opacity`, `blending`, `alphaMode`, `alphaThreshold`,
+    `depthWrite` and `depthTest`, so tinting, additive sprites and cutout sprites no longer require
+    replacing the material. `blending` and `alphaMode` are engine-owned names — `'additive'`, `'mask'` —
+    so a game never imports `three` for a prop value. An alpha mode decides exactly two material fields:
+    `transparent`, and the `alphaTest` used when no `alphaThreshold` is authored. Declaring no
+    `alphaMode` keeps the pre-existing default, which is a hybrid none of the three modes spells and is
+    unchanged here deliberately.
+
+    A new `material` prop is the supported seam for a custom sprite material, and it **receives the
+    sheet texture** the component has already resolved, so a game no longer resolves the same sheet a
+    second time to reach an object the component is holding. The element is cloned rather than written
+    into, and nothing else about it is touched — none of the appearance props is applied to a supplied
+    material. A material whose `map` prop is set keeps it, `map={null}` included; an element handing
+    over a material instance — a `<primitive>` — receives nothing, because r3f would apply the prop by
+    writing onto an instance the game owns. A
+    material supplied as `children` still works and still does not receive the texture.
+
+    Tinting one sprite does not tint others cut from the same sheet: the tint is on the material
+    instance, never on the manager-owned texture.
+
+- 53ff0ec: Default a texture's color space to sRGB. **Data maps must now declare `colorSpace: 'none'`.**
+
+    A `texture` or `sprite-sheet` manifest entry that declares no `colorSpace` is now published as
+    `'srgb'`. Until now it was published with no color space at all, which is three's default for a bare
+    texture.
+
+    What that changes in an existing game depends on how the game hands the texture to a material,
+    because `@react-three/fiber` tags a texture sRGB itself on some routes and not on others. What r3f
+    does on each route below is pinned against the installed version by
+    `renderer/components/r3f/__tests__/r3f-texture-color-space.test.tsx`.
+    - **A color image set as a JSX prop on a color slot — `<meshStandardMaterial map={texture} />` — does
+      not change.** r3f already tagged it sRGB when the prop was applied. This is the route the engine's
+      own `AnimatedSprite` takes for its default material.
+    - **A color image passed through constructor `args`, or assigned to a material the game built
+      itself, now renders darker than before.** r3f does not tag a texture on
+      either route (`<meshStandardMaterial args={[{ map: texture }]} />`, `material.map = texture`).
+      Those were uploaded without an sRGB decode, so their stored values were shaded as if they were
+      linear. If you had compensated for that look on one of these routes, take the compensation out.
+    - **A data map that declares nothing is now wrong.** Roughness, metalness, normal, ambient-occlusion
+      and mask images are not color and must not be decoded. r3f leaves a texture on a data slot
+      (`roughnessMap`, `normalMap`) alone, so until now an undeclared one stayed untagged, which is right
+      for it; it now arrives tagged sRGB, and r3f leaves that alone too. Declare it:
+      `textureEntry({ ref, priority, sampling: { colorSpace: 'none' } })`.
+
+    A texture inside a `.glb` is unaffected: `GLTFLoader` configures those, not the asset manifest.
+
+    The default is `DEFAULT_TEXTURE_COLOR_SPACE`, exported from `@chimera-engine/simulation/content`
+    beside the sampling vocabulary. Data maps stay a declared option rather than a second asset kind.
+
+    The blank template's worked `asset-manifest.ts` example now declares its banner through
+    `textureEntry` with an explicit `colorSpace: 'srgb'`, so the first texture a new game declares shows
+    that the option exists.
+
+### Patch Changes
+
+- efa0660: Pin the catch-up comparator in `bootstrapGameStore` on an equal-tick boundary.
+
+    When `getCurrentSnapshot()` resolves a snapshot on the same tick as one already applied from the
+    live stream, the catch-up is discarded and the live snapshot stands. Every fixture before this one
+    put the two snapshots on different ticks, so loosening the comparator to `>=` went unnoticed. The
+    new case delivers two structurally equal snapshots as distinct objects on one tick and asserts, by
+    identity, that the store holds the live one. No production code changes.
+
+- b79e047: Record that GPU-compressed textures are out of scope for now, and why.
+
+    There is no `.ktx2` or Basis asset kind, and §4.10 now says so plainly rather than leaving a game to
+    discover it: plan for uncompressed texture memory, where an 8-bit RGBA image costs `width × height × 4`
+    bytes on the GPU plus a third again for mipmaps. Against that the engine offers fewer or smaller
+    images, and the mipmap third, since `generateMipmaps` is declarable per entry.
+
+    What decided it was not packaging. Both apps copy their asset directory unfiltered, so a compressed
+    file ships with no config change, and the transcoder would be served from the app's own protocol like
+    anything else under `assets/`. A `.wasm` content-type row is not needed either: `KTX2Loader` reads the
+    binary as an arraybuffer and hands it to the transcoder, which compiles from those bytes rather than
+    streaming a response.
+
+    The obstacle is where the asset layer sits. three's `KTX2Loader` refuses to load or even to parse
+    without `detectSupport(renderer)`, because the renderer is what tells it which compressed formats the
+    GPU accepts — so it is needed to choose a transcode target before any byte is decoded. Managers are
+    built outside a canvas, and a game that mounts none never creates a `WebGLRenderer` at all. Carrying
+    the GPU device into that layer is a new dependency direction and a change to the shape of
+    `AssetLoader`.
+
+    A test holds that refusal against the installed three, so the reasoning reds rather than ages if the
+    requirement goes away. §4.10 also records a second cost the branch did not measure: the transcoder
+    runs in a worker created from a `blob:` URL, which the shipped CSP does not look to admit — something
+    a yes would have to settle first.
+
+    Nothing half-built is left behind, deliberately: a partial surface would be a game's first sign that
+    the answer was yes.
+
+- 9684821: Add `display.shadowQuality` and `display.renderScale` engine settings.
+
+    Graphics quality becomes a **player** setting, not only an author setting — the same class of knob
+    as the existing `display.targetFps`. `shadowQuality` is a tier name (`off` | `low` | `medium` |
+    `high`); `renderScale` is a fraction of what would otherwise be drawn (`0.5` | `0.75` | `1`). Both
+    defaults reproduce what the canvas rendered before either existed.
+
+    Both values are engine-owned names and scalars. Per Invariant #1 nothing stored in `simulation/` may
+    name a `three` symbol, so the tier becomes a shadow-map type on the renderer side alone.
+
+    The three halves of a `display` field have to agree and only one of them is self-checking:
+    `engineSettingsZodShape` carries no type annotation, so a field added to the `EngineSettings`
+    interface and to `ENGINE_DEFAULTS` but forgotten in the Zod shape compiles, and
+    `SettingsMerger.validatePatch` then strips it — discarding the player's stored override on every
+    load. The red-first test for this task drives a stored override through `validatePatch` against the
+    REAL shape and failed with `{ display: {} }` before the Zod half existed.
+
+    `apps/tactics` supplies its own settings-page definition, so it opts out of
+    `ENGINE_DEFAULT_SETTINGS_DEFINITION` and would have silently lost both rows. Its definition carries
+    them and its own field-list pin names them, which is the test that catches this class. `apps/action`
+    and the blank template ship no settings-page definition and pick the rows up from the engine default
+    tab set; all three spread `ENGINE_DEFAULTS` and `engineSettingsZodShape` into their schemas, so they
+    inherit persistence and validation.
+
+    `display.renderScale` is the first display field whose stored value is fractional. Its descriptor
+    parses with a numeric parser rather than `display.targetFps`'s `parseIntegerValue`, which would
+    truncate `0.75` to `0` — a value the schema rejects, so the override would be refused rather than
+    stored.
+
+    Tokens are added to the engine key catalogue, the English bundle and the Czech bundle, and the
+    documented surfaces that enumerate the engine field set name both fields.
+
+- 6745e3c: Declare the engine's asset-kind ids once, and guard the two readers against drifting apart.
+
+    `validate:assets` reports a manifest kind the engine registers no loader for. Which kinds those are
+    was written down twice — once as a literal set inside the tool, once as the loaders
+    `createDefaultAssetLoaderRegistry` builds — with nothing holding the two equal. A gate that refuses a
+    kind the engine loads turns a working manifest into a failed build; a gate that accepts one the engine
+    cannot load moves the failure into the shipped game.
+
+    `ENGINE_ASSET_LOADER_KIND_IDS` in `@chimera-engine/simulation/foundation/engine-asset-kinds.js` is now
+    the one declaration. The tool builds its membership set from it, and a guard asserts the default
+    loader registry registers exactly those kinds — in both directions, since a declared kind with no
+    loader passes a manifest the runtime then refuses, and a loader with no declaration is a gate that
+    refuses a file the engine can load. The list is typed against `AssetKindId`, so an id with no phantom
+    brand behind it is a compile error.
+
+    Two properties of the tool are now pinned rather than merely true. A missing environment map is
+    reported by the same walk that reports any other missing ref. And no extension allow-list exists: an
+    HDRI declared under the `texture` kind, or a PNG under `environment-map`, still passes — both are
+    authoring mistakes the runtime catches, and a rule making them the gate's business would be a new
+    restriction across every kind, needing its own justification.
+
+- bcf4501: Add `LightingRig`, an engine-owned default light rig, to `@chimera-engine/renderer/components/r3f`.
+
+    Mounted as a child of `GameCanvas`, it renders one ambient light and one directional key light, so a
+    game gets usable lighting without hand-rolling `<ambientLight>` + `<directionalLight>`. Its props are
+    plain numbers, a position tuple and a flag — `ambientIntensity`, `keyLightIntensity`,
+    `keyLightPosition` and `castShadow` — so configuring it imports neither `three` nor `Canvas`.
+
+    The rig is a default, not a monopoly: it suppresses nothing, so a game's own lights mount beside it,
+    and a game that wants bespoke lighting keeps writing its lights as before.
+
+- 07d1fd9: Expose the WebGL context options on `GameCanvas` as a distinct, frozen prop shape.
+
+    `GameCanvasProps` gains `contextOptions` — `antialias`, `alpha`, `powerPreference`, `stencil`,
+    `preserveDrawingBuffer` — and the r3f barrel publishes `WebGLContextOptions` and its
+    `PowerPreference` as types. It is a nested object rather than flat props, and that shape IS the
+    contract: everything beside it can still move, everything inside it cannot. WebGL context attributes
+    are fixed when the context is built, so a value written afterwards cannot take effect.
+
+    What the separation is worth at the type level is bounded, and the docs say so: TypeScript's
+    excess-property check bites a fresh object literal, so a widened variable or a spread reaches
+    through either way. The literal case is measured in both directions — a mutable knob inside
+    `contextOptions`, and a context option as a flat prop — each with its own `@ts-expect-error` pin. A
+    raw `gl={…}` pass-through remains rejected: this task exposes curated context options, not the
+    coupling shape Invariant #127 bans from game files.
+
+    A change after mount is REFUSED, not ignored, because silently disregarding it is the failure this
+    shape exists to prevent. The canvas keeps the values it mounted with and names the differing keys
+    through the renderer logger as `ContextOptionsAfterMountError` — logged, not thrown, the way a
+    duplicate `role="main"` canvas is. The comparison is by value, so a game writing its options inline
+    (a fresh object every render) reports nothing; a key that is DROPPED counts as a change, since `{}`
+    asks for r3f's default where the mount asked for something else. To build a context with different
+    attributes, remount the canvas under a new React `key`.
+
+    `camera-system.md` records what stays unexposed — r3f's `legacy`, `linear`, `flat`, `orthographic`,
+    `performance`, `raycaster`, `scene`, `events`, `onCreated` and `size` — so the omission does not read
+    as an oversight to the next reader.
+
+    The key list the drift comparison walks is derived from a `Record<keyof WebGLContextOptions, true>`
+    rather than written as a tuple. A `satisfies readonly (keyof …)[]` checks membership only, so a
+    sixth option added to the type and forgotten in the list would compile and be silently uncompared;
+    the record makes a missing key TS2741 and an extra one TS2353.
+
+- 25fabe5: Publish curated renderer configuration on `GameCanvas`.
+
+    `GameCanvasProps` gains `shadows`, `toneMapping`, `toneMappingExposure`, `outputColorSpace` and
+    `renderScale`, and the r3f barrel publishes `ShadowQuality`, `ToneMappingMode`, `OutputColorSpace`
+    and `RenderScale` as types. Every value is an engine-owned NAME, so a game configures the renderer
+    while importing neither `Canvas` nor `three` — Invariant #127 bans the `Canvas` binding from game
+    files, and this is what makes the ban liveable rather than merely restrictive. The name to
+    `three`-constant mapping lives in `renderer/components/r3f/rendererConfig.ts` and stays
+    renderer-internal; the types ship, the constants do not.
+
+    Omitting the props reproduces the rendering the canvas had before they existed. `shadows` and
+    `renderScale` ride r3f's own `shadows` / `dpr` props and both keys are OMITTED rather than
+    defaulted, so r3f applies its own defaults; the three colour fields are never written.
+
+    The colour trio is not a Canvas prop. The alternative is handing r3f a raw `gl={…}` object, which
+    is the pass-through shape Invariant #127 keeps out of game files — so the curated props carry the
+    concern, and `GameCanvas` applies these three from a null component mounted inside the `<Canvas>`,
+    where the renderer is R3F root state. A change to any of them takes effect without remounting the
+    canvas, measured one case per knob. A renderer has no unset state, so dropping the prop afterwards
+    leaves the last authored value standing; that limit is documented on the prop and pinned by a test.
+
+    Every prop is per canvas, so an `overlay` can be configured more cheaply than the `main` scene it
+    sits over.
+
+- 3fe629a: `GameCanvas` re-resolves its render scale when the display's device-pixel ratio changes.
+
+    A range `renderScale` — r3f's `[1, 2]` default included — is resolved against the display's own
+    ratio, and the canvas root read that ratio only when it rendered. A ratio change that re-rendered
+    nothing else left the canvas at the dpr resolved from the old ratio. The canvas root now subscribes
+    to the ratio through `matchMedia`, so a change reaches the canvas without a remount. Where there is
+    no `matchMedia` (jsdom), nothing is subscribed.
+
+    camera-system.md §4.22 "Precedence" now records that the shadow clamp has no floor, deliberately,
+    and what a game whose scene needs shadows does instead: it sets its settings default for
+    `display.shadowQuality`, which the player can still lower.
+
+- 5564a05: Release `LightingRig`'s key-light shadow map when the resolved shadow quality changes to `off`.
+
+    On a change to `off`, the rig disposes the shadow map three built for its key light, and any blur
+    pass, and clears both. The map's size is kept, so a return to the same quality allocates a fresh map
+    at that size.
+
+- 6a16ed6: Route `display.shadowQuality` to `LightingRig`'s shadow map.
+
+    `LightingRig` now reads the shadow quality its `GameCanvas` resolves — the player's tier, capped by
+    the game's `shadows` ceiling — and sizes its key light's shadow map from it: 512 px per side at
+    `basic`, 1024 at `percentage`, 2048 at `soft` and `variance`. At `off` the key light does not cast,
+    whatever `castShadow` says.
+
+    A quality change applies live, without remounting the canvas: the rig releases the shadow map three
+    built at the old size, so the next frame allocates one at the new size.
+
+- e161e4b: Adopt `LightingRig` in both reference apps, so the shadows their meshes already ask for render.
+
+    The tactics board, the action playfield and the action shell background now mount `LightingRig`
+    instead of a hand-rolled ambient + directional pair, keeping each scene's intensities and key light
+    position. Tactics' old key light did not cast, so its units' `castShadow` and its ground's
+    `receiveShadow` rendered nothing even with shadow mapping on; the rig's key light casts.
+
+    Both apps default `display.shadowQuality` to `medium` over the engine's `off`, so a fresh install
+    shows the shadows, and a player can still turn them off.
+
+    `LightingRig` gains `shadowCameraExtent`, the half-side of the box its key light's shadow covers.
+    Omitted, it keeps three's own `5`; the action arena is wider than that, so both action scenes size
+    the box from the arena.
+
+- 88f810c: Guard that a named-mode mapping table stays off the shell layout graph.
+
+    The tone-mapping and output-colour-space knobs each need an engine-name → `three`-constant table,
+    and so do the sampling and blending modes. Nothing the always-mounted shell
+    layout chunk reaches through a static **value** edge may name `three`, so where those tables live is
+    a real constraint — and until now it was enforced only by a census that could itself go blunt
+    without anyone noticing. A census whose predicate silently stopped matching goes on passing, and a
+    shrunken graph passes for the wrong reason.
+
+    `named-mode-mapping-table-placement.test.ts` keeps it sharp. It runs the real walk from each
+    consumer app's real layout with **one real module's source overlaid** by that same source plus a
+    `three` import — exactly what moving a mapping table into a module the layout reaches would do — and
+    asserts the census reports it by that module's name. Three arms, because the property has three
+    defeatable halves: a value import is reported, the same module unmutated reports nothing (so the
+    report is caused by the mutation rather than by something already there), and a `type`-only import
+    is not reported. A fourth pins that the overlaid module is on the graph at all, since an overlay of
+    a module the walk never visits would prove nothing.
+
+    The guard mutates a **file system**, never the tree, so it needs no manual step and leaves nothing
+    to restore — a standing check rather than a measurement recorded once in a comment. The census
+    itself is untouched: it is not amended or relaxed to accommodate the new tables.
+
+    `camera-system.md` records the constraint, the two compliant shapes (off the graph entirely, as
+    `rendererConfig.ts` is; or behind a dynamic edge, as `AssetManager.ts` reaches `TextureLoader`), and
+    the `type`-only exception, alongside the guard above.
+
+- 497ba6c: Resolve `display.shadowQuality` and `display.renderScale` at the canvas root.
+
+    **The precedence is one rule for both knobs: the player's setting chooses, the game's prop caps.** A
+    game therefore cannot spend a player's GPU budget for them, and a player cannot ask for more than the
+    scene supports. A game that authors nothing imposes no cap, so the player's setting stands alone.
+
+    This changes what `GameCanvasProps.shadows` and `GameCanvasProps.renderScale` mean: each is now a
+    **ceiling** rather than the value applied. Authoring `shadows="soft"` no longer renders soft shadows
+    on its own — the player's tier does, up to that ceiling — and at the engine default tier (`off`) a
+    canvas has shadow mapping disabled whatever the game authored. That is what the canvas rendered
+    before either setting existed, so nothing visibly changes today; it is F103's casting light that
+    makes shadows show.
+
+    Two vocabularies meet at this seam and they are different quantities, which is the mistake the docs
+    now exist to prevent. `display.shadowQuality` is a player TIER (`off` | `low` | `medium` | `high`);
+    `shadows` is a shadow-map NAME (`off` | `basic` | `percentage` | `soft` | `variance`). The tier maps
+    to a name and the clamp is an index comparison on the ascending cost order.
+
+    `display.renderScale` is a FRACTION of what would otherwise be drawn; `renderScale` is r3f's `dpr`
+    and is ABSOLUTE. A **range** ceiling is not scaled end-for-end, and getting that wrong is a setting
+    that does nothing: r3f resolves a range by clamping the display's own ratio into it
+    (`Math.min(Math.max(dpr[0], target), dpr[1])`), so scaling the ends yields `clamp(target, lo·f, hi·f)`
+    — not `f ×` anything, and on a `devicePixelRatio` of 1 the same ratio for every option. The engine
+    therefore resolves the range itself and scales the result, handing the canvas a scalar. At the engine
+    default fraction that scalar equals what r3f's own `calculateDpr` returns for the same ceiling, and
+    the tests assert it against that formula rather than against a copied number.
+
+    The resolved ratio is floored just above zero, so a coarse setting renders coarsely rather than
+    degenerating to a zero-area drawing buffer.
+
+    Both are read by `selectDisplayQuality.ts`, the sibling of `selectTargetFps.ts`, and neither it nor
+    the resolution is a barrel export — the canvas root is the one place an engine-wide display setting
+    can apply to whatever a game renders (Invariant #127), and the seam stays engine-internal
+    (Invariant #96).
+
+    Which knobs survive a mid-session change is now stated rather than discovered: shadows, render scale
+    and the colour trio all apply live, because r3f re-runs `configure()` from a layout effect with no
+    dependency array and writes `gl.shadowMap` and the `dpr` on every pass. `contextOptions` cannot, and
+    is refused by name.
+
+- bf18dad: Export `ShadowQualityProvider` from `@chimera-engine/renderer/components/r3f`, so a game's component
+  test can mount `LightingRig` without a `GameCanvas`.
+
+    `LightingRig` sizes its key light's shadow map from the shadow quality its `GameCanvas` resolved. A
+    test that mounts a scene under `@react-three/test-renderer` has no `GameCanvas` to resolve one, so it now
+    wraps the scene in `<ShadowQualityProvider quality="…">` and the rig reads that quality instead.
+
+    The provider throws when mounted inside a `GameCanvas` or inside another `ShadowQualityProvider`, so
+    a rig under a `GameCanvas` still reads only the canvas's resolution.
+
+- 3fdc8ea: Stop `GameAssetSession` from warming audio clips, so a game forwarding one shell inventory to both
+  shell payload fields no longer decodes its menu audio twice.
+
+    `shellAudioAssets` and `shellBackgroundAssets` each open their own session over their own manager,
+    and each session ran the critical preload over the whole inventory it was handed. Forwarding one
+    inventory to both fetched and decoded every critical clip once per session, and the background
+    session kept its copy for as long as the background was mounted. `AudioManager` loads a clip through
+    the app-level delegate, and a `GameAssetSession` never registers as that delegate, so the copy it
+    decoded was not one `AudioManager` played.
+
+    A `GameAssetSession` now treats every `audio-clip` entry as `deferred` for its warm-up. The entry is
+    still registered, so a subtree that loads the clip directly still resolves it, on demand. The shell
+    audio session is unchanged and still warms every critical entry, clips included. Other critical
+    entries in a shared inventory are still warmed by both sessions.
+
+- f3c5370: Apply a manifest entry's declared texture sampling in the loader, before the texture is published.
+
+    The default `texture` and `sprite-sheet` loaders now read the `sampling` a manifest entry declares
+    and write it onto the texture while the loader is still the only thing holding it. What
+    `AssetManager.load()` resolves and what `get()` returns is already configured, so a component has no
+    configuration step of its own and no reason to write to a texture it shares with every other
+    consumer of that ref. An option the entry does not declare is left as the loader produced it, apart from
+    the color space, which has a default.
+
+    The declaration is checked before the image, or a sprite sheet's atlas descriptor, is requested. An
+    invalid one — reachable through a hand-authored entry, which no builder checked — rejects the load
+    with `InvalidTextureSamplingError`.
+
+    `parseSpriteAtlas`, and so `useSpriteAtlas` and `AnimatedSprite`, now honour a sheet declared
+    `flipY: false`: its `v` coordinates run down the image with the unflipped rows. Before this the
+    atlas assumed three's default `flipY: true`. A sheet that does not declare `flipY` is measured as
+    before.
+
+- Updated dependencies [9684821]
+- Updated dependencies [6745e3c]
+- Updated dependencies [e9c3160]
+- Updated dependencies [53ff0ec]
+- Updated dependencies [5117c6c]
+- Updated dependencies [85ccade]
+- Updated dependencies [f36b101]
+    - @chimera-engine/simulation@1.0.0-rc.14
+
 ## 1.0.0-rc.13
 
 ### Minor Changes

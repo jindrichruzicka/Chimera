@@ -1,5 +1,51 @@
 # @chimera-engine/action
 
+## 0.2.0-rc.2
+
+### Minor Changes
+
+- c0bedd8: Light the action menu's mirror ball with a manifest-declared HDRI, and prove it renders with nothing
+  fetched.
+
+    The menu background gains a decorative chrome sphere whose only light is the environment map it
+    reflects. A physically-based metal has no diffuse term, so with no environment map it renders
+    near-black under any number of lights — which is what makes one frame enough to say an HDRI decoded,
+    uploaded and lit a PBR material, with no before-and-after comparison to arrange.
+
+    The sky ships in `apps/action/assets/`, resolves through the shell manifest like every other asset,
+    and is GENERATED: `tools/gen-action-environment-hdr.ts` emits it and a byte-equality test holds the
+    committed file equal to that output, because a Radiance image cannot be reviewed by reading it. The
+    shell payload now forwards its inventory as `shellBackgroundAssets` as well as `shellAudioAssets`,
+    which is what opens an asset session around the background subtree so its own components can resolve
+    a ref.
+
+    `environment-map.spec.ts` asserts both halves in the running app: the reflection reaches the screen,
+    and the requests its recorder saw all used a local scheme. The recorder is installed from the spec
+    rather than shipped, and carries a positive control — one that was never wired would report no
+    outbound request just as convincingly as an app that made none. What it cannot see is stated in the
+    spec: it attaches after the app has booted.
+
+    One measured constraint came out of building this, and it is documented in §4.10 rather than left for
+    the next game to find: an equirectangular source narrower than 64 px renders a physical material BLACK
+    with nothing logged anywhere, because the pre-filtered form three builds for it is sized from the
+    source.
+
+### Patch Changes
+
+- e161e4b: Adopt `LightingRig` in both reference apps, so the shadows their meshes already ask for render.
+
+    The tactics board, the action playfield and the action shell background now mount `LightingRig`
+    instead of a hand-rolled ambient + directional pair, keeping each scene's intensities and key light
+    position. Tactics' old key light did not cast, so its units' `castShadow` and its ground's
+    `receiveShadow` rendered nothing even with shadow mapping on; the rig's key light casts.
+
+    Both apps default `display.shadowQuality` to `medium` over the engine's `off`, so a fresh install
+    shows the shadows, and a player can still turn them off.
+
+    `LightingRig` gains `shadowCameraExtent`, the half-side of the box its key light's shadow covers.
+    Omitted, it keeps three's own `5`; the action arena is wider than that, so both action scenes size
+    the box from the arena.
+
 ## 0.1.1-rc.1
 
 ### Patch Changes

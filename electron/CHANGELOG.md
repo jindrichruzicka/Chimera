@@ -1,5 +1,242 @@
 # @chimera-engine/electron
 
+## 1.0.0-rc.14
+
+### Minor Changes
+
+- ce7e67a: `StateBroadcaster` no longer diffs or serialises for a recipient nothing will receive.
+
+    `HostTransport` gains `isReachable(playerId)`: whether a snapshot sent to that player now would
+    reach a client, which is the check `sendSnapshot` makes before dropping a frame. The WebSocket
+    transport answers with its open-socket check and the in-memory transport with its client lookup.
+    Breaking for anyone implementing `HostTransport` themselves.
+
+    Before sending, `StateBroadcaster` asks the transport and its own renderer recipients. A recipient
+    neither will deliver to — the transport cannot reach it and no renderer is bound to it — is sent
+    nothing, costs no diff, no size test and no keyframe serialisation, and keeps no baseline, so the
+    first frame it gets once it is reachable again is a keyframe. The host's own seat keeps its renderer
+    leg on deltas: it is never reachable over the transport, and its renderer consumes the delta.
+
+    `electron/main/__tests__/BroadcasterPerBeatPerf.bench.test.ts` measures the broadcaster per wave
+    for reachable seats, for seats nothing receives, and for projection alone; §7.5 records the numbers.
+
+### Patch Changes
+
+- 3eb490e: Serve `.jpg` and `.jpeg` as `image/jpeg` over the app protocol.
+
+    Both extensions were missing from the protocol handler's content-type table and fell through to
+    `application/octet-stream`. The table is a curated list — `.bin` is mapped to octet-stream on
+    purpose — so a common image type answering as octet-stream read as a decision when it was not one.
+
+    An image type is not range-capable, so a `Range` header on a JPEG is answered with the whole file.
+
+- d2b5a44: Record that asset loaders are engine-owned, and make `validate:assets` say so.
+
+    The asset docs promised that games register additional loaders and pass a composed registry into
+    `AssetManager`. Nothing in the tree did that: every construction site passes no registry, and the
+    public assets barrel publishes neither the loader types nor the manager factory, so there was
+    nothing to build a registry with and nowhere to hand one in. The decision recorded in §4.10 is that
+    the kinds the engine registers a loader for are the whole set, with the cost stated — a game that
+    wants a format the engine does not load waits for the engine.
+
+    `chimera-validate-assets` no longer widens its known-kind set by scanning game source for loader
+    declarations. That scan accepted a kind the runtime would then refuse. The set the gate checks
+    against is now the kinds the engine registers a loader for. No file in this repo was reached by the
+    scan, so nothing that passed for a real reason starts failing.
+
+    Declaration merging on `AssetKindRegistry` still types a distinct ref. What it never did was make
+    the kind loadable, and the gate above is where that is now said out loud.
+
+- cd52737: Reap crash dump temp files an interrupted dump write left behind.
+
+    A process killed between a crash dump's write and its rename left a `crash-<iso>.json.tmp` in
+    `userData/crashes/` that no sweep removed. The composition root now runs
+    `reapOrphanCrashDumpTempFiles()` once per app start over that directory, taking only dump temp files
+    at least an hour old.
+
+    Crash dumps sit directly in `userData/crashes/`, one level above where `sweepOrphanTempFiles()`
+    looks, so `electron/main/orphan-temp-reap.ts` gains `sweepOrphanTempFilesIn()`, the same sweep over
+    the files of one directory.
+
+- db3cdd2: Keep an applied `engine:sync_request` out of the Inspector's action log.
+
+    The request changes nothing and leaves the tick where it was, so the debug bridge used to log it
+    as a state-changing action: the next action, applied at the same tick, then read as a tick
+    regression, was compacted with a warning, and the bridge's redo stash was wiped while the engine's
+    own redo buffer was not. The bridge now treats a sync request like undo and redo and does not append
+    it or touch the redo stash.
+
+- 6745e3c: Declare the engine's asset-kind ids once, and guard the two readers against drifting apart.
+
+    `validate:assets` reports a manifest kind the engine registers no loader for. Which kinds those are
+    was written down twice — once as a literal set inside the tool, once as the loaders
+    `createDefaultAssetLoaderRegistry` builds — with nothing holding the two equal. A gate that refuses a
+    kind the engine loads turns a working manifest into a failed build; a gate that accepts one the engine
+    cannot load moves the failure into the shipped game.
+
+    `ENGINE_ASSET_LOADER_KIND_IDS` in `@chimera-engine/simulation/foundation/engine-asset-kinds.js` is now
+    the one declaration. The tool builds its membership set from it, and a guard asserts the default
+    loader registry registers exactly those kinds — in both directions, since a declared kind with no
+    loader passes a manifest the runtime then refuses, and a loader with no declaration is a gate that
+    refuses a file the engine can load. The list is typed against `AssetKindId`, so an id with no phantom
+    brand behind it is a compile error.
+
+    Two properties of the tool are now pinned rather than merely true. A missing environment map is
+    reported by the same walk that reports any other missing ref. And no extension allow-list exists: an
+    HDRI declared under the `texture` kind, or a PNG under `environment-map`, still passes — both are
+    authoring mistakes the runtime catches, and a rule making them the gate's business would be a new
+    restriction across every kind, needing its own justification.
+
+- e9c3160: Add an `environment-map` asset kind, so an HDRI ships in `assets/` and lights a PBR scene.
+
+    A physically-based material without image-based lighting reads as flat plastic whatever its
+    roughness and metalness say, and until now there was no asset kind that could carry the light: the
+    registered kinds were `texture`, `audio-clip`, `gltf-model`, `sprite-sheet` and `particle-config`,
+    none of which decodes an HDRI.
+
+    An `environment-map` entry resolves to an equirectangular `THREE.Texture` of linear radiance data.
+    `.hdr` and `.exr` are loaded, the decoder chosen from the ref's extension and imported inside its own
+    branch so neither is named on a path that does not use it. Any other extension rejects with
+    `UnsupportedEnvironmentMapFormatError`, which names both the extension refused and the ones that
+    load. `validate:assets` knows the kind, so an entry declaring it passes the build gate.
+
+    Two things differ from the `texture` kinds on purpose. The equirectangular mapping is written by the
+    loader rather than declared, because three's default for a fresh texture samples the image as a flat
+    decal and lights nothing. And no colour-space default is applied: the decoders write
+    `LinearSRGBColorSpace` themselves, and the sRGB default that suits a colour image would have the
+    renderer decode radiance a second time. Everything an entry does declare through the existing
+    sampling vocabulary is still applied.
+
+    `chimera://` serves Radiance as `image/vnd.radiance` and OpenEXR as `image/x-exr`. Neither row is what
+    makes the load work — both decoders read the file as an arraybuffer — so the rows say what the file
+    is rather than enabling it.
+
+    Applying the texture is ordinary React Three Fiber: `scene.environment` lights every standard material
+    in the scene, a material's `envMap` lights one. Three converts an equirectangular map to the
+    pre-filtered form a physical material samples, so neither route needs a helper library.
+
+- 049d1fc: Reap replay temp files a crashed write left behind.
+
+    `FileReplayRepository` and `FilePerspectiveReplayRepository` name every replay with a fresh UUID, so
+    their temp paths are per write and no later write reopens one: a process killed between a replay's
+    write and its rename left a full-size `.tmp` that nothing removed and the replay list never showed.
+    Both repositories now carry `reapOrphanTempFiles()`, and the composition root runs it once per app
+    start over `userData/replays` and `userData/perspective-replays`, as it already did for saves.
+
+    The sweep itself moved out of `FileSaveRepository` into `electron/main/orphan-temp-reap.ts`
+    (`sweepOrphanTempFiles()`, with `ORPHAN_TEMP_MAX_AGE_MS` beside it), and all three repositories
+    call it with the names they write. It takes only temp artefacts at least an hour old.
+
+- 9d3363e: Give a save's temp file a name no second instance can take.
+
+    `FileSaveRepository` told one in-flight write from another by a module-level counter, and module
+    state restarts in every process. Two instances sharing one `userData` — nothing refuses a second
+    one, the app requests no single-instance lock — therefore both opened `<slot>.chimera.1.tmp` for
+    their first save of a slot: both wrote that file, the first rename moved it away, and the second
+    rename failed with `ENOENT` and rejected its caller's save. That is the failure the per-write name
+    was introduced to remove, and the autosave slot is the one with the most writes.
+
+    The temp name now carries the process id as well as the counter (`<slot>.chimera.<pid>.<n>.tmp`).
+    No two live processes carry one process id, so the prefix separates the two counters wherever they
+    come from one operating system; the counter still does the work inside a process.
+
+    `reapOrphanTempFiles()` takes the new shape alongside both superseded ones — the counter alone, and
+    the per-slot `<slot>.chimera.tmp` an older install can still be carrying — and `list()` shows none
+    of them, because it filters on the `.chimera` suffix.
+
+- 1dca1e8: Reap the `.tmp` artefacts a crashed save leaves behind.
+
+    Naming the save temp file per WRITE removed a race between two writers of one slot, and took the
+    old scheme's self-healing with it: `<slot>.chimera.tmp` was reopened and truncated by the next write
+    to that slot, while a per-write name is never reopened by anything. A process killed between
+    the write and the rename therefore left a full-size file that `list()` could not show — it filters
+    on the `.chimera` suffix — and `delete(slotId)` could not remove, one save file of disk per crash
+    for the life of the install.
+
+    `FileSaveRepository.reapOrphanTempFiles()` sweeps `userData/saves/*/` and unlinks them.
+    `electron/main/index.ts` runs it once at app start, on the same repository instance the
+    `SaveManager` is built on, without awaiting it — nothing downstream reads the result, so startup
+    does not wait on the disk.
+
+    The sweep decides on AGE rather than ownership. It cannot ask whether an artefact belongs to a write
+    in flight: the app requests no single-instance lock, so a second instance sharing the same `userData`
+    may be writing one right now, and taking that file would restore the same `ENOENT`-on-rename the
+    per-write name was introduced to remove. `ORPHAN_TEMP_MAX_AGE_MS` is one hour, chosen by what a wrong
+    answer costs in each direction rather than by timing a write: reaping late costs disk the next start
+    gives back, reaping early costs a save. It is a heuristic, not a proof — a writer suspended past the
+    window has its artefact taken, and its rename then fails the way any interrupted save's does.
+
+    A name that merely CONTAINS the temp shape is left alone, not only one that lacks it: the sweep
+    unlinks what it matches, so `autosave.chimera.1.tmp.bak` has to survive it.
+
+- 5117c6c: Let a manifest entry declare how its texture is sampled.
+
+    A `texture` or `sprite-sheet` entry can carry a `sampling` declaration under `metadata.sampling`:
+    `colorSpace`, `magFilter`, `minFilter`, `wrapS`, `wrapT`, `flipY`, `anisotropy` and
+    `generateMipmaps`. The values are engine-owned names and JSON scalars — `'nearest'`, not a graphics
+    library's constant — so a declaration survives the JSON comparison the asset cache uses to decide
+    whether a re-registered entry is still the same asset.
+
+    `textureEntry({ ref, priority, sampling })` is new on `@chimera-engine/simulation/content`, and
+    `spriteAnimationEntry` takes an optional `sampling` that it writes beside the clip sheet. Both check
+    the declaration and throw `InvalidTextureSamplingError`, naming every fault, for a misspelled option
+    or a value outside the vocabulary. An entry authored without `sampling` is unchanged.
+
+    `validate-assets` now peels `textureEntry(...)` like the other entry builders. Before this, an entry
+    authored through it was skipped, so its ref was never looked for on disk.
+
+- f36b101: Honour a client's `engine:sync_request` on a host with no ticker, and keep the request out of the undo
+  history and the replay recording.
+
+    A client whose snapshot delta will not apply asks for a keyframe with `engine:sync_request`, stamped with
+    the tick of the last snapshot it holds. On a turn-based host the envelope reached `ActionPipeline` as
+    stamped, so a request behind the host's tick was refused with `StaleActionError` before Stage 7 could
+    force the full snapshot, and the client waited for the next keyframe.
+
+    The host's per-action fan-out now applies `engine:sync_request` at its current tick on every host. The
+    helper that re-stamps envelopes is renamed from `restampForHeartbeatHost` to `envelopeToApply`; every other
+    action on a host with no ticker is still applied as stamped, so a stale action there is still refused.
+
+    `ActionPipeline` Stage 6 no longer appends `engine:sync_request` to `ActionHistory`. Undo replays the
+    history since the memento minus its last `steps` entries, so an entry for the request was the step a
+    player's undo removed.
+
+    `buildHostSessionPipeline` no longer passes `engine:sync_request` to the replay recording.
+    `ReplayPlayer.step()` refuses a recorded action that does not advance the tick by exactly one, so a
+    recording across a re-sync could not be played past it.
+
+- Updated dependencies [1c8d524]
+- Updated dependencies [ce7e67a]
+- Updated dependencies [efa0660]
+- Updated dependencies [b79e047]
+- Updated dependencies [9684821]
+- Updated dependencies [6745e3c]
+- Updated dependencies [bcf4501]
+- Updated dependencies [e9c3160]
+- Updated dependencies [3c8f7f8]
+- Updated dependencies [07d1fd9]
+- Updated dependencies [25fabe5]
+- Updated dependencies [3fe629a]
+- Updated dependencies [5564a05]
+- Updated dependencies [6a16ed6]
+- Updated dependencies [e161e4b]
+- Updated dependencies [a7f43d8]
+- Updated dependencies [88f810c]
+- Updated dependencies [497ba6c]
+- Updated dependencies [e1de476]
+- Updated dependencies [bf18dad]
+- Updated dependencies [c968d76]
+- Updated dependencies [3fdc8ea]
+- Updated dependencies [53ff0ec]
+- Updated dependencies [f3c5370]
+- Updated dependencies [5117c6c]
+- Updated dependencies [85ccade]
+- Updated dependencies [f36b101]
+    - @chimera-engine/renderer@1.0.0-rc.14
+    - @chimera-engine/networking@1.0.0-rc.14
+    - @chimera-engine/simulation@1.0.0-rc.14
+    - @chimera-engine/ai@1.0.0-rc.14
+
 ## 1.0.0-rc.13
 
 ### Minor Changes
