@@ -359,8 +359,7 @@ export function readDeviceRatio(): number {
  * the ratio leaves it; the listener then moves to a query for the ratio the
  * display moved to.
  *
- * Where there is no `matchMedia` — jsdom, which a scaffolded game's own
- * component tests render in — nothing is subscribed.
+ * Where there is no `matchMedia` — jsdom — nothing is subscribed.
  */
 export function subscribeToDeviceRatio(onChange: () => void): () => void {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {

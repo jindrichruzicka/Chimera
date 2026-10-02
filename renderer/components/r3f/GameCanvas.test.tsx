@@ -1225,9 +1225,10 @@ describe('GameCanvas camera fit policy', () => {
     });
 
     it('fits without a ResizeObserver, for an environment that has none', () => {
-        // A scaffolded game's own jsdom component tests reach GameCanvas with no
-        // ResizeObserver defined. The layout-effect measurement still runs, so a
-        // canvas that never resizes is fitted anyway.
+        // This file's environment reaches the guard: jsdom, with r3f's Canvas
+        // replaced by the mock above and ResizeObserver set to undefined below.
+        // The layout-effect measurement still runs, so a canvas that never
+        // resizes is fitted anyway.
         containerBox = { width: 1920, height: 1080 };
         vi.stubGlobal('ResizeObserver', undefined);
 

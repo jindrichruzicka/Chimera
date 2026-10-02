@@ -498,10 +498,9 @@ function useLetterboxedCanvasBox(
 
         measure();
 
-        // Absent wherever a jsdom-style environment renders no layout — a
-        // scaffolded game's own component tests reach this. The layout-effect
-        // measurement above still runs, so a canvas that never resizes is
-        // fitted either way.
+        // Absent wherever a jsdom-style environment renders no layout. The
+        // layout-effect measurement above still runs, so a canvas that never
+        // resizes is fitted either way.
         if (typeof ResizeObserver === 'undefined') {
             return;
         }
