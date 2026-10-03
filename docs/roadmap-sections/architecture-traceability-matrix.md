@@ -10,8 +10,6 @@ tags: [traceability, architecture, roadmap, sections, features, cross-reference]
 
 What is measured here, and how strongly, is stated by `tools/traceability-matrix.test.ts`.
 
-The census it differences against is the set of features that have a roadmap heading, so a feature without one reaches this table only if a row names it directly. Several shipped without ever gaining one; `tools/traceability-matrix.test.ts` records what the census can and cannot see.
-
 ---
 
 | Architecture Section                                                                         | Description                                                                                                                                                                                                                                                                | Features                                                                                                                                                                                                                                                                                                                                                              |

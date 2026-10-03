@@ -28,6 +28,11 @@
  * that has no heading — is deliberately not asserted: F73 shipped without ever
  * gaining a roadmap section and is carried by the §3 row on purpose.
  *
+ * The census cannot see a feature without a heading at all. So every feature the
+ * Feature-to-Milestone Index assigns to a milestone must also appear in the
+ * matrix table. Whether the index was widened for a new feature is
+ * `/review-feature`'s to check, not this guard's.
+ *
  * **Section reachability.** A row naming a section nothing else knows about is
  * the same defect wearing the opposite sign — it reads as a resolved anchor and
  * is not. The rows this guard was written against resolved only inside
@@ -298,6 +303,27 @@ function milestoneIndexRows(): string[][] {
     return tableRowsUnder(MATRIX_DOC, '## Feature-to-Milestone Index');
 }
 
+/**
+ * The features the Feature-to-Milestone Index assigns to a milestone that no row
+ * of the matrix table names. It reads the document's TEXT, so a fixture can drop
+ * a feature from every row and watch it surface.
+ */
+function indexedFeaturesNamedByNoRow(matrixText: string): string[] {
+    const indexed = unionOf(
+        parseTableAfter(matrixText, '## Feature-to-Milestone Index').map((cells) => cells[0] ?? ''),
+        expandFeatureTokens,
+    );
+    const named = new Set(
+        unionOf(
+            parseTableAfter(matrixText, '# Architecture Traceability Matrix')
+                .filter((cells) => cells.length >= 3)
+                .map((cells) => cells.at(-1) ?? ''),
+            expandFeatureTokens,
+        ),
+    );
+    return indexed.filter((feature) => !named.has(feature));
+}
+
 /** The `Architecture Section` column of the overview's Core Components index. */
 function overviewSectionCells(): string[] {
     return tableRowsUnder(OVERVIEW_DOC, '## Index: Core Components (§4)').map(
@@ -534,6 +560,34 @@ describe('every feature reaches an architecture section', () => {
 
         const missing = census.filter((feature) => !indexed.includes(feature));
         expect(missing, 'features with a roadmap heading but no milestone-index row').toEqual([]);
+    });
+
+    it('names every feature the Feature-to-Milestone Index assigns in the matrix table, headed or not', () => {
+        expect(
+            indexedFeaturesNamedByNoRow(read(MATRIX_DOC)),
+            'features the milestone index assigns but no matrix row names',
+        ).toEqual([]);
+    });
+
+    it('reports a feature without a roadmap heading that no matrix row names', () => {
+        // F103 has no roadmap heading, so the census above cannot see it. Dropping it
+        // from every matrix row must surface it here.
+        expect(featureCensus().map((entry) => entry.feature)).not.toContain('F103');
+
+        const matrix = read(MATRIX_DOC);
+        const withoutF103 = matrix.replaceAll(', F103', '');
+        expect(withoutF103).not.toBe(matrix);
+
+        expect(indexedFeaturesNamedByNoRow(withoutF103)).toEqual(['F103']);
+    });
+
+    it('does not count a row too short to be a matrix row as naming a feature', () => {
+        const withShortRow = read(MATRIX_DOC)
+            .replaceAll(', F103', '')
+            .replace('| §4.22 Camera', '| §4.99 Probe | F103 |\n| §4.22 Camera');
+        expect(withShortRow).toContain('| §4.99 Probe | F103 |');
+
+        expect(indexedFeaturesNamedByNoRow(withShortRow)).toEqual(['F103']);
     });
 });
 

@@ -9,7 +9,7 @@ Given feature designator `$1`:
 2. Read [ROADMAP](../../docs/ROADMAP.md), the relevant architecture/core-component docs, [module boundaries](../../docs/executive-architecture/module-boundaries-file-tree.md), and [architecture invariants](../../docs/executive-architecture/architecture-invariants.md).
 3. Resolve title, milestone, module label, architecture section, checklist items, invariants, non-goals, and existing GitHub issues. If the feature already exists, stop and report its URL.
 4. Present the feature + task decomposition for user approval before creating anything. The final task is always the feature review/merge task.
-5. After approval, create the feature then task issues via the GitHub issue templates and create-issue skill. Each task: `Part of #<feature>`, one module owner, testable criteria, only genuinely touched invariants.
+5. After approval, create the feature then task issues via the GitHub issue templates and create-issue skill. Each task: `Part of #<feature>`, one module owner, testable criteria, only genuinely touched invariants. A feature with no roadmap heading gets one more criterion on its first task: widen its milestone's Feature-to-Milestone Index row in `docs/roadmap-sections/architecture-traceability-matrix.md` to cover the feature id, and name the id in the matrix-table row of each architecture section the feature declares.
 6. Update the feature issue child-task checklist with real task numbers.
 7. Report feature URL, milestone, created tasks, and assumptions.
 
