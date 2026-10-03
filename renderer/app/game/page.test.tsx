@@ -985,6 +985,11 @@ describe('GamePage — post-game summary navigation', () => {
         });
         renderGamePage();
         await screen.findByTestId('game-canvas');
+        // The canvas commits before SceneRouter's passive effects run: its uiStore
+        // subscription, and the scene sync that sets the screen to the scene's
+        // default. Navigating ahead of them leaves the router unsubscribed, and the
+        // sync then puts the playfield back. Wait for the sync instead.
+        await waitFor(() => expect(useUiStore.getState().activeSceneId).toBe('engine:game'));
 
         const cb = inputActionCallbacks.get('game:end-turn');
         expect(cb).toBeDefined();
