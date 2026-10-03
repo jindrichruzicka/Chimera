@@ -18,6 +18,7 @@ import { installFakeDisplay } from './__test-support__/fakeDisplay';
 import {
     applyColorConfig,
     readDeviceRatio,
+    releaseBlurPass,
     releaseShadowMap,
     resizeShadowMap,
     resolveRenderScale,
@@ -211,6 +212,37 @@ describe('releaseShadowMap', () => {
         expect(shadow.map).toBeNull();
         expect(shadow.mapPass).toBeNull();
         expect(shadow.mapSize.toArray()).toEqual([512, 512]);
+    });
+});
+
+describe('releaseBlurPass', () => {
+    it('disposes and nulls the blur pass, and leaves the map and its size alone', () => {
+        const { shadow } = new DirectionalLight();
+        shadow.mapSize.set(2048, 2048);
+        const allocated = plantShadowTargets(shadow);
+
+        releaseBlurPass(shadow);
+
+        expect(shadow.mapPass).toBeNull();
+        expect(allocated.mapPassDispose).toHaveBeenCalledOnce();
+        expect(shadow.map).toBe(allocated.map);
+        expect(allocated.mapDispose).not.toHaveBeenCalled();
+        expect(allocated.depthTextureDispose).not.toHaveBeenCalled();
+        expect(shadow.mapSize.toArray()).toEqual([2048, 2048]);
+    });
+
+    it('leaves a shadow with no blur pass untouched', () => {
+        const { shadow } = new DirectionalLight();
+        shadow.mapSize.set(1024, 1024);
+        const allocated = plantShadowTargets(shadow, { withBlurPass: false });
+
+        releaseBlurPass(shadow);
+
+        expect(shadow.mapPass).toBeNull();
+        expect(shadow.map).toBe(allocated.map);
+        expect(allocated.mapDispose).not.toHaveBeenCalled();
+        expect(allocated.depthTextureDispose).not.toHaveBeenCalled();
+        expect(shadow.mapSize.toArray()).toEqual([1024, 1024]);
     });
 });
 

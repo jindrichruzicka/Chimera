@@ -283,12 +283,35 @@ describe('LightingRig shadow quality', () => {
 
         try {
             const key = onlyObject<DirectionalLight>(renderer.scene, 'DirectionalLight');
-            const allocated = fakeShadowTargets(key);
+            const allocated = fakeShadowTargets(key, { withBlurPass: false });
 
             await renderer.update(underCanvas(<LightingRig />, 'variance'));
 
             expect(key.shadow.map).toBe(allocated.map);
             expect(allocated.mapDispose).not.toHaveBeenCalled();
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
+    it("releases the blur pass and keeps the map when the quality leaves 'variance' for 'soft'", async () => {
+        const renderer = await ReactThreeTestRenderer.create(
+            underCanvas(<LightingRig />, 'variance'),
+        );
+
+        try {
+            const key = onlyObject<DirectionalLight>(renderer.scene, 'DirectionalLight');
+            const allocated = fakeShadowTargets(key);
+
+            await renderer.update(underCanvas(<LightingRig />, 'soft'));
+
+            expect(onlyObject<DirectionalLight>(renderer.scene, 'DirectionalLight')).toBe(key);
+            expect(key.shadow.mapPass).toBeNull();
+            expect(allocated.mapPassDispose).toHaveBeenCalledOnce();
+            expect(key.shadow.map).toBe(allocated.map);
+            expect(allocated.mapDispose).not.toHaveBeenCalled();
+            expect(allocated.depthTextureDispose).not.toHaveBeenCalled();
+            expect(key.shadow.mapSize.toArray()).toEqual([2048, 2048]);
         } finally {
             await renderer.unmount();
         }

@@ -180,6 +180,9 @@ export function shadowMapSize(quality: ShadowQuality): number | null {
     return SHADOW_MAP_SIZES[quality];
 }
 
+/** The field of a light's shadow that `releaseBlurPass` reads and writes. */
+export type BlurPassShadow = Pick<LightShadow, 'mapPass'>;
+
 /** The fields of a light's shadow that `releaseShadowMap` reads and writes. */
 export type ReleasableShadow = Pick<LightShadow, 'map' | 'mapPass'>;
 
@@ -197,6 +200,16 @@ export function releaseShadowMap(shadow: ReleasableShadow): void {
         shadow.map.dispose();
         shadow.map = null;
     }
+    releaseBlurPass(shadow);
+}
+
+/**
+ * Dispose the blur pass three built for a light's shadow at `variance` and null
+ * the field, leaving the map and `mapSize` as they were. three allocates the
+ * pass on that path alone and frees it only when the light's shadow is
+ * disposed: a shadow-map type change rebuilds the map and not the pass.
+ */
+export function releaseBlurPass(shadow: BlurPassShadow): void {
     if (shadow.mapPass !== null) {
         shadow.mapPass.dispose();
         shadow.mapPass = null;

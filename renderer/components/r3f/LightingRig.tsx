@@ -21,7 +21,12 @@
 import React from 'react';
 import type { DirectionalLight } from 'three';
 import type { Vector3Tuple } from '../../types/r3f-types.js';
-import { releaseShadowMap, resizeShadowMap, shadowMapSize } from './rendererConfig.js';
+import {
+    releaseBlurPass,
+    releaseShadowMap,
+    resizeShadowMap,
+    shadowMapSize,
+} from './rendererConfig.js';
 import { useCanvasShadowQuality } from './shadowQualityContext.js';
 
 export type LightingRigProps = Readonly<{
@@ -57,13 +62,17 @@ export function LightingRig({
     castShadow = true,
     shadowCameraExtent = DEFAULT_SHADOW_CAMERA_EXTENT,
 }: LightingRigProps): React.ReactElement {
-    const mapSize = shadowMapSize(useCanvasShadowQuality());
+    const quality = useCanvasShadowQuality();
+    const mapSize = shadowMapSize(quality);
     const keyLightRef = React.useRef<DirectionalLight>(null);
 
     // A layout effect, so the size is on the light before the frame that
     // renders it — and a changed quality reaches a mounted light without a
     // remount. At `off` the light stops casting, so the map built at the last
     // quality is released rather than held, and its size is kept for a return.
+    // It keys on the quality, not only the size: `variance` to `soft` keeps the
+    // size, and three builds a blur pass at `variance` alone and does not free
+    // it on the type change, so every quality change releases the pass.
     React.useLayoutEffect(() => {
         const keyLight = keyLightRef.current;
         if (keyLight === null) {
@@ -74,7 +83,8 @@ export function LightingRig({
             return;
         }
         resizeShadowMap(keyLight.shadow, mapSize);
-    }, [mapSize]);
+        releaseBlurPass(keyLight.shadow);
+    }, [quality, mapSize]);
 
     React.useLayoutEffect(() => {
         const keyLight = keyLightRef.current;

@@ -484,6 +484,7 @@ export type LightingRigProps = Readonly<{
 
 - **A quality change applies live, without a remount**: the rig releases the shadow map built at the old size, and the next frame allocates one at the new size.
 - **A change to `off` releases the map** and any blur pass, and keeps the map's size, so a return to the same quality allocates at that size.
+- **A change from `variance` to `soft` releases the blur pass** three built at `variance`. Both qualities share a size, so the rig leaves the map to three, which rebuilds it for the new shadow-map type.
 - The rig reads the resolution from the `GameCanvas` it is mounted in. Mounted outside one, with no `ShadowQualityProvider` above it, it throws.
 - **A component test mounts the rig under `ShadowQualityProvider`.** A game that tests a scene component with `@react-three/test-renderer` has no `GameCanvas` to resolve a quality, so it wraps the scene in the provider, which the same barrel exports, with the quality to test at:
 
