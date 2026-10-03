@@ -223,6 +223,20 @@ The first row is the route `AnimatedSprite` takes for its default material. It a
 means a color space declared on the entry does not survive that route: r3f writes
 sRGB over it on the shared texture when the prop is applied.
 
+**The engine accepts that overwrite.** For an entry that declares sRGB, or nothing,
+the write changes nothing, because the texture was sRGB already. What it loses is a
+deliberately non-sRGB declaration on a color slot, such as a linear-encoded image on
+`map`. The ways out cost more than that case:
+
+- r3f gates the conversion on its root `linear` flag (and spares a texture that is not
+  8-bit RGBA), and the same flag sets the output color space. `GameCanvas` keeps it
+  unexposed; see "What stays unexposed" in `camera-system.md`.
+- Building `AnimatedSprite`'s default material outside the JSX prop would change how
+  every sprite's material is built.
+
+`r3f-texture-color-space.test.tsx` pins the overwrite, so an r3f upgrade that stops
+making it fails there.
+
 **Data maps declare `colorSpace: 'none'`.** Roughness, metalness, normal, ambient
 occlusion and mask images are not color, and sRGB is wrong for them. They are told
 apart by that one declared option rather than by a second asset kind: a second kind

@@ -28,6 +28,7 @@ import {
     type Mesh,
     MeshStandardMaterial,
     NoColorSpace,
+    RedFormat,
     RGBAFormat,
     SRGBColorSpace,
     Texture,
@@ -70,23 +71,37 @@ async function mountedEnvMap(element: React.ReactElement): Promise<Texture | nul
     return bound;
 }
 
+/**
+ * The slots r3f treats as color. `meshPhysicalMaterial` hosts them because two do
+ * not exist on a standard material.
+ */
+const COLOR_SLOTS = ['map', 'emissiveMap', 'sheenColorMap', 'specularColorMap', 'envMap'] as const;
+
 describe('r3f and a texture set on a JSX color slot', () => {
-    // The slots r3f treats as color. `meshPhysicalMaterial` because two of them do
-    // not exist on a standard material.
-    it.each(['map', 'emissiveMap', 'sheenColorMap', 'specularColorMap', 'envMap'] as const)(
-        'tags an untagged texture sRGB when it is the `%s` prop',
-        async (slot) => {
-            const texture = textureTagged(NoColorSpace);
+    it.each(COLOR_SLOTS)('tags an untagged texture sRGB when it is the `%s` prop', async (slot) => {
+        const texture = textureTagged(NoColorSpace);
 
-            await mounted(
-                <mesh>
-                    <meshPhysicalMaterial {...{ [slot]: texture }} />
-                </mesh>,
-            );
+        await mounted(
+            <mesh>
+                <meshPhysicalMaterial {...{ [slot]: texture }} />
+            </mesh>,
+        );
 
-            expect(texture.colorSpace).toBe(SRGBColorSpace);
-        },
-    );
+        expect(texture.colorSpace).toBe(SRGBColorSpace);
+    });
+
+    it('spares an 8-bit texture that is not RGBA', async () => {
+        const texture = textureTagged(NoColorSpace);
+        texture.format = RedFormat;
+
+        await mounted(
+            <mesh>
+                <meshStandardMaterial map={texture} />
+            </mesh>,
+        );
+
+        expect(texture.colorSpace).toBe(NoColorSpace);
+    });
 
     it('re-tags an 8-bit envMap but spares a half-float one', async () => {
         // The case the environment-map route depends on: an HDRI arrives tagged
@@ -130,17 +145,20 @@ describe('r3f and a texture set on a JSX color slot', () => {
         expect(halfFloatTexture.colorSpace).toBe(LinearSRGBColorSpace);
     });
 
-    it('overwrites a color space the texture already carried', async () => {
-        const texture = textureTagged(LinearSRGBColorSpace);
+    it.each(COLOR_SLOTS)(
+        'overwrites a color space the texture already carried on the `%s` prop',
+        async (slot) => {
+            const texture = textureTagged(LinearSRGBColorSpace);
 
-        await mounted(
-            <mesh>
-                <meshStandardMaterial map={texture} />
-            </mesh>,
-        );
+            await mounted(
+                <mesh>
+                    <meshPhysicalMaterial {...{ [slot]: texture }} />
+                </mesh>,
+            );
 
-        expect(texture.colorSpace).toBe(SRGBColorSpace);
-    });
+            expect(texture.colorSpace).toBe(SRGBColorSpace);
+        },
+    );
 });
 
 describe('r3f and a texture set on a JSX data slot', () => {
