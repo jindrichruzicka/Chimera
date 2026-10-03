@@ -40,6 +40,18 @@ nothing (§A.1).
 
 ## Part A — Confirmed gaps
 
+> **Snapshot as of 2026-08-31 (`763cc1ec`).** Part A, and the Summary above it,
+> record what was found when this brief was scoped. They are not kept current,
+> and are not rewritten as the tree moves: the findings are the record. Their
+> file and line references point into that commit, and into `three` 0.184 for
+> `three`'s own source, not into `HEAD`; read a repository path with
+> `git show 763cc1ec:<path>`.
+>
+> The features that took up Part B have since shipped: R1 and R2 as F102
+> (#1215), R3 and R8.1 as F104 (#1217), R4 and R5 as F105 (#1218), R6 as F106
+> (#1219), and R7 and R8.2 as F107 (#1220). Part B onward states the
+> requirements.
+
 ### A.1 — Shadows are off, and two reference apps already ask for them
 
 `GameCanvas` renders `<Canvas>` with `camera`, `frameloop`, `className`,
@@ -342,8 +354,7 @@ The explicit ask is sprites drawn with custom shaders. Requirements:
   violating Invariant #21.
 - **R6.2** — Whatever this clones is component-owned and disposed on unmount,
   under the same carve-out #21 already grants the node tree and skeletons.
-- **R6.3** — The cost is stated where a game can see it: a cloned material is a
-  new draw-call batch and a new shader compile on first use. A game tinting 200
+- **R6.3** — The cost is stated where a game can see it. A game tinting 200
   units needs to know that before it ships, not after.
 
 ### R7 — Environment maps as game assets
