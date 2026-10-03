@@ -33,6 +33,12 @@
  * `apps/**` specifier from renderer source — so a fixture the renderer's own
  * tests consume cannot be a game's asset.
  *
+ * **Why the container writer is shared.** `glbContainer.ts` beside this file
+ * writes the bytes, and `tools/gen-showcase-animated-glb.ts` writes the
+ * committed rig through the same module. `renderer/` must not import `tools/`,
+ * so the module sits here and the tool imports it — the direction the
+ * `tools → renderer` edge already runs.
+ *
  * What the container holds, and what is asserted about it, is
  * `__tests__/gltf-model-fixture.test.ts`; this header does not restate it.
  */
@@ -41,6 +47,18 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import type { LoadedGltfAsset } from '../AssetManager.js';
+import {
+    COMPONENT_TYPE_FLOAT,
+    COMPONENT_TYPE_UNSIGNED_SHORT,
+    PRIMITIVE_MODE_TRIANGLES,
+    TARGET_ARRAY_BUFFER,
+    TARGET_ELEMENT_ARRAY_BUFFER,
+    asFloat32,
+    boundsOf,
+    packFloats,
+    packGlb,
+    packUnsignedShorts,
+} from './glbContainer.js';
 
 /**
  * Which material the fixture's mesh loads as.
@@ -118,83 +136,12 @@ const NORMALS: readonly (readonly [number, number, number])[] = [
 ];
 const INDICES: readonly number[] = [0, 1, 2, 0, 2, 3];
 
-// ── glTF / GLB constants ─────────────────────────────────────────────────────
-//
-// These constants, and `packGlb`/`glbChunk` below, also exist in
-// `tools/gen-showcase-animated-glb.ts`. The copy is not justified here, because
-// no justification for it has been established: `renderer/` is a published
-// package and must not import repo tooling, but the reverse edge already exists
-// (`tools/shell-page-routes.ts` imports renderer source), so whether a shared
-// module is reachable is an open question rather than a settled no. Recorded as
-// such so the next author decides it rather than inheriting a third copy.
-
-const GLB_MAGIC = 0x46546c67; // 'glTF'
-const GLB_JSON_CHUNK_TYPE = 0x4e4f534a; // 'JSON'
-const GLB_BIN_CHUNK_TYPE = 0x004e4942; // 'BIN\0'
-const GLB_CONTAINER_VERSION = 2;
-
-const COMPONENT_TYPE_UNSIGNED_SHORT = 5123;
-const COMPONENT_TYPE_FLOAT = 5126;
-const TARGET_ARRAY_BUFFER = 34962;
-const TARGET_ELEMENT_ARRAY_BUFFER = 34963;
-const PRIMITIVE_MODE_TRIANGLES = 4;
-
 const UNLIT_EXTENSION = 'KHR_materials_unlit';
-
-function packFloats(values: readonly number[]): Buffer {
-    const bytes = Buffer.alloc(values.length * 4);
-    values.forEach((value, index) => bytes.writeFloatLE(value, index * 4));
-    return bytes;
-}
-
-function packUnsignedShorts(values: readonly number[]): Buffer {
-    const bytes = Buffer.alloc(values.length * 2);
-    values.forEach((value, index) => bytes.writeUInt16LE(value, index * 2));
-    return bytes;
-}
-
-/**
- * Component-wise min/max of a flat run of `stride`-wide elements.
- *
- * Derived from the packed values rather than authored beside them: a POSITION
- * accessor whose declared bounds disagree with its data is a defect loaders
- * silently cull geometry over.
- */
-function boundsOf(
-    values: readonly number[],
-    stride: number,
-): {
-    readonly min: readonly number[];
-    readonly max: readonly number[];
-} {
-    const min = values.slice(0, stride);
-    const max = values.slice(0, stride);
-    for (let index = stride; index < values.length; index += stride) {
-        for (let lane = 0; lane < stride; lane += 1) {
-            const value = values[index + lane] ?? 0;
-            if (value < (min[lane] ?? 0)) min[lane] = value;
-            if (value > (max[lane] ?? 0)) max[lane] = value;
-        }
-    }
-    return { min, max };
-}
-
-/**
- * Round every element to the float32 the buffer will hold.
- *
- * A declared bound must bound the STORED data, not the authored doubles. Every
- * coordinate above is exactly representable in float32, so removing this changes
- * no byte today and no test fails — a deliberately equivalent mutant, recorded
- * rather than resolved by deleting a guard on the strength of its survival.
- */
-function asFloat32(values: readonly number[]): number[] {
-    return Array.from(new Float32Array(values));
-}
 
 /**
  * Build the fixture as a binary glTF container.
  *
- * Deterministic and dependency-free: the same bytes on every machine, so the two
+ * Deterministic: the same bytes on every machine, so the two
  * shading arms are comparable at all. What differs between them is
  * `gltf-model-fixture.test.ts`'s to state.
  */
@@ -329,43 +276,4 @@ export async function loadGltfModelFixture(
         new GLTFLoader().parse(bytes, '', resolve, reject);
     });
     return { scene: gltf.scene, animations: gltf.animations };
-}
-
-/**
- * Assemble the container.
- *
- * The JSON chunk pads with spaces, which `JSON.parse` tolerates. The BIN chunk is
- * passed a NUL pad byte too, but this fixture's payload is already 4-aligned, so
- * it pads by zero bytes and that argument reaches nothing: changing it to any
- * other byte alters no output and fails no test. Recorded here as an equivalent
- * mutant, since a survivor is evidence about coverage and not a reason to delete
- * the argument.
- */
-function packGlb(jsonText: string, bin: Buffer): Uint8Array {
-    const jsonChunk = glbChunk(GLB_JSON_CHUNK_TYPE, Buffer.from(jsonText, 'utf8'), 0x20);
-    const binChunk = glbChunk(GLB_BIN_CHUNK_TYPE, bin, 0x00);
-
-    const header = Buffer.alloc(12);
-    header.writeUInt32LE(GLB_MAGIC, 0);
-    header.writeUInt32LE(GLB_CONTAINER_VERSION, 4);
-    header.writeUInt32LE(header.length + jsonChunk.length + binChunk.length, 8);
-
-    return new Uint8Array(Buffer.concat([header, jsonChunk, binChunk]));
-}
-
-/**
- * One glTF chunk, padded so the NEXT chunk header starts 4-aligned.
- *
- * The outer `% 4` is what keeps an already-aligned body unpadded; without it an
- * aligned body gains four bytes, and the BIN chunk then declares four bytes more
- * than the `buffers[0].byteLength` it carries. `GLTFLoader` does not compare the
- * two (measured against three 0.184.0), so `gltf-model-fixture.test.ts` is where
- * that bound is stated.
- */
-function glbChunk(type: number, body: Buffer, padWith: number): Buffer {
-    const padding = (4 - (body.length % 4)) % 4;
-    const header = Buffer.alloc(8);
-    header.writeUInt32LE(body.length + padding, 0);
-    header.writeUInt32LE(type, 4);
-    return Buffer.concat([header, body, Buffer.alloc(padding, padWith)]);
 }

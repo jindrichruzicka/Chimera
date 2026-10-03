@@ -50,6 +50,19 @@
  * esbuild rejects top-level await in CJS output).
  */
 
+import {
+    COMPONENT_TYPE_FLOAT,
+    COMPONENT_TYPE_UNSIGNED_SHORT,
+    PRIMITIVE_MODE_TRIANGLES,
+    TARGET_ARRAY_BUFFER,
+    TARGET_ELEMENT_ARRAY_BUFFER,
+    asFloat32,
+    boundsOf,
+    packFloats,
+    packGlb,
+    packUnsignedShorts,
+} from '../renderer/assets/__test-support__/glbContainer.js';
+
 /** Where the generated fixture is committed, relative to the repo root. */
 export const SHOWCASE_ANIMATED_GLB_REL_PATH =
     'apps/tactics/assets/models/showcase-rig-animated.glb';
@@ -203,19 +216,6 @@ const INVERSE_BIND_MATRICES: readonly (readonly number[])[] = [
     [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, -TOP_BONE_Y, 0, 1],
 ];
 
-// ── glTF / GLB constants ─────────────────────────────────────────────────────
-
-const GLB_MAGIC = 0x46546c67; // 'glTF'
-const GLB_JSON_CHUNK_TYPE = 0x4e4f534a; // 'JSON'
-const GLB_BIN_CHUNK_TYPE = 0x004e4942; // 'BIN\0'
-const GLB_CONTAINER_VERSION = 2;
-
-const COMPONENT_TYPE_UNSIGNED_SHORT = 5123;
-const COMPONENT_TYPE_FLOAT = 5126;
-const TARGET_ARRAY_BUFFER = 34962;
-const TARGET_ELEMENT_ARRAY_BUFFER = 34963;
-const PRIMITIVE_MODE_TRIANGLES = 4;
-
 // ── Buffer authoring ─────────────────────────────────────────────────────────
 
 /** A slice of the BIN chunk, plus the accessor bookkeeping it needs. */
@@ -260,57 +260,12 @@ export class BufferPacker {
     }
 }
 
-function packFloats(values: readonly number[]): Buffer {
-    const bytes = Buffer.alloc(values.length * 4);
-    values.forEach((value, index) => bytes.writeFloatLE(value, index * 4));
-    return bytes;
-}
-
-function packUnsignedShorts(values: readonly number[]): Buffer {
-    const bytes = Buffer.alloc(values.length * 2);
-    values.forEach((value, index) => bytes.writeUInt16LE(value, index * 2));
-    return bytes;
-}
-
-/**
- * Component-wise min/max of a flat run of `stride`-wide elements.
- *
- * Computed from the packed values rather than authored beside them: an accessor
- * whose declared bounds disagree with its data is a defect a loader silently
- * culls geometry over, and a hand-written bound is exactly how that happens.
- */
-function boundsOf(values: readonly number[], stride: number): { min: number[]; max: number[] } {
-    const min = values.slice(0, stride);
-    const max = values.slice(0, stride);
-    for (let index = stride; index < values.length; index += stride) {
-        for (let lane = 0; lane < stride; lane += 1) {
-            const value = values[index + lane]!;
-            if (value < min[lane]!) min[lane] = value;
-            if (value > max[lane]!) max[lane] = value;
-        }
-    }
-    return { min, max };
-}
-
-/**
- * Round every element to the float32 value the buffer will actually hold.
- *
- * The accessor's declared min/max must bound the STORED data, not the authored
- * doubles: `0.3` stored as float32 reads back as `0.30000001192092896`, so a
- * `max` of `0.3` would be below the value it is meant to bound — which is what
- * makes a strict glTF validator reject the container.
- */
-function asFloat32(values: readonly number[]): number[] {
-    const view = new Float32Array(values);
-    return Array.from(view);
-}
-
 // ── The document ─────────────────────────────────────────────────────────────
 
 /**
  * Build the animated showcase rig as a binary glTF container.
  *
- * Deterministic and dependency-free: the same bytes on every machine and every
+ * Deterministic: the same bytes on every machine and every
  * Node version.
  */
 export function buildShowcaseAnimatedGlb(): Uint8Array {
@@ -539,28 +494,6 @@ export function buildShowcaseAnimatedGlb(): Uint8Array {
     };
 
     return packGlb(JSON.stringify(json), bin);
-}
-
-/** Assemble the container: header, JSON chunk (space-padded), BIN chunk (NUL-padded). */
-function packGlb(jsonText: string, bin: Buffer): Uint8Array {
-    const jsonChunk = glbChunk(GLB_JSON_CHUNK_TYPE, Buffer.from(jsonText, 'utf8'), 0x20);
-    const binChunk = glbChunk(GLB_BIN_CHUNK_TYPE, bin, 0x00);
-
-    const header = Buffer.alloc(12);
-    header.writeUInt32LE(GLB_MAGIC, 0);
-    header.writeUInt32LE(GLB_CONTAINER_VERSION, 4);
-    header.writeUInt32LE(header.length + jsonChunk.length + binChunk.length, 8);
-
-    return new Uint8Array(Buffer.concat([header, jsonChunk, binChunk]));
-}
-
-/** One glTF chunk: an 8-byte header plus a body padded to a 4-byte boundary. */
-function glbChunk(type: number, body: Buffer, padWith: number): Buffer {
-    const padding = (4 - (body.length % 4)) % 4;
-    const header = Buffer.alloc(8);
-    header.writeUInt32LE(body.length + padding, 0);
-    header.writeUInt32LE(type, 4);
-    return Buffer.concat([header, body, Buffer.alloc(padding, padWith)]);
 }
 
 /** True when the committed bytes differ from the freshly built ones (drift). */
