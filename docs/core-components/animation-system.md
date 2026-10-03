@@ -568,36 +568,33 @@ must be called inside a `<GameCanvas>`, since it subscribes to the frame loop.
 
 **Where it has to land.** The hook advances `value` inside the frame loop and never re-renders —
 that is the point of it — so the material must hold the very object the hook returned. Build the
-material yourself, seat the uniform in its constructor, and hand the instance over:
+material yourself, seat the uniform in its constructor, and hand the instance over. On a sprite, do
+it in a material component, which also receives the sheet texture as its `map` prop (see the seam
+section below):
 
 ```tsx
-const time = useShaderTime();
-// The sheet is resolved here because a `ShaderMaterial` samples `uniforms`, and the
-// `material` prop's texture handoff sets a `map` PROP — see the seam section below.
-const { texture } = useSpriteAtlas(sheet);
-const [material, setMaterial] = useState<ShaderMaterial | null>(null);
+// `map` is optional only so `<RunnerShader />` type-checks; `AnimatedSprite` passes it.
+function RunnerShader({ map }: { readonly map?: Texture }) {
+    const time = useShaderTime();
+    const [material, setMaterial] = useState<ShaderMaterial | null>(null);
 
-useEffect(() => {
-    if (texture === null) return;
-    const created = new ShaderMaterial({
-        uniforms: { uTime: time, uMap: { value: texture } },
-        vertexShader,
-        fragmentShader,
-    });
-    setMaterial(created);
-    return () => {
-        setMaterial(null);
-        created.dispose();
-    };
-}, [time, texture]);
+    useLayoutEffect(() => {
+        const created = new ShaderMaterial({
+            uniforms: { uTime: time, uMap: { value: map ?? null } },
+            vertexShader,
+            fragmentShader,
+        });
+        setMaterial(created);
+        return () => {
+            setMaterial(null);
+            created.dispose();
+        };
+    }, [time, map]);
 
-return material === null ? null : (
-    <AnimatedSprite
-        sheet={sheet}
-        clip="run"
-        material={<primitive object={material} attach="material" />}
-    />
-);
+    return material === null ? null : <primitive object={material} attach="material" />;
+}
+
+<AnimatedSprite sheet={sheet} clip="run" material={<RunnerShader />} />;
 ```
 
 **Do not declare `uniforms` as a JSX prop for this.** Measured against `@react-three/fiber` 9.6.1:
@@ -708,12 +705,13 @@ What the engine does and does not do to what it is handed:
 - **A `material` that is not a material does not delete the default one.** `material={<group/>}` is
   caller error, and the engine takes the cheap failure: the default is still emitted, so the sprite
   does not fall back to an unmapped white quad.
-- **A `ShaderMaterial` is not reached by this.** The handoff sets a `map` PROP, and a
-  `ShaderMaterial` samples its `uniforms` and never a `map` property — measured: `applyProps` sets
-  `shader.map` and leaves `uniforms` empty. A game writing one seats the texture in its own uniforms
-  at construction, on the owned-instance path the shader-time section shows, and resolves the sheet
-  through `useSpriteAtlas` to do so. The seam removes the second resolution for stock material
-  intrinsics; for a shader it does not, and closing that is its own task.
+- **A `ShaderMaterial` takes the texture through a component.** The handoff sets a `map` PROP, and
+  a `ShaderMaterial` samples its `uniforms`, never a `map` property — measured: `applyProps` sets
+  `shader.map` and leaves `uniforms` empty. A material component receives the same `map` prop, so
+  it seats the texture in the uniforms it builds its own `ShaderMaterial` with and hands that
+  instance over as a `<primitive>`, as the shader-time section shows.
+  `renderer/components/r3f/__tests__/sprite-shader-material-texture.test.tsx` renders that shape
+  through the real `@react-three/fiber`.
 - **The texture itself is never configured.** It is manager-owned and shared by every sprite cut from
   the sheet (Invariant #21), so receiving it is not a licence to set `magFilter`, `colorSpace` or
   `flipY` on it. Those belong to how the sheet is authored and loaded.

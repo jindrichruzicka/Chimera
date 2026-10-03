@@ -401,6 +401,12 @@ export interface AnimatedSpriteProps extends UseSpriteClipPlayerOptions {
      * into, and `withSheetTexture` is where the precedence is stated: which
      * elements receive the texture, and which the engine declines to touch.
      *
+     * The texture arrives as a `map` prop. A `ShaderMaterial` samples its
+     * `uniforms`, not a `map` property, so a custom shader takes it through a
+     * material component: the component receives `map` and seats it in the
+     * uniforms of the `ShaderMaterial` it builds, then hands that instance over
+     * as a `<primitive>`.
+     *
      * Supplying a material here AND as `children` is caller error. Both are
      * emitted, this one first.
      */
